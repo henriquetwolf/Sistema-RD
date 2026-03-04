@@ -202,10 +202,10 @@ export const CrmBoard: React.FC = () => {
   // Conta Azul confirmation popup
   const [contaAzulConfirmDeal, setContaAzulConfirmDeal] = useState<any | null>(null);
   const [contaAzulFormData, setContaAzulFormData] = useState<{
-    descricao: string; valor: number; data_competencia: string; data_vencimento: string;
+    descricao: string; valor: number; valor_entrada: number; data_competencia: string; data_vencimento: string;
     parcelas: number; categoria_id: string; centro_custo_id: string; observacoes: string;
     contato_nome: string; contato_cpf: string; produto_id: string; tipo_pagamento: string; deal_number: string;
-  }>({ descricao: '', valor: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '', contato_nome: '', contato_cpf: '', produto_id: '', tipo_pagamento: '', deal_number: '' });
+  }>({ descricao: '', valor: 0, valor_entrada: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '', contato_nome: '', contato_cpf: '', produto_id: '', tipo_pagamento: '', deal_number: '' });
   const [contaAzulCategories, setContaAzulCategories] = useState<{ id: string; id_conta_azul: string; nome: string; tipo: string }[]>([]);
   const [contaAzulCostCenters, setContaAzulCostCenters] = useState<{ id: string; id_conta_azul: string; nome: string }[]>([]);
   const [contaAzulProducts, setContaAzulProducts] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
@@ -637,6 +637,7 @@ export const CrmBoard: React.FC = () => {
       setContaAzulFormData({
           descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
           valor: deal.value || 0,
+          valor_entrada: deal.entry_value || deal.entryValue || 0,
           data_competencia: hoje,
           data_vencimento: deal.first_due_date || hoje,
           parcelas: deal.installments || 1,
@@ -696,6 +697,7 @@ export const CrmBoard: React.FC = () => {
               data_venda: contaAzulFormData.data_competencia,
               data_vencimento: contaAzulFormData.data_vencimento,
               parcelas: contaAzulFormData.parcelas,
+              valor_entrada: contaAzulFormData.valor_entrada || 0,
               categoria_id: contaAzulFormData.categoria_id,
               centro_custo_id: contaAzulFormData.centro_custo_id,
               contato_nome: contaAzulFormData.contato_nome,
@@ -1764,13 +1766,29 @@ export const CrmBoard: React.FC = () => {
                               </div>
 
                               <div>
-                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$) *</label>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Total (R$) *</label>
                                   <input type="number" step="0.01" value={contaAzulFormData.valor || ''} onChange={e => setContaAzulFormData(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Entrada (R$)</label>
+                                  <input type="number" step="0.01" min={0} value={contaAzulFormData.valor_entrada || ''} onChange={e => setContaAzulFormData(f => ({ ...f, valor_entrada: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500 outline-none" />
                               </div>
 
                               <div>
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Parcelas</label>
                                   <input type="number" min={1} value={contaAzulFormData.parcelas} onChange={e => setContaAzulFormData(f => ({ ...f, parcelas: parseInt(e.target.value) || 1 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor da Parcela</label>
+                                  <div className="w-full px-4 py-2.5 border border-slate-100 rounded-xl text-sm font-bold bg-slate-50 text-slate-700">
+                                      R$ {(() => {
+                                          const rest = Math.max((contaAzulFormData.valor || 0) - (contaAzulFormData.valor_entrada || 0), 0);
+                                          const pp = contaAzulFormData.parcelas > 0 ? rest / contaAzulFormData.parcelas : 0;
+                                          return pp.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                      })()}
+                                  </div>
                               </div>
 
                               <div>

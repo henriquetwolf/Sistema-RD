@@ -170,19 +170,38 @@ async function createReceivable(req: Request): Promise<Response> {
     try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf); } catch (e: any) { console.error("Contact error:", e.message); }
   }
 
-  const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
-  const parcelas = Array.from({ length: numParcelas }, (_, i) => {
+  const valorEntrada = Math.max(parseFloat(body.valor_entrada) || 0, 0);
+  const valorRestante = Math.round((valor - valorEntrada) * 100) / 100;
+  const valorParcelaBase = Math.floor((valorRestante / numParcelas) * 100) / 100;
+  const valorUltimaParcela = Math.round((valorRestante - valorParcelaBase * (numParcelas - 1)) * 100) / 100;
+
+  const parcelas: any[] = [];
+
+  if (valorEntrada > 0) {
+    const pe: any = {
+      data_vencimento: dataCompetencia,
+      descricao: `${descricao} - Entrada`,
+      detalhe_valor: { valor_bruto: valorEntrada, valor_liquido: valorEntrada },
+      nota: observacao,
+    };
+    if (body.conta_financeira_id) pe.conta_financeira = body.conta_financeira_id;
+    parcelas.push(pe);
+  }
+
+  for (let i = 0; i < numParcelas; i++) {
     const d = new Date(dataVencimento);
     d.setMonth(d.getMonth() + i);
+    const isLast = i === numParcelas - 1;
+    const vp = isLast ? valorUltimaParcela : valorParcelaBase;
     const p: any = {
       data_vencimento: d.toISOString().split("T")[0],
       descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
-      detalhe_valor: { valor_bruto: valorParcela, valor_liquido: valorParcela },
+      detalhe_valor: { valor_bruto: vp, valor_liquido: vp },
       nota: observacao,
     };
     if (body.conta_financeira_id) p.conta_financeira = body.conta_financeira_id;
-    return p;
-  });
+    parcelas.push(p);
+  }
 
   const ratItem: any = { id_categoria: body.categoria_id, valor };
   if (body.centro_custo_id) {
@@ -224,19 +243,38 @@ async function createPayable(req: Request): Promise<Response> {
     try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf); } catch (e: any) { console.error("Contact error:", e.message); }
   }
 
-  const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
-  const parcelas = Array.from({ length: numParcelas }, (_, i) => {
+  const valorEntrada = Math.max(parseFloat(body.valor_entrada) || 0, 0);
+  const valorRestante = Math.round((valor - valorEntrada) * 100) / 100;
+  const valorParcelaBase = Math.floor((valorRestante / numParcelas) * 100) / 100;
+  const valorUltimaParcela = Math.round((valorRestante - valorParcelaBase * (numParcelas - 1)) * 100) / 100;
+
+  const parcelas: any[] = [];
+
+  if (valorEntrada > 0) {
+    const pe: any = {
+      data_vencimento: dataCompetencia,
+      descricao: `${descricao} - Entrada`,
+      detalhe_valor: { valor_bruto: valorEntrada, valor_liquido: valorEntrada },
+      nota: observacao,
+    };
+    if (body.conta_financeira_id) pe.conta_financeira = body.conta_financeira_id;
+    parcelas.push(pe);
+  }
+
+  for (let i = 0; i < numParcelas; i++) {
     const d = new Date(dataVencimento);
     d.setMonth(d.getMonth() + i);
+    const isLast = i === numParcelas - 1;
+    const vp = isLast ? valorUltimaParcela : valorParcelaBase;
     const p: any = {
       data_vencimento: d.toISOString().split("T")[0],
       descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
-      detalhe_valor: { valor_bruto: valorParcela, valor_liquido: valorParcela },
+      detalhe_valor: { valor_bruto: vp, valor_liquido: vp },
       nota: observacao,
     };
     if (body.conta_financeira_id) p.conta_financeira = body.conta_financeira_id;
-    return p;
-  });
+    parcelas.push(p);
+  }
 
   const ratItem: any = { id_categoria: body.categoria_id, valor };
   if (body.centro_custo_id) {
@@ -446,12 +484,18 @@ async function createSale(req: Request): Promise<Response> {
   }
 
   const valorTotal = hasMultipleItems
-    ? itensPayload.reduce((sum: number, it: any) => sum + it.valor, 0)
+    ? itensPayload.reduce((sum: number, it: any) => sum + (it.valor * (it.quantidade || 1)), 0)
     : valor;
 
-  const valorParcela = Math.round((valorTotal / numParcelas) * 100) / 100;
+  const valorEntrada = Math.max(parseFloat(body.valor_entrada) || 0, 0);
+  const valorRestante = Math.round((valorTotal - valorEntrada) * 100) / 100;
+
+  const valorParcelaBase = Math.floor((valorRestante / numParcelas) * 100) / 100;
+  const valorUltimaParcela = Math.round((valorRestante - valorParcelaBase * (numParcelas - 1)) * 100) / 100;
+
+  const totalParcelasApi = numParcelas + (valorEntrada > 0 ? 1 : 0);
   let opcaoCondicao = "À vista";
-  if (numParcelas > 1) opcaoCondicao = numParcelas + "x";
+  if (totalParcelasApi > 1) opcaoCondicao = totalParcelasApi + "x";
 
   const pm = (body.tipo_pagamento || body.payment_method || "").toUpperCase();
   let tipoPagamento = "OUTRO";
@@ -462,15 +506,28 @@ async function createSale(req: Request): Promise<Response> {
   else if (pm.includes("DINHEIRO") || pm.includes("VISTA")) tipoPagamento = "DINHEIRO";
   else if (pm.includes("TRANSF")) tipoPagamento = "TRANSFERENCIA_BANCARIA";
 
-  const parcelas = Array.from({ length: numParcelas }, (_, i) => {
+  const parcelas: any[] = [];
+
+  if (valorEntrada > 0) {
+    parcelas.push({
+      descricao: "Entrada",
+      valor: valorEntrada,
+      data_vencimento: dataVenda,
+    });
+  }
+
+  for (let i = 0; i < numParcelas; i++) {
     const d = new Date(dataVencimento);
     d.setMonth(d.getMonth() + i);
-    return {
+    const isLast = i === numParcelas - 1;
+    parcelas.push({
       descricao: numParcelas > 1 ? `Parcela ${i + 1}/${numParcelas}` : "Pagamento único",
-      valor: valorParcela,
+      valor: isLast ? valorUltimaParcela : valorParcelaBase,
       data_vencimento: d.toISOString().split("T")[0],
-    };
-  });
+    });
+  }
+
+  console.log(`createSale parcelas: entrada=${valorEntrada}, restante=${valorRestante}, base=${valorParcelaBase}, ultima=${valorUltimaParcela}, total_parcelas=${parcelas.length}`);
 
   const saleNum = Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 100);
 

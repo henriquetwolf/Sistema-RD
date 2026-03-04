@@ -363,6 +363,73 @@ export interface ReceivableStats {
   overdueCount: number;
 }
 
+interface ReceivableSummary {
+  vencidos: number;
+  vencem_hoje: number;
+  a_vencer: number;
+  recebidos: number;
+  total_periodo: number;
+}
+
+async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | 'offset'> = {}): Promise<ReceivableSummary> {
+  const today = new Date().toISOString().split('T')[0];
+
+  let query = supabase
+    .from('conta_azul_contas_receber')
+    .select('valor, valor_pago, status, data_vencimento')
+    .order('data_vencimento', { ascending: false })
+    .limit(50000);
+
+  if (filters.accountId) query = query.eq('account_id', filters.accountId);
+  if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
+  if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
+  if (filters.search) {
+    query = query.or(`contato_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+  }
+  if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
+  if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
+
+  if (filters.status && filters.status !== 'all') {
+    if (filters.status === 'Pago') {
+      query = query.ilike('status', '%Liquidado%');
+    } else if (filters.status === 'Pendente') {
+      query = query.not('status', 'ilike', '%Liquidado%').gte('data_vencimento', today);
+    } else if (filters.status === 'Atrasado') {
+      query = query.not('status', 'ilike', '%Liquidado%').lt('data_vencimento', today);
+    } else {
+      query = query.ilike('status', `%${filters.status}%`);
+    }
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const records = data || [];
+
+  let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
+
+  for (const r of records) {
+    const valor = Number(r.valor || 0);
+    const valorPago = Number(r.valor_pago || 0);
+    const isLiquidado = (r.status || '').toLowerCase().includes('liquidado');
+    const restante = valor - valorPago;
+
+    total_periodo += valor;
+    recebidos += valorPago;
+
+    if (!isLiquidado && restante > 0) {
+      if (r.data_vencimento && r.data_vencimento < today) {
+        vencidos += restante;
+      } else if (r.data_vencimento === today) {
+        vencem_hoje += restante;
+      } else {
+        a_vencer += restante;
+      }
+    }
+  }
+
+  return { vencidos, vencem_hoje, a_vencer, recebidos, total_periodo };
+}
+
 async function getReceivableStats(accountId?: string): Promise<ReceivableStats> {
   const today = new Date().toISOString().split('T')[0];
 
@@ -517,6 +584,7 @@ export const contaAzulService = {
   // Read
   getReceivables,
   getReceivableStats,
+  getReceivableSummary,
   getPayables,
   getCategories,
   getCostCenters,

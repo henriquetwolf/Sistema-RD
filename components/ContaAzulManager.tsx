@@ -6,7 +6,8 @@ import {
   AlertTriangle, Zap, CheckCircle2 as CheckIcon, BarChart3,
   PieChart as PieIcon, TrendingUp, Monitor, BarChart, Wallet, ArrowDownToLine,
   ArrowUpRight, ArrowDownRight, Plus, Save, X, Link2, Unlink,
-  CreditCard, Layers, Building2, Tag, FileText, List, Trash2, Pencil
+  CreditCard, Layers, Building2, Tag, FileText, List, Trash2, Pencil,
+  Download, Calendar, XCircle
 } from 'lucide-react';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -20,6 +21,9 @@ import type {
   ContaAzulAccount, ContaAzulAccountStatus
 } from '../types';
 import clsx from 'clsx';
+import Papa from 'papaparse';
+
+declare const XLSX: any;
 
 const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -48,6 +52,8 @@ export const ContaAzulManager: React.FC = () => {
   const [receivables, setReceivables] = useState<ContaAzulReceivable[]>([]);
   const [recCount, setRecCount] = useState(0);
   const [recPage, setRecPage] = useState(1);
+  const [recSummary, setRecSummary] = useState({ vencidos: 0, vencem_hoje: 0, a_vencer: 0, recebidos: 0, total_periodo: 0 });
+  const [isExporting, setIsExporting] = useState(false);
 
   // Payables
   const [payables, setPayables] = useState<ContaAzulPayable[]>([]);
@@ -307,6 +313,77 @@ export const ContaAzulManager: React.FC = () => {
     }
   }, [searchTerm, statusFilter, startDate, endDate, recPage, selectedAccountId]);
 
+  const loadReceivableSummary = useCallback(async () => {
+    try {
+      const summary = await contaAzulService.getReceivableSummary({
+        search: searchTerm || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        accountId: selectedAccountId || undefined,
+      });
+      setRecSummary(summary);
+    } catch (e) {
+      console.error('Error loading receivable summary:', e);
+    }
+  }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
+
+  const handleExportReceivables = useCallback(async (format: 'csv' | 'xlsx') => {
+    setIsExporting(true);
+    try {
+      const { data } = await contaAzulService.getReceivables({
+        search: searchTerm || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        limit: 50000,
+        offset: 0,
+        accountId: selectedAccountId || undefined,
+      });
+
+      const rows = data.map(r => ({
+        'Contato': r.contato_nome || '',
+        'Descrição': r.descricao || '',
+        'Vencimento': r.data_vencimento ? new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '',
+        'Competência': r.data_competencia ? new Date(r.data_competencia + 'T00:00:00').toLocaleDateString('pt-BR') : '',
+        'Valor (R$)': r.valor,
+        'Recebido (R$)': r.valor_pago,
+        'A Receber (R$)': r.valor - r.valor_pago,
+        'Categoria': r.categoria_nome || '',
+        'Centro de Custo': r.centro_custo_nome || '',
+        'Conta Financeira': r.conta_financeira_nome || '',
+        'Status': r.status,
+        'Documento': r.numero_documento || '',
+        'Observações': r.observacoes || '',
+      }));
+
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      if (format === 'xlsx') {
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Contas a Receber');
+        XLSX.writeFile(workbook, `Contas_Receber_${dateStr}.xlsx`);
+      } else {
+        const csv = Papa.unparse(rows);
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Contas_Receber_${dateStr}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error('Error exporting receivables:', e);
+      alert('Erro ao exportar dados. Tente novamente.');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
+
   const loadPayables = useCallback(async () => {
     setIsLoadingData(true);
     try {
@@ -350,8 +427,11 @@ export const ContaAzulManager: React.FC = () => {
   }, [isSelectedConnected, loadOverview, loadAuxiliaries]);
 
   useEffect(() => {
-    if (activeTab === 'receivables' && isSelectedConnected) loadReceivables();
-  }, [activeTab, loadReceivables, isSelectedConnected]);
+    if (activeTab === 'receivables' && isSelectedConnected) {
+      loadReceivables();
+      loadReceivableSummary();
+    }
+  }, [activeTab, loadReceivables, loadReceivableSummary, isSelectedConnected]);
 
   useEffect(() => {
     if (activeTab === 'payables' && isSelectedConnected) loadPayables();
@@ -868,15 +948,24 @@ export const ContaAzulManager: React.FC = () => {
         {/* ═══ RECEIVABLES ═══ */}
         {activeTab === 'receivables' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
-            <FilterBar
+            <ReceivableFilterBar
               searchTerm={searchTerm} setSearchTerm={setSearchTerm}
               statusFilter={statusFilter} setStatusFilter={setStatusFilter}
               startDate={startDate} setStartDate={setStartDate}
               endDate={endDate} setEndDate={setEndDate}
               onSync={() => handleSync('receivables')}
               isSyncing={isSyncing}
-              syncLabel="Sync Receber"
+              financialAccounts={financialAccounts}
+              onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); }}
             />
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <KpiCard label="Vencidos (R$)" value={formatCurrency(recSummary.vencidos)} sub="Em atraso" icon={<AlertTriangle size={48} />} color="red" />
+              <KpiCard label="Vencem Hoje (R$)" value={formatCurrency(recSummary.vencem_hoje)} sub="Vencimento hoje" icon={<Clock size={48} />} color="amber" />
+              <KpiCard label="A Vencer (R$)" value={formatCurrency(recSummary.a_vencer)} sub="Futuras" icon={<Calendar size={48} />} color="blue" />
+              <KpiCard label="Recebidos (R$)" value={formatCurrency(recSummary.recebidos)} sub="Já recebido" icon={<CheckCircle size={48} />} color="green" />
+              <KpiCard label="Total do Período (R$)" value={formatCurrency(recSummary.total_periodo)} sub={`${recCount} registros`} icon={<DollarSign size={48} />} color="dark" />
+            </div>
 
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
               <div className="px-8 py-5 border-b bg-slate-50/50 flex items-center justify-between shrink-0">
@@ -886,6 +975,22 @@ export const ContaAzulManager: React.FC = () => {
                     <h3 className="text-lg font-black text-slate-800 tracking-tight">Contas a Receber</h3>
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{recCount} registros sincronizados</p>
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleExportReceivables('csv')}
+                    disabled={isExporting || receivables.length === 0}
+                    className="bg-white hover:bg-slate-50 disabled:opacity-40 border border-slate-200 text-slate-600 px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} CSV
+                  </button>
+                  <button
+                    onClick={() => handleExportReceivables('xlsx')}
+                    disabled={isExporting || receivables.length === 0}
+                    className="bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Excel
+                  </button>
                 </div>
               </div>
 
@@ -906,6 +1011,7 @@ export const ContaAzulManager: React.FC = () => {
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vencimento</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Valor</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Recebido</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">A Receber</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Categoria</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
                       </tr>
@@ -920,6 +1026,7 @@ export const ContaAzulManager: React.FC = () => {
                           <td className="px-6 py-3 text-xs font-bold text-slate-700">{formatDate(r.data_vencimento)}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700 text-right">{formatCurrency(r.valor)}</td>
                           <td className="px-6 py-3 text-xs font-black text-emerald-600 text-right">{formatCurrency(r.valor_pago)}</td>
+                          <td className="px-6 py-3 text-xs font-bold text-amber-600 text-right">{formatCurrency(r.valor - r.valor_pago)}</td>
                           <td className="px-6 py-3 text-[10px] text-slate-500">{r.categoria_nome || '--'}</td>
                           <td className="px-6 py-3 text-center">
                             <StatusBadge status={r.status} />
@@ -1502,11 +1609,12 @@ export const ContaAzulManager: React.FC = () => {
 
 // ── Sub-components ────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, color }: { label: string; value: string; sub: string; icon: React.ReactNode; color: 'blue' | 'green' | 'red' | 'dark' }) {
+function KpiCard({ label, value, sub, icon, color }: { label: string; value: string; sub: string; icon: React.ReactNode; color: 'blue' | 'green' | 'red' | 'dark' | 'amber' }) {
   const colorMap = {
     blue: { bg: 'bg-white', text: 'text-blue-700', iconColor: 'text-blue-600', border: 'border-slate-200' },
     green: { bg: 'bg-white', text: 'text-green-600', iconColor: 'text-green-600', border: 'border-slate-200' },
     red: { bg: 'bg-white', text: 'text-red-600', iconColor: 'text-red-600', border: 'border-slate-200' },
+    amber: { bg: 'bg-white', text: 'text-amber-600', iconColor: 'text-amber-500', border: 'border-slate-200' },
     dark: { bg: 'bg-slate-900', text: 'text-white', iconColor: 'text-white/10', border: 'border-slate-800' },
   };
   const c = colorMap[color];
@@ -1555,6 +1663,102 @@ function FilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, s
       <button onClick={onSync} disabled={isSyncing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 transition-all whitespace-nowrap">
         {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncLabel}
       </button>
+    </div>
+  );
+}
+
+const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, onSync, isSyncing, financialAccounts, onClear }: any) {
+  const [contaFilter, setContaFilter] = useState('');
+
+  const currentMonth = useMemo(() => {
+    if (startDate) {
+      const d = new Date(startDate + 'T00:00:00');
+      return { month: d.getMonth(), year: d.getFullYear() };
+    }
+    const now = new Date();
+    return { month: now.getMonth(), year: now.getFullYear() };
+  }, [startDate]);
+
+  const setMonthPeriod = (month: number, year: number) => {
+    const first = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const last = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    setStartDate(first);
+    setEndDate(last);
+  };
+
+  const navigateMonth = (dir: -1 | 1) => {
+    let m = currentMonth.month + dir;
+    let y = currentMonth.year;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    setMonthPeriod(m, y);
+  };
+
+  const handleContaChange = (val: string) => {
+    setContaFilter(val);
+  };
+
+  const hasFilters = searchTerm || statusFilter !== 'all' || startDate || endDate || contaFilter;
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-end gap-4">
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2 whitespace-nowrap">Vencimento</span>
+          <button onClick={() => navigateMonth(-1)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            onClick={() => setMonthPeriod(currentMonth.month, currentMonth.year)}
+            className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-xs font-black min-w-[140px] text-center whitespace-nowrap"
+          >
+            {MONTH_NAMES[currentMonth.month]} {currentMonth.year}
+          </button>
+          <button onClick={() => navigateMonth(1)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input type="text" placeholder="Pesquisar no período selecionado..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <select value={contaFilter} onChange={e => handleContaChange(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]">
+          <option value="">Todas as Contas</option>
+          {(financialAccounts || []).map((a: any) => (
+            <option key={a.id} value={a.nome}>{a.nome}</option>
+          ))}
+        </select>
+
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">Todos os Status</option>
+          <option value="Pago">Pago / Liquidado</option>
+          <option value="Pendente">Pendente</option>
+          <option value="Atrasado">Atrasado / Vencido</option>
+        </select>
+
+        <button onClick={onSync} disabled={isSyncing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 transition-all whitespace-nowrap">
+          {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 px-1">
+        <div className="flex items-center gap-2">
+          <Calendar size={14} className="text-slate-400" />
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 outline-none" />
+          <span className="text-slate-300 text-xs">até</span>
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 outline-none" />
+        </div>
+        {hasFilters && (
+          <button onClick={() => { onClear(); setContaFilter(''); }} className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors">
+            <XCircle size={14} /> Limpar filtros
+          </button>
+        )}
+      </div>
     </div>
   );
 }

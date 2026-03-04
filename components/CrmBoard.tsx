@@ -700,6 +700,7 @@ export const CrmBoard: React.FC = () => {
               valor_entrada: contaAzulFormData.valor_entrada || 0,
               categoria_id: contaAzulFormData.categoria_id,
               centro_custo_id: contaAzulFormData.centro_custo_id,
+              centro_custo_nome: contaAzulCostCenters.find(cc => cc.id_conta_azul === contaAzulFormData.centro_custo_id)?.nome || '',
               contato_nome: contaAzulFormData.contato_nome,
               contato_cpf: contaAzulFormData.contato_cpf,
               tipo_pagamento: contaAzulFormData.tipo_pagamento,

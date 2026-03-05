@@ -16,8 +16,9 @@ import clsx from 'clsx';
 
 const getDisplayStatus = (record: ContaAzulReceivable): string => {
   const status = (record.status || '').toLowerCase();
-  if (status.includes('liquidado')) return 'Pago';
+  if (status.includes('liquidado') || status.includes('quitado')) return 'Pago';
   if (record.valor > 0 && Number(record.valor_pago || 0) >= Number(record.valor)) return 'Pago';
+  if (status.includes('perdido') || status.includes('desconsiderado')) return 'Cancelado';
   const today = new Date().toISOString().split('T')[0];
   if (record.data_vencimento && record.data_vencimento < today) return 'Atrasado';
   return 'Pendente';

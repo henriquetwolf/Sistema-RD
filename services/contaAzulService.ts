@@ -243,11 +243,19 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
-      query = query.ilike('status', '%Liquidado%');
+      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%');
     } else if (filters.status === 'Pendente') {
-      query = query.not('status', 'ilike', '%Liquidado%').gte('data_vencimento', today);
+      query = query
+        .not('status', 'ilike', '%Liquidado%')
+        .not('status', 'ilike', '%Quitado%')
+        .not('status', 'ilike', '%Perdido%')
+        .gte('data_vencimento', today);
     } else if (filters.status === 'Atrasado') {
-      query = query.not('status', 'ilike', '%Liquidado%').lt('data_vencimento', today);
+      query = query
+        .not('status', 'ilike', '%Liquidado%')
+        .not('status', 'ilike', '%Quitado%')
+        .not('status', 'ilike', '%Perdido%')
+        .lt('data_vencimento', today);
     } else {
       query = query.ilike('status', `%${filters.status}%`);
     }

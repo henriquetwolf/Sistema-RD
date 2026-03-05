@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { pagBankService } from '../services/pagBankService';
+import { stripeService } from '../services/stripeService';
 import type { PagBankOrder, PagBankPlan, PagBankSubscription, PagBankWebhookLog, PagBankCoupon } from '../types';
-import { Settings, ShoppingCart, CreditCard, RefreshCw, Loader2, CheckCircle, XCircle, Clock, DollarSign, TrendingUp, Eye, Plus, Trash2, AlertCircle, QrCode, FileText, Activity, Save, ToggleLeft, ToggleRight, Search, ChevronDown, ChevronUp, Tag, Copy, Percent, Edit2 } from 'lucide-react';
+import { Settings, ShoppingCart, CreditCard, RefreshCw, Loader2, CheckCircle, XCircle, Clock, DollarSign, TrendingUp, Eye, Plus, Trash2, AlertCircle, QrCode, FileText, Activity, Save, ToggleLeft, ToggleRight, Search, ChevronDown, ChevronUp, Tag, Copy, Percent, Edit2, Zap } from 'lucide-react';
 import clsx from 'clsx';
 
-type ActiveTab = 'config' | 'orders' | 'plans' | 'subscriptions' | 'coupons' | 'webhooks';
+type ActiveTab = 'config' | 'orders' | 'plans' | 'subscriptions' | 'coupons' | 'webhooks' | 'stripe';
 
 export function PagBankManager() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('config');
@@ -12,6 +13,9 @@ export function PagBankManager() {
 
   const [configForm, setConfigForm] = useState({ api_token: '', public_key: '', sandbox_mode: true, webhook_secret: '', notification_url: '' });
   const [configSaved, setConfigSaved] = useState(false);
+
+  const [stripeForm, setStripeForm] = useState({ publishable_key: '', secret_key: '', webhook_secret: '', is_active: true });
+  const [stripeSaved, setStripeSaved] = useState(false);
 
   const [orders, setOrders] = useState<PagBankOrder[]>([]);
   const [plans, setPlans] = useState<PagBankPlan[]>([]);
@@ -60,6 +64,18 @@ export function PagBankManager() {
       setSubscriptions(subsData);
       setStats(statsData);
       setCoupons(couponsData);
+
+      try {
+        const stripeData = await stripeService.getFullConfig();
+        if (stripeData) {
+          setStripeForm({
+            publishable_key: stripeData.publishable_key || '',
+            secret_key: stripeData.secret_key || '',
+            webhook_secret: stripeData.webhook_secret || '',
+            is_active: stripeData.is_active ?? true,
+          });
+        }
+      } catch (_) {}
     } catch (e) {
       console.error(e);
     } finally {
@@ -74,6 +90,16 @@ export function PagBankManager() {
       setTimeout(() => setConfigSaved(false), 3000);
     } catch (e: any) {
       alert('Erro ao salvar: ' + e.message);
+    }
+  };
+
+  const handleSaveStripeConfig = async () => {
+    try {
+      await stripeService.saveConfig(stripeForm);
+      setStripeSaved(true);
+      setTimeout(() => setStripeSaved(false), 3000);
+    } catch (e: any) {
+      alert('Erro ao salvar Stripe: ' + e.message);
     }
   };
 
@@ -247,7 +273,8 @@ export function PagBankManager() {
   }
 
   const tabs: { id: ActiveTab; label: string; icon: any }[] = [
-    { id: 'config', label: 'Configuração', icon: Settings },
+    { id: 'config', label: 'PagBank', icon: Settings },
+    { id: 'stripe', label: 'Stripe', icon: Zap },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart },
     { id: 'plans', label: 'Planos', icon: CreditCard },
     { id: 'subscriptions', label: 'Assinaturas', icon: RefreshCw },
@@ -727,6 +754,55 @@ export function PagBankManager() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Stripe Tab */}
+      {activeTab === 'stripe' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+          <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">Credenciais Stripe</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">Chave Publicável (Publishable Key) *</label>
+              <input type="text" value={stripeForm.publishable_key} onChange={e => setStripeForm(p => ({...p, publishable_key: e.target.value}))} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="pk_test_... ou pk_live_..." />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">Chave Secreta (Secret Key) *</label>
+              <input type="password" value={stripeForm.secret_key} onChange={e => setStripeForm(p => ({...p, secret_key: e.target.value}))} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="sk_test_... ou sk_live_..." />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">Webhook Secret (opcional)</label>
+              <input type="password" value={stripeForm.webhook_secret} onChange={e => setStripeForm(p => ({...p, webhook_secret: e.target.value}))} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="whsec_..." />
+            </div>
+            <div className="flex items-center gap-3 pt-6">
+              <button onClick={() => setStripeForm(p => ({...p, is_active: !p.is_active}))} className="flex items-center gap-2">
+                {stripeForm.is_active ? <ToggleRight size={28} className="text-green-600" /> : <ToggleLeft size={28} className="text-slate-400" />}
+                <span className={clsx('text-sm font-bold', stripeForm.is_active ? 'text-green-700' : 'text-slate-500')}>
+                  {stripeForm.is_active ? 'Ativo' : 'Inativo'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <p className="text-xs font-bold text-indigo-800 mb-1">URL do Webhook Stripe</p>
+            <div className="flex items-center gap-2">
+              <code className="text-xs text-indigo-600 bg-white px-3 py-2 rounded-lg border border-indigo-100 flex-1 break-all">
+                {`${(import.meta as any).env?.VITE_APP_SUPABASE_URL || 'https://SEU-PROJETO.supabase.co'}/functions/v1/stripe-webhook`}
+              </code>
+              <button onClick={() => { navigator.clipboard.writeText(`${(import.meta as any).env?.VITE_APP_SUPABASE_URL || ''}/functions/v1/stripe-webhook`); }} className="text-indigo-600 hover:text-indigo-800 p-2">
+                <Copy size={14} />
+              </button>
+            </div>
+            <p className="text-[10px] text-indigo-500 mt-2">Configure esta URL no Dashboard do Stripe em Developers &gt; Webhooks. Evento necessário: <strong>checkout.session.completed</strong></p>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={handleSaveStripeConfig} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-200">
+              <Save size={16} /> Salvar Configuração Stripe
+            </button>
+            {stripeSaved && <span className="text-green-600 text-sm font-bold flex items-center gap-1"><CheckCircle size={14} /> Salvo!</span>}
           </div>
         </div>
       )}

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { pagBankService } from '../services/pagBankService';
+import { stripeService } from '../services/stripeService';
 import { appBackend } from '../services/appBackend';
 import type { OnlineCourse, PagBankCouponValidation } from '../types';
-import { Loader2, CheckCircle, XCircle, ArrowLeft, ShieldCheck, Lock, AlertCircle, Tag, X, ExternalLink } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, ArrowLeft, ShieldCheck, Lock, AlertCircle, Tag, X, ExternalLink, CreditCard } from 'lucide-react';
 import clsx from 'clsx';
+
+type PaymentGateway = 'pagbank' | 'stripe';
 
 interface CheckoutPageProps {
   courseId: string;
@@ -26,6 +29,9 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
   const [payUrl, setPayUrl] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const pollRef = useRef<number | null>(null);
+
+  const [gateway, setGateway] = useState<PaymentGateway>('stripe');
+  const [availableGateways, setAvailableGateways] = useState<PaymentGateway[]>([]);
 
   const [couponCode, setCouponCode] = useState('');
   const [couponValidation, setCouponValidation] = useState<PagBankCouponValidation | null>(null);
@@ -61,6 +67,21 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
         return;
       }
       setCourse(found);
+
+      const gateways: PaymentGateway[] = [];
+      try {
+        const stripeConfig = await stripeService.getConfig();
+        if (stripeConfig.configured && stripeConfig.is_active) gateways.push('stripe');
+      } catch (_) {}
+      try {
+        const pagConfig = await pagBankService.getConfig();
+        if (pagConfig.configured) gateways.push('pagbank');
+      } catch (_) {}
+
+      setAvailableGateways(gateways);
+      if (gateways.length > 0 && !gateways.includes(gateway)) {
+        setGateway(gateways[0]);
+      }
     } catch (e: any) {
       setError(e.message || 'Erro ao carregar dados');
     } finally {
@@ -123,8 +144,12 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
 
   const handleSubmit = async () => {
     setError('');
-    if (!form.name || !form.email || !form.cpf) {
-      setError('Preencha nome, e-mail e CPF.');
+    if (!form.name || !form.email) {
+      setError('Preencha nome e e-mail.');
+      return;
+    }
+    if (gateway === 'pagbank' && !form.cpf) {
+      setError('Preencha o CPF para pagamento via PagBank.');
       return;
     }
     if (!course) return;
@@ -137,28 +162,52 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
       const currentUrl = window.location.origin + window.location.pathname;
       const returnUrl = `${currentUrl}?checkout=${courseId}&checkout_return=1`;
 
-      const response = await pagBankService.createCheckout({
-        course_id: courseId,
-        course_title: course.title,
-        student_deal_id: dealId || `guest-${Date.now()}`,
-        student_name: form.name,
-        student_email: form.email,
-        student_cpf: form.cpf.replace(/\D/g, ''),
-        student_phone: form.phone.replace(/\D/g, ''),
-        amount: amountInCents,
-        coupon_code: appliedCoupon,
-        return_url: returnUrl,
-      });
+      if (gateway === 'stripe') {
+        const response = await stripeService.createCheckoutSession({
+          course_id: courseId,
+          course_title: course.title,
+          student_deal_id: dealId || `guest-${Date.now()}`,
+          student_name: form.name,
+          student_email: form.email,
+          amount: amountInCents,
+          coupon_code: appliedCoupon,
+          return_url: returnUrl,
+        });
 
-      if (response.pay_url) {
-        setPayUrl(response.pay_url);
-        setReferenceId(response.reference_id);
-        setStep('redirecting');
-        startPaymentPolling(response.reference_id);
-        window.open(response.pay_url, '_blank');
+        if (response.session_url) {
+          setPayUrl(response.session_url);
+          setReferenceId(response.reference_id);
+          setStep('redirecting');
+          startPaymentPolling(response.reference_id, 'stripe');
+          window.open(response.session_url, '_blank');
+        } else {
+          setError('Não foi possível gerar o link de pagamento. Tente novamente.');
+          setStep('error');
+        }
       } else {
-        setError('Não foi possível gerar o link de pagamento. Tente novamente.');
-        setStep('error');
+        const response = await pagBankService.createCheckout({
+          course_id: courseId,
+          course_title: course.title,
+          student_deal_id: dealId || `guest-${Date.now()}`,
+          student_name: form.name,
+          student_email: form.email,
+          student_cpf: form.cpf.replace(/\D/g, ''),
+          student_phone: form.phone.replace(/\D/g, ''),
+          amount: amountInCents,
+          coupon_code: appliedCoupon,
+          return_url: returnUrl,
+        });
+
+        if (response.pay_url) {
+          setPayUrl(response.pay_url);
+          setReferenceId(response.reference_id);
+          setStep('redirecting');
+          startPaymentPolling(response.reference_id, 'pagbank');
+          window.open(response.pay_url, '_blank');
+        } else {
+          setError('Não foi possível gerar o link de pagamento. Tente novamente.');
+          setStep('error');
+        }
       }
     } catch (e: any) {
       setError(e.message || 'Erro ao criar checkout');
@@ -166,7 +215,7 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
     }
   };
 
-  const startPaymentPolling = (refId: string) => {
+  const startPaymentPolling = (refId: string, gw: PaymentGateway) => {
     if (pollRef.current) clearInterval(pollRef.current);
     let attempts = 0;
     pollRef.current = window.setInterval(async () => {
@@ -176,11 +225,20 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
         return;
       }
       try {
-        const order = await pagBankService.checkOrderStatus(undefined, refId);
-        if (order.status === 'PAID' || order.pagbank_payments?.[0]?.status === 'PAID') {
-          if (pollRef.current) clearInterval(pollRef.current);
-          setStep('success');
-          onSuccess?.();
+        if (gw === 'stripe') {
+          const order = await stripeService.checkStatus(refId);
+          if (order.status === 'PAID' || order.pagbank_payments?.[0]?.status === 'PAID') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setStep('success');
+            onSuccess?.();
+          }
+        } else {
+          const order = await pagBankService.checkOrderStatus(undefined, refId);
+          if (order.status === 'PAID' || order.pagbank_payments?.[0]?.status === 'PAID') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setStep('success');
+            onSuccess?.();
+          }
         }
       } catch (_) {}
     }, 5000);
@@ -250,9 +308,9 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
           <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <ExternalLink className="text-indigo-600" size={36} />
           </div>
-          <h1 className="text-xl font-black text-slate-800 mb-2">Finalize o pagamento no PagBank</h1>
+          <h1 className="text-xl font-black text-slate-800 mb-2">Finalize o pagamento</h1>
           <p className="text-slate-500 mb-6">
-            Uma nova aba foi aberta com a página de pagamento do PagBank. Complete o pagamento por lá.
+            Uma nova aba foi aberta com a página de pagamento {gateway === 'stripe' ? 'do Stripe' : 'do PagBank'}. Complete o pagamento por lá.
           </p>
           <p className="text-xs text-slate-400 mb-6">Esta página atualizará automaticamente quando o pagamento for confirmado.</p>
 
@@ -377,15 +435,60 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
             )}
           </div>
 
-          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 text-center">
-            <ShieldCheck className="text-indigo-600 mx-auto mb-2" size={32} />
-            <p className="text-sm font-bold text-indigo-800">Pagamento Seguro via PagBank</p>
-            <p className="text-xs text-indigo-600 mt-1">Você será redirecionado para a página segura do PagBank onde poderá escolher pagar com PIX, Cartão de Crédito, Débito ou Boleto.</p>
+          {availableGateways.length > 1 && (
+            <div>
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Forma de Pagamento</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setGateway('stripe')}
+                  className={clsx(
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all',
+                    gateway === 'stripe'
+                      ? 'border-indigo-500 bg-indigo-50 shadow-md'
+                      : 'border-slate-200 hover:border-slate-300'
+                  )}
+                >
+                  <CreditCard size={24} className={gateway === 'stripe' ? 'text-indigo-600' : 'text-slate-400'} />
+                  <span className={clsx('text-xs font-bold', gateway === 'stripe' ? 'text-indigo-700' : 'text-slate-500')}>Stripe</span>
+                  <span className="text-[10px] text-slate-400">Cartão, Boleto</span>
+                </button>
+                <button
+                  onClick={() => setGateway('pagbank')}
+                  className={clsx(
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all',
+                    gateway === 'pagbank'
+                      ? 'border-green-500 bg-green-50 shadow-md'
+                      : 'border-slate-200 hover:border-slate-300'
+                  )}
+                >
+                  <ShieldCheck size={24} className={gateway === 'pagbank' ? 'text-green-600' : 'text-slate-400'} />
+                  <span className={clsx('text-xs font-bold', gateway === 'pagbank' ? 'text-green-700' : 'text-slate-500')}>PagBank</span>
+                  <span className="text-[10px] text-slate-400">PIX, Cartão, Boleto</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className={clsx('rounded-2xl p-5 text-center border', gateway === 'stripe' ? 'bg-indigo-50 border-indigo-200' : 'bg-green-50 border-green-200')}>
+            <ShieldCheck className={clsx('mx-auto mb-2', gateway === 'stripe' ? 'text-indigo-600' : 'text-green-600')} size={32} />
+            <p className={clsx('text-sm font-bold', gateway === 'stripe' ? 'text-indigo-800' : 'text-green-800')}>
+              Pagamento Seguro via {gateway === 'stripe' ? 'Stripe' : 'PagBank'}
+            </p>
+            <p className={clsx('text-xs mt-1', gateway === 'stripe' ? 'text-indigo-600' : 'text-green-600')}>
+              {gateway === 'stripe'
+                ? 'Você será redirecionado para a página segura do Stripe onde poderá pagar com Cartão de Crédito ou Boleto.'
+                : 'Você será redirecionado para a página segura do PagBank onde poderá escolher pagar com PIX, Cartão de Crédito, Débito ou Boleto.'}
+            </p>
           </div>
 
           <button
             onClick={handleSubmit}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 text-base"
+            className={clsx(
+              'w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-base',
+              gateway === 'stripe'
+                ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
+                : 'bg-green-600 hover:bg-green-700 shadow-green-200'
+            )}
           >
             <Lock size={18} />
             Ir para Pagamento {formatCurrency(effectivePrice)}
@@ -393,7 +496,7 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
 
           <div className="flex items-center justify-center gap-2 text-slate-400">
             <ShieldCheck size={14} />
-            <p className="text-[10px] font-bold uppercase tracking-widest">Pagamento processado pelo PagBank</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest">Pagamento processado pelo {gateway === 'stripe' ? 'Stripe' : 'PagBank'}</p>
           </div>
         </div>
       </div>

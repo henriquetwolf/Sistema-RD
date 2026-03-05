@@ -1087,3 +1087,31 @@ export interface PagBankCouponValidation {
   final_amount: number;
   message: string;
 }
+
+// ── Stripe Integration Types ────────────────────────────────
+
+export interface StripeConfig {
+  id: string;
+  publishable_key: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StripeCreateSessionPayload {
+  course_id: string;
+  course_title?: string;
+  student_deal_id: string;
+  student_name?: string;
+  student_email?: string;
+  amount: number;
+  coupon_code?: string;
+  return_url?: string;
+}
+
+export interface StripeCreateSessionResponse {
+  success: boolean;
+  session_id: string;
+  session_url: string;
+  reference_id: string;
+}

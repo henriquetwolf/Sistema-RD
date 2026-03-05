@@ -136,42 +136,31 @@ async function handleCreateCheckout(req: Request): Promise<Response> {
   }
 
   const cleanCpf = (student_cpf || "").replace(/\D/g, "");
-  const phoneParts = parsePhone(student_phone || "");
 
   const checkoutPayload: any = {
     reference_id: referenceId,
-    customer: {
-      name: student_name || "Aluno",
-      email: student_email || "aluno@voll.com.br",
-      tax_id: cleanCpf || undefined,
-      phones: phoneParts ? [{ country: "+55", area: phoneParts.area, number: phoneParts.number, type: phoneParts.type }] : undefined,
-    },
     items: [
       {
-        reference_id: course_id,
-        name: course_title || "Curso Online",
+        name: (course_title || "Curso Online").substring(0, 64),
         quantity: 1,
         unit_amount: finalAmount,
       },
     ],
-    payment_methods: [
-      { type: "CREDIT_CARD" },
-      { type: "DEBIT_CARD" },
-      { type: "BOLETO" },
-      { type: "PIX" },
-    ],
-    payment_methods_configs: [
-      {
-        type: "CREDIT_CARD",
-        config_options: [
-          { option: "INSTALLMENTS_LIMIT", value: "12" },
-        ],
-      },
-    ],
-    soft_descriptor: "VOLL Pilates",
-    payment_notification_urls: config.notification_url ? [config.notification_url] : [],
-    notification_urls: config.notification_url ? [config.notification_url] : [],
   };
+
+  if (student_name || student_email) {
+    const customerObj: any = {};
+    if (student_name) customerObj.name = student_name;
+    if (student_email) customerObj.email = student_email;
+    if (cleanCpf && cleanCpf.length === 11) customerObj.tax_id = cleanCpf;
+    checkoutPayload.customer = customerObj;
+    checkoutPayload.customer_modifiable = true;
+  }
+
+  if (config.notification_url) {
+    checkoutPayload.payment_notification_urls = [config.notification_url];
+    checkoutPayload.notification_urls = [config.notification_url];
+  }
 
   if (return_url) {
     checkoutPayload.redirect_urls = {

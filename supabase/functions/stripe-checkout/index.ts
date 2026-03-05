@@ -342,6 +342,8 @@ async function handleCheckStatus(req: Request): Promise<Response> {
                 updated_at: new Date().toISOString(),
               })
               .eq("order_id", localOrder.id);
+
+            await grantCourseAccess(db, localOrder);
           }
 
           localOrder.status = newStatus;
@@ -359,6 +361,84 @@ async function handleCheckStatus(req: Request): Promise<Response> {
     .single();
 
   return jsonResponse(updatedOrder || localOrder);
+}
+
+async function grantCourseAccess(db: any, order: any) {
+  if (!order.course_id || !order.student_deal_id) {
+    console.log("[stripe-checkout] Missing course_id or student_deal_id, skipping access grant");
+    return;
+  }
+
+  const { data: existingAccess } = await db
+    .from("crm_student_course_access")
+    .select("id")
+    .eq("student_deal_id", order.student_deal_id)
+    .eq("course_id", order.course_id)
+    .maybeSingle();
+
+  if (existingAccess) {
+    console.log("[stripe-checkout] Access already exists for student:", order.student_deal_id);
+    return;
+  }
+
+  const { error: accessErr } = await db
+    .from("crm_student_course_access")
+    .insert({
+      student_deal_id: order.student_deal_id,
+      course_id: order.course_id,
+      unlocked_at: new Date().toISOString(),
+    });
+
+  if (accessErr) {
+    console.error("[stripe-checkout] Error granting access:", accessErr);
+    return;
+  }
+
+  console.log(
+    "[stripe-checkout] Access granted for student:",
+    order.student_deal_id,
+    "course:",
+    order.course_id
+  );
+
+  await db.from("crm_activity_logs").insert({
+    user_name: "Sistema Stripe",
+    action: "create",
+    module: "stripe",
+    details: `Acesso liberado automaticamente ao curso "${order.course_title || "Curso"}" para ${order.student_name || "Aluno"} (${order.student_email || ""}) após pagamento confirmado via Stripe.`,
+    record_id: order.id,
+  });
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const { data: tokens } = await db
+      .from("crm_device_tokens")
+      .select("token, platform")
+      .eq("user_id", order.student_deal_id)
+      .eq("user_type", "student");
+
+    if (tokens && tokens.length > 0) {
+      await fetch(`${supabaseUrl}/functions/v1/push-notify`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "send",
+          user_id: order.student_deal_id,
+          user_type: "student",
+          title: "Pagamento Confirmado!",
+          body: `Seu acesso ao curso "${order.course_title || "Curso"}" foi liberado. Bons estudos!`,
+          data: { type: "course_unlocked", course_id: order.course_id },
+        }),
+      });
+    }
+  } catch (pushErr) {
+    console.error("[stripe-checkout] Push notification error (non-blocking):", pushErr);
+  }
 }
 
 async function validateCouponInternal(

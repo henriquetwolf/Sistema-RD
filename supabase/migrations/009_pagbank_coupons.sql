@@ -27,8 +27,8 @@ ALTER TABLE pagbank_coupons ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_coupons"
     ON pagbank_coupons FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_coupons"
-    ON pagbank_coupons FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_coupons"
+    ON pagbank_coupons FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pb_coupons_code ON pagbank_coupons(UPPER(code));
 CREATE INDEX IF NOT EXISTS idx_pb_coupons_active ON pagbank_coupons(is_active);
@@ -52,8 +52,8 @@ ALTER TABLE pagbank_coupon_usage ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_coupon_usage"
     ON pagbank_coupon_usage FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_coupon_usage"
-    ON pagbank_coupon_usage FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_coupon_usage"
+    ON pagbank_coupon_usage FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_pb_coupon_usage_coupon ON pagbank_coupon_usage(coupon_id);
 CREATE INDEX IF NOT EXISTS idx_pb_coupon_usage_student ON pagbank_coupon_usage(student_deal_id);

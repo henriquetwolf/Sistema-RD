@@ -56,6 +56,8 @@ Deno.serve(async (req) => {
     switch (action) {
       case "config":
         return await handleGetConfig();
+      case "create-checkout":
+        return await handleCreateCheckout(req);
       case "create-order":
         return await handleCreateOrder(req);
       case "check-status":
@@ -89,6 +91,181 @@ async function handleGetConfig(): Promise<Response> {
     configured: true,
     public_key: data.public_key,
     sandbox_mode: data.sandbox_mode,
+  });
+}
+
+// ── POST /create-checkout ────────────────────────────────────
+
+async function handleCreateCheckout(req: Request): Promise<Response> {
+  const body = await req.json();
+  const {
+    course_id,
+    course_title,
+    student_deal_id,
+    student_name,
+    student_email,
+    student_cpf,
+    student_phone,
+    amount,
+    coupon_code,
+    return_url,
+  } = body;
+
+  if (!course_id || !student_deal_id || !amount) {
+    return errorResponse("Campos obrigatórios: course_id, student_deal_id, amount");
+  }
+
+  const config = await getPagBankConfig();
+  const apiUrl = getApiUrl(config.sandbox_mode);
+  const db = getSupabaseServiceClient();
+
+  const referenceId = `VOLL-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+
+  let finalAmount = amount;
+  let discountAmount = 0;
+  let couponId: string | null = null;
+
+  if (coupon_code) {
+    const couponResult = await validateCouponInternal(db, coupon_code, amount, course_id, student_deal_id, student_email);
+    if (!couponResult.valid) {
+      return errorResponse(couponResult.message);
+    }
+    finalAmount = couponResult.final_amount;
+    discountAmount = couponResult.discount_amount;
+    couponId = couponResult.coupon?.id || null;
+  }
+
+  const cleanCpf = (student_cpf || "").replace(/\D/g, "");
+  const phoneParts = parsePhone(student_phone || "");
+
+  const checkoutPayload: any = {
+    reference_id: referenceId,
+    customer: {
+      name: student_name || "Aluno",
+      email: student_email || "aluno@voll.com.br",
+      tax_id: cleanCpf || undefined,
+      phones: phoneParts ? [{ country: "+55", area: phoneParts.area, number: phoneParts.number, type: phoneParts.type }] : undefined,
+    },
+    items: [
+      {
+        reference_id: course_id,
+        name: course_title || "Curso Online",
+        quantity: 1,
+        unit_amount: finalAmount,
+      },
+    ],
+    payment_methods: [
+      { type: "CREDIT_CARD" },
+      { type: "DEBIT_CARD" },
+      { type: "BOLETO" },
+      { type: "PIX" },
+    ],
+    payment_methods_configs: [
+      {
+        type: "CREDIT_CARD",
+        config_options: [
+          { option: "INSTALLMENTS_LIMIT", value: "12" },
+        ],
+      },
+    ],
+    soft_descriptor: "VOLL Pilates",
+    payment_notification_urls: config.notification_url ? [config.notification_url] : [],
+    notification_urls: config.notification_url ? [config.notification_url] : [],
+  };
+
+  if (return_url) {
+    checkoutPayload.redirect_urls = {
+      return_url: return_url,
+      back_url: return_url,
+    };
+  }
+
+  console.log("[pagbank-orders] Creating checkout:", JSON.stringify(checkoutPayload).substring(0, 500));
+
+  const pagbankRes = await fetch(`${apiUrl}/checkouts`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.api_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(checkoutPayload),
+  });
+
+  const pagbankData = await pagbankRes.json();
+
+  if (!pagbankRes.ok) {
+    console.error("[pagbank-orders] PagBank checkout error:", JSON.stringify(pagbankData));
+    return errorResponse(
+      `Erro PagBank: ${pagbankData.error_messages?.[0]?.description || pagbankData.message || JSON.stringify(pagbankData)}`,
+      502
+    );
+  }
+
+  const payLink = pagbankData.links?.find((l: any) => l.rel === "PAY")?.href;
+
+  const { error: orderErr } = await db.from("pagbank_orders").insert({
+    reference_id: referenceId,
+    pagbank_order_id: pagbankData.id,
+    course_id,
+    course_title,
+    student_deal_id,
+    student_name,
+    student_email,
+    student_cpf: cleanCpf,
+    amount: finalAmount,
+    original_amount: amount,
+    discount_amount: discountAmount,
+    coupon_code: coupon_code || null,
+    payment_method: "CHECKOUT",
+    status: "PENDING",
+  });
+
+  if (orderErr) console.error("[pagbank-orders] DB insert order error:", orderErr);
+
+  const { data: insertedOrder } = await db
+    .from("pagbank_orders")
+    .select("id")
+    .eq("reference_id", referenceId)
+    .single();
+
+  if (insertedOrder) {
+    await db.from("pagbank_payments").insert({
+      order_id: insertedOrder.id,
+      payment_method: "CHECKOUT",
+      amount: finalAmount,
+      status: "WAITING",
+    });
+  }
+
+  if (couponId && insertedOrder?.id) {
+    await db.from("pagbank_coupon_usage").insert({
+      coupon_id: couponId,
+      order_id: insertedOrder.id,
+      student_deal_id,
+      student_email,
+      original_amount: amount,
+      discount_amount: discountAmount,
+      final_amount: finalAmount,
+    });
+
+    const { data: couponRow } = await db
+      .from("pagbank_coupons")
+      .select("current_uses")
+      .eq("id", couponId)
+      .single();
+    if (couponRow) {
+      await db.from("pagbank_coupons")
+        .update({ current_uses: (couponRow.current_uses || 0) + 1, updated_at: new Date().toISOString() })
+        .eq("id", couponId);
+    }
+  }
+
+  return jsonResponse({
+    success: true,
+    checkout_id: pagbankData.id,
+    reference_id: referenceId,
+    pay_url: payLink || null,
+    links: pagbankData.links || [],
   });
 }
 

@@ -33,9 +33,12 @@ Deno.serve(async (req) => {
     const payload = await req.json();
     console.log("[pagbank-webhook] Received:", JSON.stringify(payload).substring(0, 1000));
 
+    const eventId = payload.id || extractChargeId(payload);
+    const eventType = payload.type || payload.event || "unknown";
+
     await db.from("pagbank_webhook_log").insert({
-      event_type: payload.type || payload.event || "unknown",
-      pagbank_id: payload.id || extractChargeId(payload),
+      event_type: eventType,
+      pagbank_id: eventId,
       payload,
     });
 
@@ -60,9 +63,17 @@ Deno.serve(async (req) => {
       await processOrderUpdate(db, payload);
     }
 
+    if (eventType === "checkout.paid" || payload.status === "PAID") {
+      await processCheckoutPaid(db, payload);
+    }
+
+    if (charges.length === 0 && qrCodes.length === 0 && payload.reference_id) {
+      await processCheckoutNotification(db, payload);
+    }
+
     await db.from("pagbank_webhook_log")
       .update({ processed: true })
-      .eq("pagbank_id", payload.id || extractChargeId(payload))
+      .eq("pagbank_id", eventId)
       .order("created_at", { ascending: false })
       .limit(1);
 
@@ -243,6 +254,60 @@ async function grantCourseAccess(db: any, orderId: string) {
     }
   } catch (pushErr) {
     console.error("[pagbank-webhook] Push notification error (non-blocking):", pushErr);
+  }
+}
+
+async function processCheckoutPaid(db: any, payload: any) {
+  const checkoutId = payload.id;
+  const referenceId = payload.reference_id;
+
+  if (!checkoutId && !referenceId) return;
+
+  let orderQuery = db.from("pagbank_orders").select("id, status, course_id, student_deal_id");
+  if (referenceId) orderQuery = orderQuery.eq("reference_id", referenceId);
+  else orderQuery = orderQuery.eq("pagbank_order_id", checkoutId);
+
+  const { data: order } = await orderQuery.maybeSingle();
+  if (!order) return;
+
+  if (order.status === "PAID") return;
+
+  await db.from("pagbank_orders")
+    .update({ status: "PAID", updated_at: new Date().toISOString() })
+    .eq("id", order.id);
+
+  await db.from("pagbank_payments")
+    .update({ status: "PAID", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("order_id", order.id);
+
+  await grantCourseAccess(db, order.id);
+}
+
+async function processCheckoutNotification(db: any, payload: any) {
+  const referenceId = payload.reference_id;
+  if (!referenceId) return;
+
+  const { data: order } = await db
+    .from("pagbank_orders")
+    .select("id, status")
+    .eq("reference_id", referenceId)
+    .maybeSingle();
+
+  if (!order) return;
+
+  const newStatus = payload.status || payload.charges?.[0]?.status;
+  if (!newStatus || newStatus === order.status) return;
+
+  await db.from("pagbank_orders")
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq("id", order.id);
+
+  await db.from("pagbank_payments")
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq("order_id", order.id);
+
+  if (newStatus === "PAID") {
+    await grantCourseAccess(db, order.id);
   }
 }
 

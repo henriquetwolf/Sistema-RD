@@ -22,8 +22,8 @@ ALTER TABLE pagbank_config ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_config"
     ON pagbank_config FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_config"
-    ON pagbank_config FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_config"
+    ON pagbank_config FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- View segura (sem api_token nem webhook_secret)
 CREATE OR REPLACE VIEW pagbank_config_safe AS
@@ -54,8 +54,8 @@ ALTER TABLE pagbank_orders ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_orders"
     ON pagbank_orders FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_orders"
-    ON pagbank_orders FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_orders"
+    ON pagbank_orders FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_pb_orders_student ON pagbank_orders(student_deal_id);
 CREATE INDEX IF NOT EXISTS idx_pb_orders_course ON pagbank_orders(course_id);
@@ -94,8 +94,8 @@ ALTER TABLE pagbank_payments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_payments"
     ON pagbank_payments FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_payments"
-    ON pagbank_payments FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_payments"
+    ON pagbank_payments FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_pb_payments_order ON pagbank_payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_pb_payments_status ON pagbank_payments(status);
@@ -124,8 +124,8 @@ ALTER TABLE pagbank_plans ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_plans"
     ON pagbank_plans FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_plans"
-    ON pagbank_plans FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_plans"
+    ON pagbank_plans FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_pb_plans_course ON pagbank_plans(course_id);
 
@@ -149,8 +149,8 @@ ALTER TABLE pagbank_subscriptions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_subscriptions"
     ON pagbank_subscriptions FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_subscriptions"
-    ON pagbank_subscriptions FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_subscriptions"
+    ON pagbank_subscriptions FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_pb_subs_student ON pagbank_subscriptions(student_deal_id);
 CREATE INDEX IF NOT EXISTS idx_pb_subs_plan ON pagbank_subscriptions(plan_id);
@@ -173,8 +173,8 @@ ALTER TABLE pagbank_webhook_log ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Service full access pagbank_webhook_log"
     ON pagbank_webhook_log FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Authenticated read pagbank_webhook_log"
-    ON pagbank_webhook_log FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated full access pagbank_webhook_log"
+    ON pagbank_webhook_log FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ── Adicionar campo purchase_type em crm_online_courses ──────
 

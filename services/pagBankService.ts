@@ -113,6 +113,24 @@ async function createOrder(payload: PagBankCreateOrderPayload): Promise<PagBankC
   });
 }
 
+async function createCheckout(payload: {
+  course_id: string;
+  course_title?: string;
+  student_deal_id: string;
+  student_name?: string;
+  student_email?: string;
+  student_cpf?: string;
+  student_phone?: string;
+  amount: number;
+  coupon_code?: string;
+  return_url?: string;
+}): Promise<{ success: boolean; checkout_id: string; reference_id: string; pay_url: string | null }> {
+  return edgeFetch('pagbank-orders', 'create-checkout', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 async function checkOrderStatus(orderId?: string, referenceId?: string): Promise<PagBankOrder> {
   return edgeFetch('pagbank-orders', 'check-status', {
     method: 'POST',
@@ -373,6 +391,7 @@ export const pagBankService = {
   getFullConfig,
   saveConfig,
   createOrder,
+  createCheckout,
   checkOrderStatus,
   getOrders,
   getStudentOrders,

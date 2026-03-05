@@ -187,11 +187,21 @@ async function handleCreateCheckout(req: Request): Promise<Response> {
     headers: {
       Authorization: `Bearer ${config.api_token}`,
       "Content-Type": "application/json",
+      Accept: "application/json",
     },
     body: JSON.stringify(checkoutPayload),
   });
 
-  const pagbankData = await pagbankRes.json();
+  const rawText = await pagbankRes.text();
+  console.log("[pagbank-orders] Checkout response status:", pagbankRes.status, "body:", rawText.substring(0, 500));
+
+  let pagbankData: any;
+  try {
+    pagbankData = JSON.parse(rawText);
+  } catch {
+    console.error("[pagbank-orders] Failed to parse PagBank response:", rawText.substring(0, 500));
+    return errorResponse(`Resposta inesperada do PagBank (status ${pagbankRes.status}): ${rawText.substring(0, 200)}`, 502);
+  }
 
   if (!pagbankRes.ok) {
     console.error("[pagbank-orders] PagBank checkout error:", JSON.stringify(pagbankData));

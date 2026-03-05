@@ -356,7 +356,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                          ))}
                       </div>
                       <a 
-                          href={c.cta_url?.value || c.cta?.href || "#"}
+                          href={c.checkout_course_id?.value ? `?checkout=${c.checkout_course_id.value}` : (c.cta_url?.value || c.cta?.href || "#")}
                           className="block w-full py-7 rounded-[2rem] font-black text-xl uppercase tracking-[0.15em] shadow-2xl transition-all transform hover:scale-[1.02] active:scale-95 text-white text-center"
                           style={{ backgroundColor: primaryColor }}
                       >

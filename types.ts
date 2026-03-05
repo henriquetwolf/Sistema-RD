@@ -915,3 +915,175 @@ export interface ContaAzulProductMapping {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── PagBank Integration Types ────────────────────────────────
+
+export type PagBankPaymentMethod = 'CREDIT_CARD' | 'PIX' | 'BOLETO';
+export type PagBankOrderStatus = 'PENDING' | 'PAID' | 'DECLINED' | 'CANCELED' | 'WAITING_PIX' | 'WAITING_BOLETO' | 'IN_ANALYSIS' | 'AUTHORIZED';
+export type PagBankPurchaseType = 'one_time' | 'subscription' | 'both';
+
+export interface PagBankConfig {
+  id: string;
+  public_key: string;
+  sandbox_mode: boolean;
+  notification_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PagBankOrder {
+  id: string;
+  reference_id: string;
+  pagbank_order_id?: string;
+  course_id: string;
+  course_title?: string;
+  student_deal_id: string;
+  student_name?: string;
+  student_email?: string;
+  student_cpf?: string;
+  amount: number;
+  payment_method: PagBankPaymentMethod;
+  status: PagBankOrderStatus;
+  created_at: string;
+  updated_at: string;
+  pagbank_payments?: PagBankPayment[];
+}
+
+export interface PagBankPayment {
+  id: string;
+  order_id: string;
+  pagbank_charge_id?: string;
+  status: string;
+  paid_at?: string;
+  payment_method?: string;
+  installments: number;
+  card_brand?: string;
+  card_last_digits?: string;
+  pix_qrcode?: string;
+  pix_qrcode_image?: string;
+  pix_expiration?: string;
+  boleto_url?: string;
+  boleto_barcode?: string;
+  boleto_due_date?: string;
+  amount?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PagBankPlan {
+  id: string;
+  pagbank_plan_id?: string;
+  course_id: string;
+  name: string;
+  description?: string;
+  amount: number;
+  interval_unit: string;
+  interval_length: number;
+  trial_days: number;
+  billing_cycles: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PagBankSubscription {
+  id: string;
+  pagbank_subscription_id?: string;
+  plan_id?: string;
+  student_deal_id: string;
+  student_name?: string;
+  student_email?: string;
+  status: string;
+  next_billing_date?: string;
+  created_at: string;
+  updated_at: string;
+  pagbank_plans?: PagBankPlan;
+}
+
+export interface PagBankCreateOrderPayload {
+  course_id: string;
+  course_title?: string;
+  student_deal_id: string;
+  student_name?: string;
+  student_email?: string;
+  student_cpf?: string;
+  student_phone?: string;
+  amount: number;
+  payment_method: PagBankPaymentMethod;
+  card_encrypted?: string;
+  installments?: number;
+  coupon_code?: string;
+}
+
+export interface PagBankCreateOrderResponse {
+  success: boolean;
+  order_id: string;
+  reference_id: string;
+  status: string;
+  payment: {
+    method: string;
+    status: string;
+    pix_qrcode?: string;
+    pix_qrcode_image?: string;
+    pix_expiration?: string;
+    boleto_url?: string;
+    boleto_barcode?: string;
+    boleto_due_date?: string;
+    card_brand?: string;
+    card_last_digits?: string;
+    installments: number;
+    charge_id?: string;
+  };
+}
+
+export interface PagBankWebhookLog {
+  id: string;
+  event_type?: string;
+  pagbank_id?: string;
+  payload?: any;
+  processed: boolean;
+  error?: string;
+  created_at: string;
+}
+
+// ── PagBank Coupons ──────────────────────────────────────────
+
+export type PagBankDiscountType = 'percentage' | 'fixed';
+
+export interface PagBankCoupon {
+  id: string;
+  code: string;
+  description?: string;
+  discount_type: PagBankDiscountType;
+  discount_value: number;
+  min_amount: number;
+  max_discount?: number;
+  course_id?: string;
+  valid_from?: string;
+  valid_until?: string;
+  max_uses: number;
+  current_uses: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PagBankCouponUsage {
+  id: string;
+  coupon_id: string;
+  order_id?: string;
+  student_deal_id?: string;
+  student_email?: string;
+  original_amount: number;
+  discount_amount: number;
+  final_amount: number;
+  created_at: string;
+}
+
+export interface PagBankCouponValidation {
+  valid: boolean;
+  coupon?: PagBankCoupon;
+  discount_amount: number;
+  final_amount: number;
+  message: string;
+}

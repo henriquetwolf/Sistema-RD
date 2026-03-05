@@ -1225,7 +1225,7 @@ Use esta análise como inspiração para estrutura, tom e design.`;
                                         placeholder="https://..."
                                     />
                                 </div>
-                                <p className="text-[8px] text-slate-400 mt-1 italic">Use a tag <strong>{"{{cta_link}}"}</strong> para injetar este link.</p>
+                                <p className="text-[8px] text-slate-400 mt-1 italic">Use a tag <strong>{"{{cta_link}}"}</strong> para injetar este link. Para checkout PagBank, use: <strong>?checkout=ID_DO_CURSO</strong></p>
                             </div>
 
                             <div>

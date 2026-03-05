@@ -1,17 +1,19 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder } from '../types';
 import { appBackend } from '../services/appBackend';
+import { pagBankService } from '../services/pagBankService';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
-    Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload
+    Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
+import { CheckoutPage } from './CheckoutPage';
 import { FormViewer } from './FormViewer';
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
@@ -23,7 +25,9 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases'>('classes');
+    const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
+    const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
     const [allCourseInfos, setAllCourseInfos] = useState<CourseInfo[]>([]);
     const [eventsList, setEventsList] = useState<EventModel[]>([]);
@@ -77,13 +81,29 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         loadEvents();
         fetchSupportNotifications();
         fetchPendingContracts();
+        loadStudentOrders();
     }, [student]);
 
     useEffect(() => {
         if (activeTab === 'certificates') loadCertificates();
         if (activeTab === 'contracts') fetchPendingContracts();
         if (activeTab === 'events') loadEvents();
+        if (activeTab === 'purchases') loadStudentOrders();
     }, [activeTab]);
+
+    const loadStudentOrders = async () => {
+        if (!mainDealId) return;
+        try {
+            const orders = await pagBankService.getStudentOrders(String(mainDealId));
+            setStudentOrders(orders);
+        } catch (e) { console.error(e); }
+    };
+
+    const handleCheckoutSuccess = () => {
+        setCheckoutCourseId(null);
+        loadOnlineCourses();
+        loadStudentOrders();
+    };
 
     // Lógica de Sincronização de Pesquisas com gatilho de conclusão
     useEffect(() => {
@@ -695,7 +715,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'online_courses', label: 'Cursos Online', icon: MonitorPlay, color: 'text-indigo-600' },
                         { id: 'events', label: 'Eventos', icon: Mic, color: 'text-amber-600' },
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
-                        { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
+                        { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length },
+                        { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' }
                     ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
@@ -747,19 +768,60 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                 <div className="col-span-full py-20 text-center text-slate-400 italic font-bold border-2 border-dashed rounded-3xl">Voce ainda nao possui cursos online.</div>
                             ) : allCourses.map(course => {
                                 const isUnlocked = unlockedCourseIds.includes(course.id);
+                                const hasPriceForPurchase = course.price > 0;
                                 return (
-                                    <div key={course.id} onClick={() => isUnlocked && handleOpenCoursePlayer(course)} className={clsx("bg-white rounded-[2rem] shadow-sm hover:shadow-xl transition-all overflow-hidden border border-slate-200 flex flex-col group", !isUnlocked ? "opacity-50 grayscale cursor-default" : "cursor-pointer")}>
+                                    <div key={course.id} onClick={() => isUnlocked && handleOpenCoursePlayer(course)} className={clsx("bg-white rounded-[2rem] shadow-sm hover:shadow-xl transition-all overflow-hidden border border-slate-200 flex flex-col group", isUnlocked ? "cursor-pointer" : "cursor-default")}>
                                         <div className="h-48 relative overflow-hidden">
                                             {course.imageUrl ? <img src={course.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={course.title} /> : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300"><MonitorPlay size={48} /></div>}
-                                            {!isUnlocked && <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center text-white"><Lock size={32} className="mb-2" /><span className="text-[10px] font-black uppercase tracking-[0.2em]">Aguardando Liberacao</span></div>}
+                                            {!isUnlocked && !hasPriceForPurchase && <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center text-white"><Lock size={32} className="mb-2" /><span className="text-[10px] font-black uppercase tracking-[0.2em]">Aguardando Liberacao</span></div>}
+                                            {!isUnlocked && hasPriceForPurchase && <div className="absolute inset-0 bg-indigo-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white"><ShoppingCart size={28} className="mb-2" /><span className="text-lg font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(course.price)}</span></div>}
                                         </div>
                                         <div className="p-6 flex-1 flex flex-col">
                                             <h3 className="font-black text-slate-800 mb-2 leading-tight">{course.title}</h3>
-                                            <div className="mt-auto flex items-center justify-between">{isUnlocked ? <span className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">Assistir Agora <ArrowRight size={14}/></span> : <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Indisponivel</span>}</div>
+                                            <div className="mt-auto flex items-center justify-between">
+                                                {isUnlocked ? (
+                                                    <span className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">Assistir Agora <ArrowRight size={14}/></span>
+                                                ) : hasPriceForPurchase ? (
+                                                    <button onClick={(e) => { e.stopPropagation(); setCheckoutCourseId(course.id); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg">
+                                                        <CreditCard size={14} /> Comprar Curso
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Indisponivel</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+                    {activeTab === 'purchases' && (
+                        <div className="space-y-4">
+                            {studentOrders.length === 0 ? (
+                                <div className="py-20 text-center text-slate-400 italic font-bold border-2 border-dashed rounded-3xl bg-white">Nenhuma compra realizada ainda.</div>
+                            ) : studentOrders.map(order => (
+                                <div key={order.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm">
+                                    <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center", order.status === 'PAID' ? "bg-green-100" : "bg-amber-100")}>
+                                        {order.status === 'PAID' ? <CheckCircle size={20} className="text-green-600" /> : <Clock size={20} className="text-amber-600" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-bold text-slate-800 text-sm truncate">{order.course_title || 'Curso'}</h4>
+                                        <div className="flex items-center gap-3 mt-1">
+                                            <span className="text-xs text-slate-400">{new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+                                            <span className="flex items-center gap-1 text-xs text-slate-500">
+                                                {order.payment_method === 'PIX' && <QrCode size={12} />}
+                                                {order.payment_method === 'CREDIT_CARD' && <CreditCard size={12} />}
+                                                {order.payment_method === 'BOLETO' && <FileText size={12} />}
+                                                {order.payment_method}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-black text-slate-800 text-sm">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.amount / 100)}</p>
+                                        <span className={clsx("text-[10px] font-black uppercase px-2 py-0.5 rounded-full", order.status === 'PAID' ? "bg-green-100 text-green-700" : order.status === 'DECLINED' || order.status === 'CANCELED' ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700")}>{order.status === 'PAID' ? 'Pago' : order.status === 'DECLINED' ? 'Recusado' : order.status === 'CANCELED' ? 'Cancelado' : 'Pendente'}</span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                     {activeTab === 'events' && (
@@ -1089,6 +1151,21 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                             <button onClick={() => setViewingEvent(null)} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all active:scale-95 shadow-lg">Finalizar</button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Checkout PagBank */}
+            {checkoutCourseId && (
+                <div className="fixed inset-0 z-[500] overflow-y-auto animate-in zoom-in-95">
+                    <CheckoutPage
+                        courseId={checkoutCourseId}
+                        dealId={String(mainDealId)}
+                        studentName={student.name}
+                        studentEmail={student.email}
+                        studentCpf={student.cpf}
+                        onClose={() => setCheckoutCourseId(null)}
+                        onSuccess={handleCheckoutSuccess}
+                    />
                 </div>
             )}
 

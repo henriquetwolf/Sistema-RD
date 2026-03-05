@@ -408,6 +408,10 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       setIsSaving(true);
       try {
           await appBackend.saveOnlineCourse(editingCourse);
+          const purchaseType = (editingCourse as any).purchaseType || 'one_time';
+          await appBackend.client.from('crm_online_courses')
+              .update({ purchase_type: purchaseType })
+              .eq('title', editingCourse.title);
           const product = products.find(p => p.name === editingCourse.title);
           if (product) {
               await appBackend.client.from('crm_products').update({
@@ -754,6 +758,14 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Link de Pagamento / Renovação</label>
                                 <input type="text" className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-xs font-mono outline-none" value={editingCourse?.paymentLink} onChange={e => setEditingCourse(prev => prev ? {...prev, paymentLink: e.target.value} : null)} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Tipo de Compra</label>
+                                <select className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer" value={(editingCourse as any)?.purchaseType || 'one_time'} onChange={e => setEditingCourse(prev => prev ? {...prev, purchaseType: e.target.value} as any : null)}>
+                                    <option value="one_time">Pagamento Único</option>
+                                    <option value="subscription">Assinatura Recorrente</option>
+                                    <option value="both">Ambos (Avulso + Assinatura)</option>
+                                </select>
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Modelo de Certificado (Automático)</label>

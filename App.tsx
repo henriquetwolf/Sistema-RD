@@ -40,6 +40,8 @@ import { AiAssistant } from './components/AiAssistant';
 import { LandingPageManager } from './components/LandingPageManager';
 import { LandingPagePublicViewer } from './components/LandingPagePublicViewer';
 import { ContaAzulManager } from './components/ContaAzulManager';
+import { PagBankManager } from './components/PagBankManager';
+import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage } from './types';
@@ -57,7 +59,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'app_manual';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual';
 
 function App() {
   if (platformService.isNative()) {
@@ -68,6 +70,8 @@ function App() {
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
   const [publicLandingPage, setPublicLandingPage] = useState<LandingPage | null>(null);
+  const [publicCheckoutCourseId, setPublicCheckoutCourseId] = useState<string | null>(null);
+  const [publicCheckoutDealId, setPublicCheckoutDealId] = useState<string | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
@@ -130,6 +134,14 @@ function App() {
         const contractId = params.get('contractId');
         const certificateHash = params.get('certificateHash');
         const landingPageId = params.get('landingPageId');
+        const checkoutCourseId = params.get('checkout');
+        const checkoutDealId = params.get('deal');
+
+        if (checkoutCourseId) {
+            setPublicCheckoutCourseId(checkoutCourseId);
+            if (checkoutDealId) setPublicCheckoutDealId(checkoutDealId);
+            return;
+        }
 
         if (publicFormId || contractId || certificateHash || landingPageId) {
             setIsPublicLoading(true);
@@ -463,6 +475,7 @@ function App() {
       </div>
   );
 
+  if (publicCheckoutCourseId) return <CheckoutPage courseId={publicCheckoutCourseId} dealId={publicCheckoutDealId || undefined} onClose={() => { setPublicCheckoutCourseId(null); window.location.href = window.location.origin; }} />;
   if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
@@ -540,7 +553,7 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -568,6 +581,7 @@ function App() {
                                 {canAccess('classes') && <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'classes' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><GraduationCap size={18} /> Turmas</button>}
                                 {canAccess('teachers') && <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><School size={18} /> Professores</button>}
                                 <button onClick={() => setDashboardTab('conta_azul')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'conta_azul' ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Landmark size={18} /> Conta Azul</button>
+                                <button onClick={() => setDashboardTab('pagbank')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'pagbank' ? "bg-green-50 text-green-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> PagBank</button>
                                 <button onClick={() => setDashboardTab('app_manual')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'app_manual' ? "bg-purple-50 text-purple-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Smartphone size={18} /> Manual APP</button>
                             </nav>
                             {canAccess('global_settings') && <div className="mt-4 pt-4 border-t border-slate-100"><button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Cog size={18} /> Configurações</button></div>}
@@ -686,6 +700,7 @@ function App() {
                         {dashboardTab === 'whatsapp_bulk' && <BulkWhatsAppSender />}
                         {dashboardTab === 'landing_pages' && <LandingPageManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'conta_azul' && <ContaAzulManager />}
+                        {dashboardTab === 'pagbank' && <PagBankManager />}
                         {dashboardTab === 'app_manual' && <AppManual />}
                     </div>
                 </div>

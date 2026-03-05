@@ -158,8 +158,9 @@ async function handleCreateCheckout(req: Request): Promise<Response> {
   }
 
   if (config.notification_url) {
-    checkoutPayload.payment_notification_urls = [config.notification_url];
-    checkoutPayload.notification_urls = [config.notification_url];
+    const notifUrl = config.notification_url.trim();
+    checkoutPayload.payment_notification_urls = [notifUrl];
+    checkoutPayload.notification_urls = [notifUrl];
   }
 
   if (return_url) {
@@ -174,7 +175,7 @@ async function handleCreateCheckout(req: Request): Promise<Response> {
   const pagbankRes = await fetch(`${apiUrl}/checkouts`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${config.api_token}`,
+      Authorization: `Bearer ${config.api_token.trim()}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -331,7 +332,7 @@ async function handleCreateOrder(req: Request): Promise<Response> {
       },
     ],
     notification_urls: config.notification_url
-      ? [config.notification_url]
+      ? [config.notification_url.trim()]
       : [],
   };
 
@@ -406,7 +407,7 @@ async function handleCreateOrder(req: Request): Promise<Response> {
   const pagbankRes = await fetch(`${apiUrl}/orders`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${config.api_token}`,
+      Authorization: `Bearer ${config.api_token.trim()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(orderPayload),
@@ -559,7 +560,7 @@ async function handleCheckStatus(req: Request): Promise<Response> {
     try {
       const apiUrl = getApiUrl(config.sandbox_mode);
       const res = await fetch(`${apiUrl}/orders/${localOrder.pagbank_order_id}`, {
-        headers: { Authorization: `Bearer ${config.api_token}` },
+        headers: { Authorization: `Bearer ${config.api_token.trim()}` },
       });
 
       if (res.ok) {

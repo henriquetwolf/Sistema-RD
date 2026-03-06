@@ -260,13 +260,8 @@ async function syncReceivables(req: Request): Promise<Response> {
       console.warn(`[syncReceivables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
     }
 
-    // Sincronização completa: só apagar depois de buscar na API com sucesso (evita apagar tudo se a API falhar ou retornar vazio por erro).
-    if (!isIncremental) {
-      const { error: delErr } = await db.from("conta_azul_contas_receber").delete().eq("account_id", accountId);
-      if (delErr) console.warn("[syncReceivables] Delete before upsert:", delErr.message);
-      else console.log(`[syncReceivables] Cleared existing receivables for account ${accountId} (will upsert ${items.length} from API)`);
-    }
-
+    // Não apagar antes do upsert: com 150k+ registros, o delete + upsert pode causar timeout ou race;
+    // só fazemos upsert — assim nunca esvaziamos a tabela. Registros removidos no Conta Azul ficam órfãos (aceitável).
     const rows = items.map(item => mapReceivableToRow(item, accountId));
     let batchErrors = 0;
     let rowErrors = 0;
@@ -335,13 +330,7 @@ async function syncPayables(req: Request): Promise<Response> {
       console.warn(`[syncPayables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
     }
 
-    // Sincronização completa: só apagar depois de buscar na API com sucesso.
-    if (!isIncremental) {
-      const { error: delErr } = await db.from("conta_azul_contas_pagar").delete().eq("account_id", accountId);
-      if (delErr) console.warn("[syncPayables] Delete before upsert:", delErr.message);
-      else console.log(`[syncPayables] Cleared existing payables for account ${accountId} (will upsert ${items.length} from API)`);
-    }
-
+    // Não apagar antes do upsert (evita esvaziar a tabela em sync com muitos registros).
     const rows = items.map(item => mapPayableToRow(item, accountId));
     let batchErrors = 0;
     let rowErrors = 0;

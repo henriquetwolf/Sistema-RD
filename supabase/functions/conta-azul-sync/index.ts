@@ -301,33 +301,9 @@ async function syncReceivables(req: Request): Promise<Response> {
         count += batch.length;
       }
     }
-    // Reconciliation: mark local records not returned by API as EXCLUIDO (full sync only)
-    let deleted = 0;
-    if (!isIncremental && rows.length > 0) {
-      const apiIds = new Set(rows.map(r => r.id_conta_azul));
-      const vencDe = params.data_vencimento_de;
-      const vencAte = params.data_vencimento_ate;
-      let localQuery = db.from("conta_azul_contas_receber")
-        .select("id, id_conta_azul")
-        .eq("account_id", accountId)
-        .neq("status", "EXCLUIDO");
-      if (vencDe) localQuery = localQuery.gte("data_vencimento", vencDe);
-      if (vencAte) localQuery = localQuery.lte("data_vencimento", vencAte);
-      const { data: localRows } = await localQuery;
-      const toDelete = (localRows || []).filter((lr: any) => !apiIds.has(lr.id_conta_azul)).map((lr: any) => lr.id);
-      if (toDelete.length > 0) {
-        for (let i = 0; i < toDelete.length; i += 200) {
-          const batch = toDelete.slice(i, i + 200);
-          await db.from("conta_azul_contas_receber").update({ status: "EXCLUIDO" }).in("id", batch);
-          deleted += batch.length;
-        }
-        console.log(`[syncReceivables] Marked ${deleted} local records as EXCLUIDO for account ${accountId} (range ${vencDe} to ${vencAte})`);
-      }
-    }
-
-    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors, ${deleted} marked EXCLUIDO for account ${accountId}`);
+    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, excluidos: deleted, incremental: isIncremental });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
@@ -412,33 +388,9 @@ async function syncPayables(req: Request): Promise<Response> {
         count += batch.length;
       }
     }
-    // Reconciliation: mark local records not returned by API as EXCLUIDO (full sync only)
-    let deleted = 0;
-    if (!isIncremental && rows.length > 0) {
-      const apiIds = new Set(rows.map(r => r.id_conta_azul));
-      const vencDe = params.data_vencimento_de;
-      const vencAte = params.data_vencimento_ate;
-      let localQuery = db.from("conta_azul_contas_pagar")
-        .select("id, id_conta_azul")
-        .eq("account_id", accountId)
-        .neq("status", "EXCLUIDO");
-      if (vencDe) localQuery = localQuery.gte("data_vencimento", vencDe);
-      if (vencAte) localQuery = localQuery.lte("data_vencimento", vencAte);
-      const { data: localRows } = await localQuery;
-      const toDelete = (localRows || []).filter((lr: any) => !apiIds.has(lr.id_conta_azul)).map((lr: any) => lr.id);
-      if (toDelete.length > 0) {
-        for (let i = 0; i < toDelete.length; i += 200) {
-          const batch = toDelete.slice(i, i + 200);
-          await db.from("conta_azul_contas_pagar").update({ status: "EXCLUIDO" }).in("id", batch);
-          deleted += batch.length;
-        }
-        console.log(`[syncPayables] Marked ${deleted} local records as EXCLUIDO for account ${accountId} (range ${vencDe} to ${vencAte})`);
-      }
-    }
-
-    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors, ${deleted} marked EXCLUIDO for account ${accountId}`);
+    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, excluidos: deleted, incremental: isIncremental });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 

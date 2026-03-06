@@ -101,12 +101,12 @@ export const ContaAzulManager: React.FC = () => {
   const hasAnyConnected = connectedCount > 0;
 
   const isSelectedConnected = useMemo(() => {
-    if (!selectedAccountId) return hasAnyConnected;
+    if (!selectedAccountId) return false;
     return accountStatuses.find(s => s.account_id === selectedAccountId)?.connected ?? false;
-  }, [selectedAccountId, accountStatuses, hasAnyConnected]);
+  }, [selectedAccountId, accountStatuses]);
 
   const selectedAccountName = useMemo(() => {
-    if (!selectedAccountId) return 'Todas as Contas';
+    if (!selectedAccountId) return 'Selecione uma conta';
     return caAccounts.find(a => a.id === selectedAccountId)?.nome || 'Conta';
   }, [selectedAccountId, caAccounts]);
 
@@ -118,8 +118,10 @@ export const ContaAzulManager: React.FC = () => {
         contaAzulService.getAccounts(),
         contaAzulService.getAuthStatusAll(),
       ]);
+      let loadedAccounts: ContaAzulAccount[] = [];
       if (results[0].status === 'fulfilled') {
-        setCaAccounts(results[0].value);
+        loadedAccounts = results[0].value;
+        setCaAccounts(loadedAccounts);
       } else {
         console.error('Error loading accounts:', results[0].reason);
       }
@@ -128,6 +130,10 @@ export const ContaAzulManager: React.FC = () => {
       } else {
         console.error('Error loading account statuses:', results[1].reason);
       }
+      setSelectedAccountId(prev => {
+        if (prev && loadedAccounts.some(a => a.id === prev)) return prev;
+        return loadedAccounts[0]?.id || null;
+      });
     } catch (e) {
       console.error('Error loading accounts:', e);
     }
@@ -279,19 +285,39 @@ export const ContaAzulManager: React.FC = () => {
 
   // ── Data loading ────────────────────────────────────────
 
+  const [allAccountsStats, setAllAccountsStats] = useState<Record<string, any>>({});
+
   const loadOverview = useCallback(async () => {
-    if (!isSelectedConnected) return;
+    if (!selectedAccountId) return;
     try {
-      const [s, logs] = await Promise.all([
-        contaAzulService.getFinancialStats(selectedAccountId || undefined),
-        contaAzulService.getSyncLogs(selectedAccountId || undefined, 10),
+      const statsPromises = caAccounts.map(async (acc) => {
+        try {
+          const s = await contaAzulService.getFinancialStats(acc.id);
+          return { id: acc.id, nome: acc.nome, stats: s };
+        } catch {
+          return { id: acc.id, nome: acc.nome, stats: null };
+        }
+      });
+      const logsPromise = contaAzulService.getSyncLogs(selectedAccountId, 10);
+
+      const [accountStats, logs] = await Promise.all([
+        Promise.all(statsPromises),
+        logsPromise,
       ]);
-      setStats(s);
+
+      const statsMap: Record<string, any> = {};
+      for (const as of accountStats) {
+        statsMap[as.id] = { nome: as.nome, ...as.stats };
+      }
+      setAllAccountsStats(statsMap);
+
+      const selectedStats = accountStats.find(a => a.id === selectedAccountId)?.stats;
+      setStats(selectedStats || null);
       setSyncLogs(logs);
     } catch (e) {
       console.error('Error loading overview:', e);
     }
-  }, [isSelectedConnected, selectedAccountId]);
+  }, [selectedAccountId, caAccounts]);
 
   const loadReceivables = useCallback(async () => {
     setIsLoadingData(true);
@@ -522,14 +548,16 @@ export const ContaAzulManager: React.FC = () => {
   ];
 
   const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts', fullSync = false) => {
-    const connectedIds = selectedAccountId
-      ? [selectedAccountId]
-      : accountStatuses.filter(s => s.connected).map(s => s.account_id);
-
-    if (connectedIds.length === 0) {
-      alert('Nenhuma conta conectada para sincronizar.');
+    if (!selectedAccountId) {
+      alert('Selecione uma conta (FILIAL ou MATRIZ) antes de sincronizar.');
       return;
     }
+    const isConnected = accountStatuses.find(s => s.account_id === selectedAccountId)?.connected;
+    if (!isConnected) {
+      alert('A conta selecionada não está conectada ao Conta Azul.');
+      return;
+    }
+    const connectedIds = [selectedAccountId];
 
     setIsSyncing(true);
     setSyncProgress(0);
@@ -813,7 +841,6 @@ export const ContaAzulManager: React.FC = () => {
             onChange={e => setSelectedAccountId(e.target.value || null)}
             className="flex-1 bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
           >
-            <option value="">Todas as Contas</option>
             {caAccounts.map(acc => {
               const st = accountStatuses.find(s => s.account_id === acc.id);
               return (
@@ -954,12 +981,89 @@ export const ContaAzulManager: React.FC = () => {
               </div>
             )}
 
-            {/* KPI Cards */}
+            {/* Resumo por Conta (FILIAL / MATRIZ / Consolidado) */}
+            {Object.keys(allAccountsStats).length > 1 && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {caAccounts.map(acc => {
+                  const as = allAccountsStats[acc.id];
+                  if (!as) return null;
+                  const isActive = acc.id === selectedAccountId;
+                  return (
+                    <div
+                      key={acc.id}
+                      onClick={() => setSelectedAccountId(acc.id)}
+                      className={clsx(
+                        "bg-white rounded-2xl border-2 p-5 cursor-pointer transition-all hover:shadow-md",
+                        isActive ? "border-blue-500 shadow-md ring-2 ring-blue-100" : "border-slate-200"
+                      )}
+                    >
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                        <Building2 size={12} className={isActive ? "text-blue-500" : "text-slate-400"} />
+                        {acc.nome}
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-slate-400 font-bold">A Receber</span>
+                          <p className="text-green-700 font-black text-sm">{formatCurrency(as.totalReceberPendente || 0)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">A Pagar</span>
+                          <p className="text-red-700 font-black text-sm">{formatCurrency(as.totalPagarPendente || 0)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">Saldo</span>
+                          <p className="text-blue-700 font-black text-sm">{formatCurrency(as.saldoContas || 0)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">Registros</span>
+                          <p className="text-slate-700 font-black text-sm">{((as.countReceber || 0) + (as.countPagar || 0)).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {(() => {
+                  const vals = Object.values(allAccountsStats) as any[];
+                  const totalRecPend = vals.reduce((s, v) => s + (v?.totalReceberPendente || 0), 0);
+                  const totalPagPend = vals.reduce((s, v) => s + (v?.totalPagarPendente || 0), 0);
+                  const totalSaldo = vals.reduce((s, v) => s + (v?.saldoContas || 0), 0);
+                  const totalCount = vals.reduce((s, v) => s + (v?.countReceber || 0) + (v?.countPagar || 0), 0);
+                  return (
+                    <div className="bg-slate-800 text-white rounded-2xl border-2 border-slate-700 p-5">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                        <TrendingUp size={12} className="text-slate-400" />
+                        Consolidado
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-slate-400 font-bold">A Receber</span>
+                          <p className="text-green-400 font-black text-sm">{formatCurrency(totalRecPend)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">A Pagar</span>
+                          <p className="text-red-400 font-black text-sm">{formatCurrency(totalPagPend)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">Saldo</span>
+                          <p className="text-blue-400 font-black text-sm">{formatCurrency(totalSaldo)}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">Registros</span>
+                          <p className="text-slate-300 font-black text-sm">{totalCount.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* KPI Cards (conta selecionada) */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <KpiCard
-                label="Saldo em Contas"
+                label={`Saldo em Contas — ${selectedAccountName}`}
                 value={formatCurrency(stats?.saldoContas || 0)}
-                sub="Todas as contas financeiras"
+                sub="Contas financeiras ativas"
                 icon={<Wallet size={56} />}
                 color="blue"
               />

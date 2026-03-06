@@ -71,9 +71,19 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
   const all: T[] = [];
   let page = 1;
   const size = 200;
+  const usePost = basePath.includes("/buscar");
   for (let i = 0; i < maxPages; i++) {
-    const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
-    const res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
+    let res: Response;
+    if (usePost) {
+      const bodyPayload = { ...queryParams, pagina: page, tamanho_pagina: size };
+      res = await contaAzulFetch(accountId, basePath, {
+        method: "POST",
+        body: JSON.stringify(bodyPayload),
+      });
+    } else {
+      const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
+      res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
+    }
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
     const items: T[] = extractItems<T>(body);
@@ -84,6 +94,7 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
       break;
     }
     all.push(...items);
+    console.log(`[contaAzulFetchPaginated] ${basePath} page ${page}: ${items.length} items (total: ${all.length})`);
     if (items.length < size) break;
     page++;
     if (page > maxPages) {
@@ -224,8 +235,12 @@ async function syncReceivables(req: Request): Promise<Response> {
     };
 
     if (isIncremental) {
-      const lastSync = await getLastSuccessfulSync("receivables", accountId)
-        || await getLastSuccessfulSync("receivables-incremental", accountId);
+      const fullSync = await getLastSuccessfulSync("receivables", accountId);
+      const incrSync = await getLastSuccessfulSync("receivables-incremental", accountId);
+      const xslSync = await getLastSuccessfulSync("receivables-xlsx-import", accountId);
+      const lastSync = [fullSync, incrSync, xslSync]
+        .filter((s): s is { finished_at: string } => !!s?.finished_at)
+        .sort((a, b) => new Date(b.finished_at).getTime() - new Date(a.finished_at).getTime())[0] || null;
       if (lastSync?.finished_at) {
         params.data_alteracao_de = lastSync.finished_at;
         params.data_alteracao_ate = new Date().toISOString();
@@ -235,19 +250,26 @@ async function syncReceivables(req: Request): Promise<Response> {
       }
     }
 
+    console.log(`[syncReceivables] Params: ${JSON.stringify(params)} for account ${accountId}`);
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
-    console.log(`Receivables fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
+    console.log(`[syncReceivables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
+    if (items.length >= 100000) {
+      console.warn(`[syncReceivables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
+    }
     const db = getSupabaseServiceClient();
     const rows = items.map(item => mapReceivableToRow(item, accountId));
+    let batchErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_contas_receber").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
-        console.error("Receivables batch error at index", i, ":", error.message, error.details);
+        batchErrors++;
+        console.error("[syncReceivables] Batch error at index", i, ":", error.message, error.details);
       } else {
         count += batch.length;
       }
     }
+    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -268,8 +290,12 @@ async function syncPayables(req: Request): Promise<Response> {
     };
 
     if (isIncremental) {
-      const lastSync = await getLastSuccessfulSync("payables", accountId)
-        || await getLastSuccessfulSync("payables-incremental", accountId);
+      const fullSync = await getLastSuccessfulSync("payables", accountId);
+      const incrSync = await getLastSuccessfulSync("payables-incremental", accountId);
+      const xslSync = await getLastSuccessfulSync("payables-xlsx-import", accountId);
+      const lastSync = [fullSync, incrSync, xslSync]
+        .filter((s): s is { finished_at: string } => !!s?.finished_at)
+        .sort((a, b) => new Date(b.finished_at).getTime() - new Date(a.finished_at).getTime())[0] || null;
       if (lastSync?.finished_at) {
         params.data_alteracao_de = lastSync.finished_at;
         params.data_alteracao_ate = new Date().toISOString();
@@ -279,19 +305,26 @@ async function syncPayables(req: Request): Promise<Response> {
       }
     }
 
+    console.log(`[syncPayables] Params: ${JSON.stringify(params)} for account ${accountId}`);
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
-    console.log(`Payables fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
+    console.log(`[syncPayables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
+    if (items.length >= 100000) {
+      console.warn(`[syncPayables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
+    }
     const db = getSupabaseServiceClient();
     const rows = items.map(item => mapPayableToRow(item, accountId));
+    let batchErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_contas_pagar").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
-        console.error("Payables batch error at index", i, ":", error.message, error.details);
+        batchErrors++;
+        console.error("[syncPayables] Batch error at index", i, ":", error.message, error.details);
       } else {
         count += batch.length;
       }
     }
+    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }

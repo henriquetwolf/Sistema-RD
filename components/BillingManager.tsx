@@ -153,6 +153,10 @@ export const BillingManager: React.FC = () => {
     try {
       const accounts = await contaAzulService.getAccounts();
       setContaAzulAccounts(accounts);
+      setSelectedAccountId(prev => {
+        if (prev && accounts.some((a: ContaAzulAccount) => a.id === prev)) return prev;
+        return accounts[0]?.id || '';
+      });
     } catch (e) {
       console.error('Erro ao carregar contas Conta Azul:', e);
     }
@@ -282,7 +286,6 @@ export const BillingManager: React.FC = () => {
                 onChange={e => setSelectedAccountId(e.target.value)}
                 className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-teal-500"
               >
-                <option value="">Todas as Contas</option>
                 {contaAzulAccounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
                     {acc.nome}{acc.cnpj ? ` — ${acc.cnpj}` : ''}

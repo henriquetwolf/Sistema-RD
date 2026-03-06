@@ -639,6 +639,8 @@ export const ContaAzulManager: React.FC = () => {
       loadAuxiliaries();
       if (activeTab === 'receivables') loadReceivables();
       if (activeTab === 'payables') loadPayables();
+      loadReceivableSummary();
+      loadPayableSummary();
     } else {
       const stepLabel = syncSteps.find(s => s.type === type)?.label || type;
       let totalSynced = 0;
@@ -677,9 +679,15 @@ export const ContaAzulManager: React.FC = () => {
         setSyncMessage(`${stepLabel}${modeLabel}: ${totalSynced} registros sincronizados`);
       }
       await loadOverview();
-      if (type === 'receivables') loadReceivables();
-      else if (type === 'payables') loadPayables();
-      else loadAuxiliaries();
+      if (type === 'receivables') {
+        loadReceivables();
+        loadReceivableSummary();
+      } else if (type === 'payables') {
+        loadPayables();
+        loadPayableSummary();
+      } else {
+        loadAuxiliaries();
+      }
     }
 
     setIsSyncing(false);

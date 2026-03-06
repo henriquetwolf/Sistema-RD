@@ -230,17 +230,19 @@ interface ReceivableFilters {
 }
 
 async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: ContaAzulReceivable[]; count: number }> {
+  // Exigir accountId para manter dados separados por conta Conta Azul (evitar mistura entre filiais/matriz).
+  if (!filters.accountId) {
+    return { data: [], count: 0 };
+  }
+
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   let query = supabase
     .from('conta_azul_contas_receber')
     .select('*', { count: 'exact' })
-    .order('data_vencimento', { ascending: false });
-
-  if (filters.accountId) {
-    query = query.eq('account_id', filters.accountId);
-  }
+    .order('data_vencimento', { ascending: false })
+    .eq('account_id', filters.accountId);
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
@@ -290,14 +292,16 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
 }
 
 async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: ContaAzulPayable[]; count: number }> {
+  // Exigir accountId para manter dados separados por conta Conta Azul.
+  if (!filters.accountId) {
+    return { data: [], count: 0 };
+  }
+
   let query = supabase
     .from('conta_azul_contas_pagar')
     .select('*', { count: 'exact' })
-    .order('data_vencimento', { ascending: false });
-
-  if (filters.accountId) {
-    query = query.eq('account_id', filters.accountId);
-  }
+    .order('data_vencimento', { ascending: false })
+    .eq('account_id', filters.accountId);
 
   if (filters.status && filters.status !== 'all') {
     query = query.ilike('status', `%${filters.status}%`);
@@ -398,6 +402,10 @@ interface ReceivableSummary {
 }
 
 async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | 'offset'> = {}): Promise<ReceivableSummary> {
+  if (!filters.accountId) {
+    return { vencidos: 0, vencem_hoje: 0, a_vencer: 0, recebidos: 0, total_periodo: 0 };
+  }
+
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -409,9 +417,8 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
       .from('conta_azul_contas_receber')
       .select('valor, valor_pago, status, data_vencimento')
       .order('id')
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-    if (filters.accountId) query = query.eq('account_id', filters.accountId);
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      .eq('account_id', filters.accountId);
     if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
     if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
     if (filters.search) {
@@ -430,32 +437,27 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   }
 
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
-
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
     const st = (r.status || '').toLowerCase();
     const isLiquidado = st.includes('liquidado') || st.includes('recebido')
       || st.includes('pago') || st.includes('quitado');
-
     total_periodo += valor;
-
-    if (isLiquidado) {
-      recebidos += valor;
-    } else if (r.data_vencimento && r.data_vencimento < today) {
-      vencidos += valor;
-    } else if (r.data_vencimento === today) {
-      vencem_hoje += valor;
-    } else {
-      a_vencer += valor;
-    }
+    if (isLiquidado) recebidos += valor;
+    else if (r.data_vencimento && r.data_vencimento < today) vencidos += valor;
+    else if (r.data_vencimento === today) vencem_hoje += valor;
+    else a_vencer += valor;
   }
-
   return { vencidos, vencem_hoje, a_vencer, recebidos, total_periodo };
 }
 
 type PayableSummary = ReceivableSummary;
 
 async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'offset'> = {}): Promise<PayableSummary> {
+  if (!filters.accountId) {
+    return { vencidos: 0, vencem_hoje: 0, a_vencer: 0, recebidos: 0, total_periodo: 0 };
+  }
+
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -467,9 +469,8 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
       .from('conta_azul_contas_pagar')
       .select('valor, valor_pago, status, data_vencimento')
       .order('id')
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-    if (filters.accountId) query = query.eq('account_id', filters.accountId);
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      .eq('account_id', filters.accountId);
     if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
     if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
     if (filters.search) {
@@ -488,30 +489,25 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
   }
 
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
-
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
     const st = (r.status || '').toLowerCase();
     const isLiquidado = st.includes('liquidado') || st.includes('recebido')
       || st.includes('pago') || st.includes('quitado');
-
     total_periodo += valor;
-
-    if (isLiquidado) {
-      recebidos += valor;
-    } else if (r.data_vencimento && r.data_vencimento < today) {
-      vencidos += valor;
-    } else if (r.data_vencimento === today) {
-      vencem_hoje += valor;
-    } else {
-      a_vencer += valor;
-    }
+    if (isLiquidado) recebidos += valor;
+    else if (r.data_vencimento && r.data_vencimento < today) vencidos += valor;
+    else if (r.data_vencimento === today) vencem_hoje += valor;
+    else a_vencer += valor;
   }
-
   return { vencidos, vencem_hoje, a_vencer, recebidos, total_periodo };
 }
 
 async function getReceivableStats(accountId?: string): Promise<ReceivableStats> {
+  if (!accountId) {
+    return { totalOriginal: 0, totalRecebido: 0, paidCount: 0, pendingCount: 0, overdueCount: 0 };
+  }
+
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -522,8 +518,8 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
     let query = supabase
       .from('conta_azul_contas_receber')
       .select('valor, valor_pago, status, data_vencimento')
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-    if (accountId) query = query.eq('account_id', accountId);
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      .eq('account_id', accountId);
     const { data, error } = await query;
     if (error) throw error;
     const rows = data || [];

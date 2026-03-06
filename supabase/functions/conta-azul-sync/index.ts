@@ -227,7 +227,16 @@ async function syncReceivables(req: Request): Promise<Response> {
   const syncLabel = isIncremental ? "receivables-incremental" : "receivables";
   const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
+  const db = getSupabaseServiceClient();
   try {
+    // Sincronização completa: apagar todos os registros desta conta antes de buscar na API.
+    // Assim o espelho no banco fica idêntico ao Conta Azul (sem registros antigos removidos lá).
+    if (!isIncremental) {
+      const { error: delErr } = await db.from("conta_azul_contas_receber").delete().eq("account_id", accountId);
+      if (delErr) console.warn("[syncReceivables] Delete before full sync:", delErr.message);
+      else console.log(`[syncReceivables] Cleared existing receivables for account ${accountId} before full sync`);
+    }
+
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -267,7 +276,6 @@ async function syncReceivables(req: Request): Promise<Response> {
     if (items.length >= 100000) {
       console.warn(`[syncReceivables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
     }
-    const db = getSupabaseServiceClient();
     const rows = items.map(item => mapReceivableToRow(item, accountId));
     let batchErrors = 0;
     let rowErrors = 0;
@@ -304,7 +312,15 @@ async function syncPayables(req: Request): Promise<Response> {
   const syncLabel = isIncremental ? "payables-incremental" : "payables";
   const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
+  const db = getSupabaseServiceClient();
   try {
+    // Sincronização completa: apagar todos os registros desta conta antes de buscar na API.
+    if (!isIncremental) {
+      const { error: delErr } = await db.from("conta_azul_contas_pagar").delete().eq("account_id", accountId);
+      if (delErr) console.warn("[syncPayables] Delete before full sync:", delErr.message);
+      else console.log(`[syncPayables] Cleared existing payables for account ${accountId} before full sync`);
+    }
+
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -334,7 +350,6 @@ async function syncPayables(req: Request): Promise<Response> {
     if (items.length >= 100000) {
       console.warn(`[syncPayables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
     }
-    const db = getSupabaseServiceClient();
     const rows = items.map(item => mapPayableToRow(item, accountId));
     let batchErrors = 0;
     let rowErrors = 0;

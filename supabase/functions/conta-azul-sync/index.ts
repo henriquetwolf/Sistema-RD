@@ -228,20 +228,6 @@ async function syncReceivables(req: Request): Promise<Response> {
   const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
   try {
-    // Restore any records incorrectly marked as EXCLUIDO (one-time fix + safety net)
-    if (!isIncremental) {
-      const db0 = getSupabaseServiceClient();
-      const { error: restoreErr } = await db0.from("conta_azul_contas_receber")
-        .update({ status: "PENDENTE" })
-        .eq("account_id", accountId)
-        .eq("status", "EXCLUIDO");
-      if (restoreErr) {
-        console.warn(`[syncReceivables] Error restoring EXCLUIDO records: ${restoreErr.message}`);
-      } else {
-        console.log(`[syncReceivables] Restored EXCLUIDO records to PENDENTE for account ${accountId}`);
-      }
-    }
-
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -319,20 +305,6 @@ async function syncPayables(req: Request): Promise<Response> {
   const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
   try {
-    // Restore any records incorrectly marked as EXCLUIDO (one-time fix + safety net)
-    if (!isIncremental) {
-      const db0 = getSupabaseServiceClient();
-      const { error: restoreErr } = await db0.from("conta_azul_contas_pagar")
-        .update({ status: "PENDENTE" })
-        .eq("account_id", accountId)
-        .eq("status", "EXCLUIDO");
-      if (restoreErr) {
-        console.warn(`[syncPayables] Error restoring EXCLUIDO records: ${restoreErr.message}`);
-      } else {
-        console.log(`[syncPayables] Restored EXCLUIDO records to PENDENTE for account ${accountId}`);
-      }
-    }
-
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -597,45 +569,6 @@ async function autoSyncAll(_req: Request): Promise<Response> {
   return jsonResponse({ success: true, auto_sync: true, results: allResults });
 }
 
-async function reconcileStale(req: Request): Promise<Response> {
-  const body = await req.json().catch(() => ({}));
-  const accountId = extractAccountId(body);
-  const syncStartedAt = body.sync_started_at;
-  const type = body.type;
-  if (!syncStartedAt) return errorResponse("Campo 'sync_started_at' é obrigatório.");
-  if (!type || (type !== "receivables" && type !== "payables")) return errorResponse("Campo 'type' deve ser 'receivables' ou 'payables'.");
-
-  const table = type === "receivables" ? "conta_azul_contas_receber" : "conta_azul_contas_pagar";
-  const db = getSupabaseServiceClient();
-
-  // Fetch stale records in pages (Supabase default limit is 1000)
-  let allStaleIds: string[] = [];
-  let page = 0;
-  const PAGE = 1000;
-  while (true) {
-    const { data } = await db.from(table)
-      .select("id")
-      .eq("account_id", accountId)
-      .neq("status", "EXCLUIDO")
-      .lt("synced_at", syncStartedAt)
-      .range(page * PAGE, (page + 1) * PAGE - 1);
-    const rows = data || [];
-    allStaleIds.push(...rows.map((r: any) => r.id));
-    if (rows.length < PAGE) break;
-    page++;
-  }
-
-  if (allStaleIds.length > 0) {
-    for (let i = 0; i < allStaleIds.length; i += 200) {
-      const batch = allStaleIds.slice(i, i + 200);
-      await db.from(table).update({ status: "EXCLUIDO" }).in("id", batch);
-    }
-  }
-
-  console.log(`[reconcileStale] account=${accountId}, type=${type}: ${allStaleIds.length} stale records marked EXCLUIDO (threshold: ${syncStartedAt})`);
-  return jsonResponse({ success: true, tipo: type, excluidos: allStaleIds.length });
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
   if (req.method !== "POST") return errorResponse("Metodo nao permitido. Use POST.", 405);
@@ -646,7 +579,6 @@ Deno.serve(async (req) => {
     switch (action) {
       case "receivables": return await syncReceivables(req);
       case "payables": return await syncPayables(req);
-      case "reconcile": return await reconcileStale(req);
       case "categories": return await syncCategories(req);
       case "cost-centers": return await syncCostCenters(req);
       case "accounts": return await syncAccounts(req);

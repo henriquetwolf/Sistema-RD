@@ -433,22 +433,20 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
 
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
-    const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
-    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago') || st.includes('quitado');
-    const restante = valor - valorPago;
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido')
+      || st.includes('pago') || st.includes('quitado');
 
     total_periodo += valor;
-    recebidos += valorPago;
 
-    if (!isLiquidado && restante > 0) {
-      if (r.data_vencimento && r.data_vencimento < today) {
-        vencidos += restante;
-      } else if (r.data_vencimento === today) {
-        vencem_hoje += restante;
-      } else {
-        a_vencer += restante;
-      }
+    if (isLiquidado) {
+      recebidos += valor;
+    } else if (r.data_vencimento && r.data_vencimento < today) {
+      vencidos += valor;
+    } else if (r.data_vencimento === today) {
+      vencem_hoje += valor;
+    } else {
+      a_vencer += valor;
     }
   }
 
@@ -489,28 +487,24 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
     page++;
   }
 
-  const records = allRecords;
-
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
 
-  for (const r of records) {
+  for (const r of allRecords) {
     const valor = Number(r.valor || 0);
-    const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
-    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago') || st.includes('quitado');
-    const restante = valor - valorPago;
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido')
+      || st.includes('pago') || st.includes('quitado');
 
     total_periodo += valor;
-    recebidos += valorPago;
 
-    if (!isLiquidado && restante > 0) {
-      if (r.data_vencimento && r.data_vencimento < today) {
-        vencidos += restante;
-      } else if (r.data_vencimento === today) {
-        vencem_hoje += restante;
-      } else {
-        a_vencer += restante;
-      }
+    if (isLiquidado) {
+      recebidos += valor;
+    } else if (r.data_vencimento && r.data_vencimento < today) {
+      vencidos += valor;
+    } else if (r.data_vencimento === today) {
+      vencem_hoje += valor;
+    } else {
+      a_vencer += valor;
     }
   }
 

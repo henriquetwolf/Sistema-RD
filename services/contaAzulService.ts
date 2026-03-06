@@ -177,7 +177,6 @@ async function triggerSyncChunked(
   accountId: string,
   onProgress?: (chunk: number, total: number) => void,
 ): Promise<ContaAzulSyncResult> {
-  const syncStartedAt = new Date().toISOString();
   const ranges = generateQuarterlyRanges();
   let totalSynced = 0;
   for (let i = 0; i < ranges.length; i++) {
@@ -188,15 +187,6 @@ async function triggerSyncChunked(
     } catch (e: any) {
       console.warn(`Chunk ${i + 1}/${ranges.length} (${type}) error:`, e.message);
     }
-  }
-  // Reconcile: mark records not updated during this full sync as EXCLUIDO
-  try {
-    await edgeFetch('conta-azul-sync', 'reconcile', {
-      method: 'POST',
-      body: withAccountId({ sync_started_at: syncStartedAt, type }, accountId),
-    });
-  } catch (e: any) {
-    console.warn('Reconcile error (non-fatal):', e.message);
   }
   return { success: true, tipo: type, sincronizados: totalSynced };
 }
@@ -246,7 +236,6 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
   let query = supabase
     .from('conta_azul_contas_receber')
     .select('*', { count: 'exact' })
-    .neq('status', 'EXCLUIDO')
     .order('data_vencimento', { ascending: false });
 
   if (filters.accountId) {
@@ -304,7 +293,6 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
   let query = supabase
     .from('conta_azul_contas_pagar')
     .select('*', { count: 'exact' })
-    .neq('status', 'EXCLUIDO')
     .order('data_vencimento', { ascending: false });
 
   if (filters.accountId) {
@@ -420,7 +408,6 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
     let query = supabase
       .from('conta_azul_contas_receber')
       .select('valor, valor_pago, status, data_vencimento')
-      .neq('status', 'EXCLUIDO')
       .order('id')
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
@@ -481,7 +468,6 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
     let query = supabase
       .from('conta_azul_contas_pagar')
       .select('valor, valor_pago, status, data_vencimento')
-      .neq('status', 'EXCLUIDO')
       .order('id')
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
@@ -542,7 +528,6 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
     let query = supabase
       .from('conta_azul_contas_receber')
       .select('valor, valor_pago, status, data_vencimento')
-      .neq('status', 'EXCLUIDO')
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     if (accountId) query = query.eq('account_id', accountId);
     const { data, error } = await query;
@@ -609,10 +594,9 @@ async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
     return all;
   }
 
-  const excludeDeleted = (q: any) => q.neq('status', 'EXCLUIDO');
   const [receberData, pagarData, contasData] = await Promise.all([
-    fetchAll('conta_azul_contas_receber', 'valor, valor_pago, status', excludeDeleted),
-    fetchAll('conta_azul_contas_pagar', 'valor, valor_pago, status', excludeDeleted),
+    fetchAll('conta_azul_contas_receber', 'valor, valor_pago, status'),
+    fetchAll('conta_azul_contas_pagar', 'valor, valor_pago, status'),
     fetchAll('conta_azul_contas_financeiras', 'saldo_atual', (q: any) => q.eq('ativo', true)),
   ]);
 

@@ -71,19 +71,10 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
   const all: T[] = [];
   let page = 1;
   const size = 200;
-  const usePost = basePath.includes("/buscar");
+  // API Conta Azul "buscar" é GET com query params (não POST): data_vencimento_de, data_vencimento_ate, pagina, tamanho_pagina
   for (let i = 0; i < maxPages; i++) {
-    let res: Response;
-    if (usePost) {
-      const bodyPayload = { ...queryParams, pagina: page, tamanho_pagina: size };
-      res = await contaAzulFetch(accountId, basePath, {
-        method: "POST",
-        body: JSON.stringify(bodyPayload),
-      });
-    } else {
-      const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
-      res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
-    }
+    const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
+    const res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
     const items: T[] = extractItems<T>(body);
@@ -229,14 +220,6 @@ async function syncReceivables(req: Request): Promise<Response> {
   let count = 0;
   const db = getSupabaseServiceClient();
   try {
-    // Sincronização completa: apagar todos os registros desta conta antes de buscar na API.
-    // Assim o espelho no banco fica idêntico ao Conta Azul (sem registros antigos removidos lá).
-    if (!isIncremental) {
-      const { error: delErr } = await db.from("conta_azul_contas_receber").delete().eq("account_id", accountId);
-      if (delErr) console.warn("[syncReceivables] Delete before full sync:", delErr.message);
-      else console.log(`[syncReceivables] Cleared existing receivables for account ${accountId} before full sync`);
-    }
-
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -276,6 +259,14 @@ async function syncReceivables(req: Request): Promise<Response> {
     if (items.length >= 100000) {
       console.warn(`[syncReceivables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
     }
+
+    // Sincronização completa: só apagar depois de buscar na API com sucesso (evita apagar tudo se a API falhar ou retornar vazio por erro).
+    if (!isIncremental) {
+      const { error: delErr } = await db.from("conta_azul_contas_receber").delete().eq("account_id", accountId);
+      if (delErr) console.warn("[syncReceivables] Delete before upsert:", delErr.message);
+      else console.log(`[syncReceivables] Cleared existing receivables for account ${accountId} (will upsert ${items.length} from API)`);
+    }
+
     const rows = items.map(item => mapReceivableToRow(item, accountId));
     let batchErrors = 0;
     let rowErrors = 0;
@@ -314,13 +305,6 @@ async function syncPayables(req: Request): Promise<Response> {
   let count = 0;
   const db = getSupabaseServiceClient();
   try {
-    // Sincronização completa: apagar todos os registros desta conta antes de buscar na API.
-    if (!isIncremental) {
-      const { error: delErr } = await db.from("conta_azul_contas_pagar").delete().eq("account_id", accountId);
-      if (delErr) console.warn("[syncPayables] Delete before full sync:", delErr.message);
-      else console.log(`[syncPayables] Cleared existing payables for account ${accountId} before full sync`);
-    }
-
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -350,6 +334,14 @@ async function syncPayables(req: Request): Promise<Response> {
     if (items.length >= 100000) {
       console.warn(`[syncPayables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
     }
+
+    // Sincronização completa: só apagar depois de buscar na API com sucesso.
+    if (!isIncremental) {
+      const { error: delErr } = await db.from("conta_azul_contas_pagar").delete().eq("account_id", accountId);
+      if (delErr) console.warn("[syncPayables] Delete before upsert:", delErr.message);
+      else console.log(`[syncPayables] Cleared existing payables for account ${accountId} (will upsert ${items.length} from API)`);
+    }
+
     const rows = items.map(item => mapPayableToRow(item, accountId));
     let batchErrors = 0;
     let rowErrors = 0;

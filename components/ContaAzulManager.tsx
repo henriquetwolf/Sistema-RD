@@ -66,6 +66,7 @@ export const ContaAzulManager: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [contaFilter, setContaFilter] = useState('');
 
   // Auxiliaries
   const [categories, setCategories] = useState<ContaAzulCategory[]>([]);
@@ -327,6 +328,7 @@ export const ContaAzulManager: React.FC = () => {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        contaFinanceira: contaFilter || undefined,
         limit: PAGE_SIZE,
         offset: (recPage - 1) * PAGE_SIZE,
         accountId: selectedAccountId || undefined,
@@ -338,7 +340,7 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsLoadingData(false);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, recPage, selectedAccountId]);
+  }, [searchTerm, statusFilter, startDate, endDate, contaFilter, recPage, selectedAccountId]);
 
   const loadReceivableSummary = useCallback(async () => {
     try {
@@ -347,13 +349,14 @@ export const ContaAzulManager: React.FC = () => {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        contaFinanceira: contaFilter || undefined,
         accountId: selectedAccountId || undefined,
       });
       setRecSummary(summary);
     } catch (e) {
       console.error('Error loading receivable summary:', e);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
+  }, [searchTerm, statusFilter, startDate, endDate, contaFilter, selectedAccountId]);
 
   const handleExportReceivables = useCallback(async (format: 'csv' | 'xlsx') => {
     setIsExporting(true);
@@ -363,6 +366,7 @@ export const ContaAzulManager: React.FC = () => {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        contaFinanceira: contaFilter || undefined,
         limit: 50000,
         offset: 0,
         accountId: selectedAccountId || undefined,
@@ -409,7 +413,7 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
+  }, [searchTerm, statusFilter, startDate, endDate, contaFilter, selectedAccountId]);
 
   const loadPayableSummary = useCallback(async () => {
     try {
@@ -417,13 +421,14 @@ export const ContaAzulManager: React.FC = () => {
         search: searchTerm || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        contaFinanceira: contaFilter || undefined,
         accountId: selectedAccountId || undefined,
       });
       setPaySummary(summary);
     } catch (e) {
       console.error('Error loading payable summary:', e);
     }
-  }, [searchTerm, startDate, endDate, selectedAccountId]);
+  }, [searchTerm, startDate, endDate, contaFilter, selectedAccountId]);
 
   const handleExportPayables = useCallback(async (format: 'csv' | 'xlsx') => {
     setIsExporting(true);
@@ -433,6 +438,7 @@ export const ContaAzulManager: React.FC = () => {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        contaFinanceira: contaFilter || undefined,
         limit: 50000,
         offset: 0,
         accountId: selectedAccountId || undefined,
@@ -479,7 +485,7 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
+  }, [searchTerm, statusFilter, startDate, endDate, contaFilter, selectedAccountId]);
 
   const loadPayables = useCallback(async () => {
     setIsLoadingData(true);
@@ -489,6 +495,7 @@ export const ContaAzulManager: React.FC = () => {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        contaFinanceira: contaFilter || undefined,
         limit: PAGE_SIZE,
         offset: (payPage - 1) * PAGE_SIZE,
         accountId: selectedAccountId || undefined,
@@ -500,7 +507,7 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsLoadingData(false);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, payPage, selectedAccountId]);
+  }, [searchTerm, statusFilter, startDate, endDate, contaFilter, payPage, selectedAccountId]);
 
   const loadAuxiliaries = useCallback(async () => {
     try {
@@ -1167,11 +1174,12 @@ export const ContaAzulManager: React.FC = () => {
               statusFilter={statusFilter} setStatusFilter={setStatusFilter}
               startDate={startDate} setStartDate={setStartDate}
               endDate={endDate} setEndDate={setEndDate}
+              contaFilter={contaFilter} setContaFilter={setContaFilter}
               onSync={() => handleSync('receivables')}
               onFullSync={() => handleSync('receivables', true)}
               isSyncing={isSyncing}
               financialAccounts={financialAccounts}
-              onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); }}
+              onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); setContaFilter(''); }}
             />
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -1268,11 +1276,12 @@ export const ContaAzulManager: React.FC = () => {
               statusFilter={statusFilter} setStatusFilter={setStatusFilter}
               startDate={startDate} setStartDate={setStartDate}
               endDate={endDate} setEndDate={setEndDate}
+              contaFilter={contaFilter} setContaFilter={setContaFilter}
               onSync={() => handleSync('payables')}
               onFullSync={() => handleSync('payables', true)}
               isSyncing={isSyncing}
               financialAccounts={financialAccounts}
-              onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); }}
+              onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); setContaFilter(''); }}
             />
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -1919,9 +1928,7 @@ function FilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, s
 
 const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, onSync, onFullSync, isSyncing, financialAccounts, onClear }: any) {
-  const [contaFilter, setContaFilter] = useState('');
-
+function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, contaFilter, setContaFilter, onSync, onFullSync, isSyncing, financialAccounts, onClear }: any) {
   const currentMonth = useMemo(() => {
     if (startDate) {
       const d = new Date(startDate + 'T00:00:00');
@@ -2009,7 +2016,7 @@ function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatu
           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 outline-none" />
         </div>
         {hasFilters && (
-          <button onClick={() => { onClear(); setContaFilter(''); }} className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors">
+          <button onClick={onClear} className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors">
             <XCircle size={14} /> Limpar filtros
           </button>
         )}

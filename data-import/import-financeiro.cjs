@@ -37,12 +37,37 @@ if (!SUPABASE_SERVICE_KEY) {
 
 // ── Helpers ──────────────────────────────────────────────────
 
+function excelSerialToDate(serial) {
+  // Excel serial: days since 1899-12-30 (with the Lotus 1-2-3 leap year bug)
+  const epoch = new Date(Date.UTC(1899, 11, 30));
+  const ms = epoch.getTime() + serial * 86400000;
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function parseDate(dateStr) {
-  if (!dateStr || dateStr === '-' || dateStr === '') return null;
+  if (dateStr === null || dateStr === undefined || dateStr === '-' || dateStr === '') return null;
+
+  if (typeof dateStr === 'number' && dateStr > 1 && dateStr < 200000) {
+    return excelSerialToDate(dateStr);
+  }
+
   const str = String(dateStr).trim();
-  const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  if (!str) return null;
+
+  const ddmmyyyy = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (ddmmyyyy) return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+
+  if (/^\d+$/.test(str)) {
+    const n = parseInt(str, 10);
+    if (n > 1 && n < 200000) return excelSerialToDate(n);
+  }
+
   return null;
 }
 

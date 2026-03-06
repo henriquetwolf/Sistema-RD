@@ -223,6 +223,7 @@ interface ReceivableFilters {
   endDate?: string;
   categoria?: string;
   centroCusto?: string;
+  contaFinanceira?: string;
   limit?: number;
   offset?: number;
   accountId?: string;
@@ -275,6 +276,9 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
   if (filters.centroCusto) {
     query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
   }
+  if (filters.contaFinanceira) {
+    query = query.ilike('conta_financeira_nome', `%${filters.contaFinanceira}%`);
+  }
 
   const limit = filters.limit || 50;
   const offset = filters.offset || 0;
@@ -306,6 +310,9 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
   }
   if (filters.search) {
     query = query.or(`fornecedor_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+  }
+  if (filters.contaFinanceira) {
+    query = query.ilike('conta_financeira_nome', `%${filters.contaFinanceira}%`);
   }
 
   const limit = filters.limit || 50;
@@ -401,6 +408,7 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
     let query = supabase
       .from('conta_azul_contas_receber')
       .select('valor, valor_pago, status, data_vencimento')
+      .order('id')
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (filters.accountId) query = query.eq('account_id', filters.accountId);
@@ -411,6 +419,7 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
     }
     if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
     if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
+    if (filters.contaFinanceira) query = query.ilike('conta_financeira_nome', `%${filters.contaFinanceira}%`);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -459,6 +468,7 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
     let query = supabase
       .from('conta_azul_contas_pagar')
       .select('valor, valor_pago, status, data_vencimento')
+      .order('id')
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (filters.accountId) query = query.eq('account_id', filters.accountId);
@@ -469,6 +479,7 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
     }
     if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
     if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
+    if (filters.contaFinanceira) query = query.ilike('conta_financeira_nome', `%${filters.contaFinanceira}%`);
 
     const { data, error } = await query;
     if (error) throw error;

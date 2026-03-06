@@ -9,7 +9,8 @@ import {
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, Type, AlignLeft, 
   Mail, Phone, Calendar, Hash, Palette, Sparkles, Image as ImageIcon,
   AlignCenter, Filter, Tag, ArrowRightLeft, User, Users, Info, FileSpreadsheet, RefreshCw, Megaphone,
-  Zap, GitBranch, Settings, Smartphone, Wifi, WifiOff, Link2, History
+  Zap, GitBranch, Settings, Smartphone, Wifi, WifiOff, Link2, History,
+  ChevronUp, ChevronDown, GripVertical, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { appBackend, Pipeline } from '../services/appBackend';
 import clsx from 'clsx';
@@ -391,6 +392,66 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       setCurrentForm(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
   };
 
+  const updateQuestion = (id: string, partial: Partial<FormQuestion>) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === id ? { ...q, ...partial } : q)
+      }));
+  };
+
+  const changeQuestionType = (id: string, newType: QuestionType) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => {
+              if (q.id !== id) return q;
+              const needsOptions = newType === 'select' || newType === 'checkbox';
+              const hadOptions = q.type === 'select' || q.type === 'checkbox';
+              return {
+                  ...q,
+                  type: newType,
+                  options: needsOptions ? (hadOptions && q.options?.length ? q.options : ['Opção 1']) : undefined
+              };
+          })
+      }));
+  };
+
+  const moveQuestion = (idx: number, direction: 'up' | 'down') => {
+      setCurrentForm(prev => {
+          const qs = [...prev.questions];
+          const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+          if (targetIdx < 0 || targetIdx >= qs.length) return prev;
+          [qs[idx], qs[targetIdx]] = [qs[targetIdx], qs[idx]];
+          return { ...prev, questions: qs };
+      });
+  };
+
+  const addOption = (questionId: string) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q =>
+              q.id === questionId ? { ...q, options: [...(q.options || []), `Opção ${(q.options?.length || 0) + 1}`] } : q
+          )
+      }));
+  };
+
+  const removeOption = (questionId: string, optionIndex: number) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q =>
+              q.id === questionId ? { ...q, options: (q.options || []).filter((_, i) => i !== optionIndex) } : q
+          )
+      }));
+  };
+
+  const updateOption = (questionId: string, optionIndex: number, value: string) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q =>
+              q.id === questionId ? { ...q, options: (q.options || []).map((o, i) => i === optionIndex ? value : o) } : q
+          )
+      }));
+  };
+
   const filteredForms = useMemo(() => {
     if (currentFolderId === null) return forms;
     return forms.filter(f => f.folderId === currentFolderId);
@@ -530,28 +591,166 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                 <textarea className="w-full text-slate-500 border-none focus:ring-0 p-0 resize-none h-12 outline-none" value={currentForm.description} onChange={e => setCurrentForm({...currentForm, description: e.target.value})} placeholder="Descrição opcional..." />
                             </div>
                             <div className="space-y-4 pb-20">
-                                {currentForm.questions.map((q, idx) => (
-                                    <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-teal-300 transition-all">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <span className="text-[10px] font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded uppercase">Campo {idx + 1}</span>
-                                            <button onClick={() => setCurrentForm({...currentForm, questions: currentForm.questions.filter(x => x.id !== q.id)})} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="md:col-span-2">
-                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Título da Pergunta</label>
-                                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-lg text-sm font-bold" value={q.title} onChange={e => setCurrentForm({...currentForm, questions: currentForm.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} />
+                                {currentForm.questions.map((q, idx) => {
+                                    const qType = QUESTION_TYPES.find(t => t.id === q.type) || QUESTION_TYPES[0];
+                                    const TypeIcon = qType.icon;
+                                    const hasOptions = q.type === 'select' || q.type === 'checkbox';
+                                    const hasPlaceholder = ['text', 'paragraph', 'email', 'phone', 'number'].includes(q.type);
+
+                                    return (
+                                    <div key={q.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:border-teal-300 transition-all overflow-hidden">
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+                                            <div className="flex items-center gap-3">
+                                                <GripVertical size={16} className="text-slate-300" />
+                                                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
+                                                    <TypeIcon size={14} className="text-teal-600" />
+                                                    <select
+                                                        className="text-xs font-bold text-teal-700 bg-transparent border-none outline-none cursor-pointer pr-1"
+                                                        value={q.type}
+                                                        onChange={e => changeQuestionType(q.id, e.target.value as QuestionType)}
+                                                    >
+                                                        {QUESTION_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                                                    </select>
+                                                </div>
+                                                <span className="text-[10px] font-black text-slate-400 uppercase">#{idx + 1}</span>
                                             </div>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() => moveQuestion(idx, 'up')}
+                                                    disabled={idx === 0}
+                                                    className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    title="Mover para cima"
+                                                >
+                                                    <ChevronUp size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => moveQuestion(idx, 'down')}
+                                                    disabled={idx === currentForm.questions.length - 1}
+                                                    className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    title="Mover para baixo"
+                                                >
+                                                    <ChevronDown size={16} />
+                                                </button>
+                                                <div className="w-px h-5 bg-slate-200 mx-1" />
+                                                <button
+                                                    onClick={() => setCurrentForm({...currentForm, questions: currentForm.questions.filter(x => x.id !== q.id)})}
+                                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                    title="Excluir campo"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Body */}
+                                        <div className="p-5 space-y-4">
+                                            {/* Title + Required */}
+                                            <div className="flex items-start gap-4">
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Título da Pergunta</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold focus:bg-white focus:border-teal-300 outline-none transition-all"
+                                                        value={q.title}
+                                                        onChange={e => updateQuestion(q.id, { title: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div className="pt-5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => updateQuestion(q.id, { required: !q.required })}
+                                                        className={clsx(
+                                                            "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold transition-all whitespace-nowrap",
+                                                            q.required
+                                                                ? "bg-red-50 border-red-200 text-red-600"
+                                                                : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300"
+                                                        )}
+                                                        title={q.required ? "Campo obrigatório" : "Campo opcional"}
+                                                    >
+                                                        {q.required ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                                        {q.required ? 'Obrigatório' : 'Opcional'}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Placeholder */}
+                                            {hasPlaceholder && (
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Texto de Ajuda (Placeholder)</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 focus:bg-white focus:border-teal-300 outline-none transition-all"
+                                                        value={q.placeholder || ''}
+                                                        onChange={e => updateQuestion(q.id, { placeholder: e.target.value })}
+                                                        placeholder="Ex: Digite seu nome completo..."
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Options editor for select/checkbox */}
+                                            {hasOptions && (
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                                                        Opções {q.type === 'select' ? '(Múltipla Escolha)' : '(Caixas de Seleção)'}
+                                                    </label>
+                                                    <div className="space-y-2">
+                                                        {(q.options || []).map((opt, optIdx) => (
+                                                            <div key={optIdx} className="flex items-center gap-2">
+                                                                <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                                                                    {q.type === 'select' ? (
+                                                                        <div className="w-4 h-4 rounded-full border-2 border-slate-300" />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 rounded border-2 border-slate-300" />
+                                                                    )}
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-teal-300 outline-none transition-all"
+                                                                    value={opt}
+                                                                    onChange={e => updateOption(q.id, optIdx, e.target.value)}
+                                                                    placeholder={`Opção ${optIdx + 1}`}
+                                                                />
+                                                                <button
+                                                                    onClick={() => removeOption(q.id, optIdx)}
+                                                                    disabled={(q.options?.length || 0) <= 1}
+                                                                    className="p-1.5 text-slate-300 hover:text-red-500 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                    title="Remover opção"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                        <button
+                                                            onClick={() => addOption(q.id)}
+                                                            className="flex items-center gap-2 text-xs font-bold text-teal-600 hover:text-teal-700 mt-1 px-2 py-1.5 rounded-lg hover:bg-teal-50 transition-all"
+                                                        >
+                                                            <Plus size={14} /> Adicionar Opção
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* CRM Mapping - mantido intacto */}
                                             {currentForm.isLeadCapture && (
-                                                <div className="md:col-span-2">
+                                                <div>
                                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5"><ArrowRightLeft size={10} className="text-teal-500"/> Vincular Campo Comercial (CRM)</label>
-                                                    <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white font-bold text-teal-700" value={q.crmMapping || ''} onChange={e => setCurrentForm({...currentForm, questions: currentForm.questions.map(x => x.id === q.id ? {...x, crmMapping: e.target.value} : x)})}>
+                                                    <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white font-bold text-teal-700" value={q.crmMapping || ''} onChange={e => updateQuestion(q.id, { crmMapping: e.target.value })}>
                                                         {CRM_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                                     </select>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
+                                {currentForm.questions.length === 0 && (
+                                    <div className="text-center py-16 text-slate-300">
+                                        <List size={48} className="mx-auto mb-4 opacity-30" />
+                                        <p className="font-bold text-sm">Nenhum campo adicionado</p>
+                                        <p className="text-xs mt-1">Use o painel lateral para adicionar campos ao formulário.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </main>

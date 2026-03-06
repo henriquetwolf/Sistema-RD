@@ -228,6 +228,20 @@ async function syncReceivables(req: Request): Promise<Response> {
   const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
   try {
+    // Restore any records incorrectly marked as EXCLUIDO (one-time fix + safety net)
+    if (!isIncremental) {
+      const db0 = getSupabaseServiceClient();
+      const { error: restoreErr } = await db0.from("conta_azul_contas_receber")
+        .update({ status: "PENDENTE" })
+        .eq("account_id", accountId)
+        .eq("status", "EXCLUIDO");
+      if (restoreErr) {
+        console.warn(`[syncReceivables] Error restoring EXCLUIDO records: ${restoreErr.message}`);
+      } else {
+        console.log(`[syncReceivables] Restored EXCLUIDO records to PENDENTE for account ${accountId}`);
+      }
+    }
+
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
@@ -315,6 +329,20 @@ async function syncPayables(req: Request): Promise<Response> {
   const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
   try {
+    // Restore any records incorrectly marked as EXCLUIDO (one-time fix + safety net)
+    if (!isIncremental) {
+      const db0 = getSupabaseServiceClient();
+      const { error: restoreErr } = await db0.from("conta_azul_contas_pagar")
+        .update({ status: "PENDENTE" })
+        .eq("account_id", accountId)
+        .eq("status", "EXCLUIDO");
+      if (restoreErr) {
+        console.warn(`[syncPayables] Error restoring EXCLUIDO records: ${restoreErr.message}`);
+      } else {
+        console.log(`[syncPayables] Restored EXCLUIDO records to PENDENTE for account ${accountId}`);
+      }
+    }
+
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,

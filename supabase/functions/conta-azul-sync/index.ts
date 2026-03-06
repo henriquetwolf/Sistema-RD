@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
 const CONTA_AZUL_BASE = "https://api-v2.contaazul.com";
 const CONTA_AZUL_AUTH_BASE = "https://auth.contaazul.com/oauth2";
@@ -160,8 +160,8 @@ function mapReceivableToRow(item: any, accountId: string) {
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: safeFloat(item.valor || item.total || item.valor_original),
-    valor_pago: safeFloat(item.valor_pago || item.pago || item.valor_recebido),
+    valor: safeFloat(item.valor ?? item.total ?? item.valor_original),
+    valor_pago: safeFloat(item.valor_pago ?? item.pago ?? item.valor_recebido),
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -191,8 +191,8 @@ function mapPayableToRow(item: any, accountId: string) {
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: safeFloat(item.valor || item.total || item.valor_original),
-    valor_pago: safeFloat(item.valor_pago || item.pago),
+    valor: safeFloat(item.valor ?? item.total ?? item.valor_original),
+    valor_pago: safeFloat(item.valor_pago ?? item.pago),
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -249,54 +249,27 @@ async function syncReceivables(req: Request): Promise<Response> {
     };
 
     if (isIncremental) {
-      const fullSync = await getLastSuccessfulSync("receivables", accountId);
-      const incrSync = await getLastSuccessfulSync("receivables-incremental", accountId);
-      const xslSync = await getLastSuccessfulSync("receivables-xlsx-import", accountId);
-      const lastSync = [fullSync, incrSync, xslSync]
-        .filter((s): s is { finished_at: string } => !!s?.finished_at)
-        .sort((a, b) => new Date(b.finished_at).getTime() - new Date(a.finished_at).getTime())[0] || null;
-      if (lastSync?.finished_at) {
-        params.data_alteracao_de = lastSync.finished_at;
-        params.data_alteracao_ate = new Date().toISOString();
-        console.log(`[syncReceivables] Incremental since ${lastSync.finished_at} for account ${accountId}`);
-      } else {
-        console.log(`[syncReceivables] No previous sync found, incremental will fetch all recent changes for account ${accountId}`);
-      }
+      // Incremental: refresh records for the last 3 months + next month
+      const now = new Date();
+      const from = new Date(now);
+      from.setMonth(from.getMonth() - 3);
+      const to = new Date(now);
+      to.setMonth(to.getMonth() + 1);
+      params.data_vencimento_de = from.toISOString().split("T")[0];
+      params.data_vencimento_ate = to.toISOString().split("T")[0];
+      console.log(`[syncReceivables] Incremental: refreshing ${params.data_vencimento_de} to ${params.data_vencimento_ate} for account ${accountId}`);
     }
 
     console.log(`[syncReceivables] Params: ${JSON.stringify(params)} for account ${accountId}`);
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
     console.log(`[syncReceivables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
 
-    // Diagnostic: log unique status values for mapping verification
+    // Diagnostic: log unique statuses and sample payment fields
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
     console.log(`[syncReceivables] Unique statuses (${statusSet.size}): ${[...statusSet].join(", ")}`);
-
-    // Secondary fetch: catch recently paid records that data_alteracao might miss
-    if (isIncremental) {
-      try {
-        const recentDate = new Date();
-        recentDate.setDate(recentDate.getDate() - 3);
-        const paymentParams: Record<string, string> = {
-          data_vencimento_de: dateRange.data_vencimento_de,
-          data_vencimento_ate: dateRange.data_vencimento_ate,
-          data_pagamento_de: recentDate.toISOString().split("T")[0],
-          data_pagamento_ate: new Date().toISOString().split("T")[0],
-        };
-        const paidItems = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", paymentParams);
-        console.log(`[syncReceivables] Secondary payment fetch: ${paidItems.length} recently paid items for account ${accountId}`);
-        const existingIds = new Set(items.map((it: any) => String(it.id)));
-        let added = 0;
-        for (const pi of paidItems) {
-          if (!existingIds.has(String(pi.id))) {
-            items.push(pi);
-            added++;
-          }
-        }
-        if (added > 0) console.log(`[syncReceivables] Added ${added} extra recently-paid items not in data_alteracao results`);
-      } catch (e: any) {
-        console.warn(`[syncReceivables] Secondary payment fetch failed (non-fatal): ${e.message}`);
-      }
+    const paidSamples = items.filter((it: any) => it.valor_pago > 0 || it.pago > 0 || it.valor_recebido > 0).slice(0, 3);
+    for (const s of paidSamples) {
+      console.log(`[syncReceivables] Paid sample id=${s.id}: valor=${s.valor}, valor_pago=${s.valor_pago}, pago=${s.pago}, valor_recebido=${s.valor_recebido}, status=${s.status_traduzido || s.status}`);
     }
 
     if (items.length >= 100000) {
@@ -350,19 +323,15 @@ async function syncPayables(req: Request): Promise<Response> {
     };
 
     if (isIncremental) {
-      const fullSync = await getLastSuccessfulSync("payables", accountId);
-      const incrSync = await getLastSuccessfulSync("payables-incremental", accountId);
-      const xslSync = await getLastSuccessfulSync("payables-xlsx-import", accountId);
-      const lastSync = [fullSync, incrSync, xslSync]
-        .filter((s): s is { finished_at: string } => !!s?.finished_at)
-        .sort((a, b) => new Date(b.finished_at).getTime() - new Date(a.finished_at).getTime())[0] || null;
-      if (lastSync?.finished_at) {
-        params.data_alteracao_de = lastSync.finished_at;
-        params.data_alteracao_ate = new Date().toISOString();
-        console.log(`[syncPayables] Incremental since ${lastSync.finished_at} for account ${accountId}`);
-      } else {
-        console.log(`[syncPayables] No previous sync found, incremental will fetch all recent changes for account ${accountId}`);
-      }
+      // Incremental: refresh records for the last 3 months + next month
+      const now = new Date();
+      const from = new Date(now);
+      from.setMonth(from.getMonth() - 3);
+      const to = new Date(now);
+      to.setMonth(to.getMonth() + 1);
+      params.data_vencimento_de = from.toISOString().split("T")[0];
+      params.data_vencimento_ate = to.toISOString().split("T")[0];
+      console.log(`[syncPayables] Incremental: refreshing ${params.data_vencimento_de} to ${params.data_vencimento_ate} for account ${accountId}`);
     }
 
     console.log(`[syncPayables] Params: ${JSON.stringify(params)} for account ${accountId}`);
@@ -372,33 +341,6 @@ async function syncPayables(req: Request): Promise<Response> {
     // Diagnostic: log unique status values for mapping verification
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
     console.log(`[syncPayables] Unique statuses (${statusSet.size}): ${[...statusSet].join(", ")}`);
-
-    // Secondary fetch: catch recently paid records that data_alteracao might miss
-    if (isIncremental) {
-      try {
-        const recentDate = new Date();
-        recentDate.setDate(recentDate.getDate() - 3);
-        const paymentParams: Record<string, string> = {
-          data_vencimento_de: dateRange.data_vencimento_de,
-          data_vencimento_ate: dateRange.data_vencimento_ate,
-          data_pagamento_de: recentDate.toISOString().split("T")[0],
-          data_pagamento_ate: new Date().toISOString().split("T")[0],
-        };
-        const paidItems = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", paymentParams);
-        console.log(`[syncPayables] Secondary payment fetch: ${paidItems.length} recently paid items for account ${accountId}`);
-        const existingIds = new Set(items.map((it: any) => String(it.id)));
-        let added = 0;
-        for (const pi of paidItems) {
-          if (!existingIds.has(String(pi.id))) {
-            items.push(pi);
-            added++;
-          }
-        }
-        if (added > 0) console.log(`[syncPayables] Added ${added} extra recently-paid items not in data_alteracao results`);
-      } catch (e: any) {
-        console.warn(`[syncPayables] Secondary payment fetch failed (non-fatal): ${e.message}`);
-      }
-    }
 
     if (items.length >= 100000) {
       console.warn(`[syncPayables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);

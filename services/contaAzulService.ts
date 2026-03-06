@@ -177,6 +177,7 @@ async function triggerSyncChunked(
   accountId: string,
   onProgress?: (chunk: number, total: number) => void,
 ): Promise<ContaAzulSyncResult> {
+  const syncStartedAt = new Date().toISOString();
   const ranges = generateQuarterlyRanges();
   let totalSynced = 0;
   for (let i = 0; i < ranges.length; i++) {
@@ -187,6 +188,15 @@ async function triggerSyncChunked(
     } catch (e: any) {
       console.warn(`Chunk ${i + 1}/${ranges.length} (${type}) error:`, e.message);
     }
+  }
+  // Reconcile: mark records not updated during this full sync as EXCLUIDO
+  try {
+    await edgeFetch('conta-azul-sync', 'reconcile', {
+      method: 'POST',
+      body: withAccountId({ sync_started_at: syncStartedAt, type }, accountId),
+    });
+  } catch (e: any) {
+    console.warn('Reconcile error (non-fatal):', e.message);
   }
   return { success: true, tipo: type, sincronizados: totalSynced };
 }

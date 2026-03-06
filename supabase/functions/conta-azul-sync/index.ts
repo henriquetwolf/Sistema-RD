@@ -264,13 +264,19 @@ async function syncReceivables(req: Request): Promise<Response> {
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
     console.log(`[syncReceivables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
 
-    // Diagnostic: log unique statuses and sample payment fields
+    // Diagnostic: log unique statuses, payment samples, and per-date counts
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
     console.log(`[syncReceivables] Unique statuses (${statusSet.size}): ${[...statusSet].join(", ")}`);
-    const paidSamples = items.filter((it: any) => it.valor_pago > 0 || it.pago > 0 || it.valor_recebido > 0).slice(0, 3);
-    for (const s of paidSamples) {
-      console.log(`[syncReceivables] Paid sample id=${s.id}: valor=${s.valor}, valor_pago=${s.valor_pago}, pago=${s.pago}, valor_recebido=${s.valor_recebido}, status=${s.status_traduzido || s.status}`);
+    const todayStr = new Date().toISOString().split("T")[0];
+    const dateCounts: Record<string, number> = {};
+    for (const it of items) {
+      const d = it.data_vencimento || "NULL";
+      dateCounts[d] = (dateCounts[d] || 0) + 1;
     }
+    const todayCount = dateCounts[todayStr] || 0;
+    console.log(`[syncReceivables] API records for today (${todayStr}): ${todayCount}`);
+    const nullDates = dateCounts["NULL"] || 0;
+    if (nullDates > 0) console.log(`[syncReceivables] WARNING: ${nullDates} items have NULL data_vencimento`);
 
     if (items.length >= 100000) {
       console.warn(`[syncReceivables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
@@ -278,17 +284,28 @@ async function syncReceivables(req: Request): Promise<Response> {
     const db = getSupabaseServiceClient();
     const rows = items.map(item => mapReceivableToRow(item, accountId));
     let batchErrors = 0;
+    let rowErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_contas_receber").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
         batchErrors++;
         console.error("[syncReceivables] Batch error at index", i, ":", error.message, error.details);
+        // Retry one-by-one to save as many records as possible
+        for (const row of batch) {
+          const { error: rowErr } = await db.from("conta_azul_contas_receber").upsert(row, { onConflict: "account_id,id_conta_azul" });
+          if (rowErr) {
+            rowErrors++;
+            console.error(`[syncReceivables] Row error id_conta_azul=${row.id_conta_azul}: ${rowErr.message}`);
+          } else {
+            count++;
+          }
+        }
       } else {
         count += batch.length;
       }
     }
-    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors for account ${accountId}`);
+    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} individual row errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -348,17 +365,27 @@ async function syncPayables(req: Request): Promise<Response> {
     const db = getSupabaseServiceClient();
     const rows = items.map(item => mapPayableToRow(item, accountId));
     let batchErrors = 0;
+    let rowErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_contas_pagar").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
         batchErrors++;
         console.error("[syncPayables] Batch error at index", i, ":", error.message, error.details);
+        for (const row of batch) {
+          const { error: rowErr } = await db.from("conta_azul_contas_pagar").upsert(row, { onConflict: "account_id,id_conta_azul" });
+          if (rowErr) {
+            rowErrors++;
+            console.error(`[syncPayables] Row error id_conta_azul=${row.id_conta_azul}: ${rowErr.message}`);
+          } else {
+            count++;
+          }
+        }
       } else {
         count += batch.length;
       }
     }
-    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors for account ${accountId}`);
+    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} individual row errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -570,6 +597,45 @@ async function autoSyncAll(_req: Request): Promise<Response> {
   return jsonResponse({ success: true, auto_sync: true, results: allResults });
 }
 
+async function reconcileStale(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const syncStartedAt = body.sync_started_at;
+  const type = body.type;
+  if (!syncStartedAt) return errorResponse("Campo 'sync_started_at' é obrigatório.");
+  if (!type || (type !== "receivables" && type !== "payables")) return errorResponse("Campo 'type' deve ser 'receivables' ou 'payables'.");
+
+  const table = type === "receivables" ? "conta_azul_contas_receber" : "conta_azul_contas_pagar";
+  const db = getSupabaseServiceClient();
+
+  // Fetch stale records in pages (Supabase default limit is 1000)
+  let allStaleIds: string[] = [];
+  let page = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data } = await db.from(table)
+      .select("id")
+      .eq("account_id", accountId)
+      .neq("status", "EXCLUIDO")
+      .lt("synced_at", syncStartedAt)
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    const rows = data || [];
+    allStaleIds.push(...rows.map((r: any) => r.id));
+    if (rows.length < PAGE) break;
+    page++;
+  }
+
+  if (allStaleIds.length > 0) {
+    for (let i = 0; i < allStaleIds.length; i += 200) {
+      const batch = allStaleIds.slice(i, i + 200);
+      await db.from(table).update({ status: "EXCLUIDO" }).in("id", batch);
+    }
+  }
+
+  console.log(`[reconcileStale] account=${accountId}, type=${type}: ${allStaleIds.length} stale records marked EXCLUIDO (threshold: ${syncStartedAt})`);
+  return jsonResponse({ success: true, tipo: type, excluidos: allStaleIds.length });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
   if (req.method !== "POST") return errorResponse("Metodo nao permitido. Use POST.", 405);
@@ -580,6 +646,7 @@ Deno.serve(async (req) => {
     switch (action) {
       case "receivables": return await syncReceivables(req);
       case "payables": return await syncPayables(req);
+      case "reconcile": return await reconcileStale(req);
       case "categories": return await syncCategories(req);
       case "cost-centers": return await syncCostCenters(req);
       case "accounts": return await syncAccounts(req);

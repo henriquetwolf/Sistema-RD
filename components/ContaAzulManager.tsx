@@ -122,25 +122,19 @@ export const ContaAzulManager: React.FC = () => {
     setCpfSearchDone(false);
     try {
       const result = await appBackend.lookupCpfGlobal(clean);
-      const names = new Set<string>();
-      if (result?.profile?.full_name) names.add(result.profile.full_name);
-      if (result?.collaborator?.full_name) names.add(result.collaborator.full_name);
-      if (result?.instructor?.full_name) names.add(result.instructor.full_name);
-      if (result?.student?.full_name) names.add(result.student.full_name);
-      if (result?.partner_studio?.responsible_name) names.add(result.partner_studio.responsible_name);
-      if (result?.franchise?.franchisee_name) names.add(result.franchise.franchisee_name);
-      (result?.deals || []).forEach((d: any) => {
-        if (d.company_name) names.add(d.company_name);
-        if (d.contact_name) names.add(d.contact_name);
-      });
-      const nameList = Array.from(names).filter(n => n.trim());
-      if (nameList.length === 0) {
-        setCpfSearchError('Nenhum nome encontrado para este CPF no sistema.');
+      if (!result) {
+        setCpfSearchError('Erro ao consultar. Verifique a conexão ou se a função de busca por CPF está disponível.');
         return;
       }
-      const { receber, pagar } = await appBackend.lookupContaAzulByName(nameList);
-      setCpfReceber(receber);
-      setCpfPagar(pagar);
+      if ((result as any).error) {
+        setCpfSearchError((result as any).error);
+        return;
+      }
+      // O RPC lookup_cpf_global já retorna conta_azul_receber e conta_azul_pagar (por CPF e por nomes conhecidos)
+      const receber = (result as any).conta_azul_receber ?? [];
+      const pagar = (result as any).conta_azul_pagar ?? [];
+      setCpfReceber(Array.isArray(receber) ? receber : []);
+      setCpfPagar(Array.isArray(pagar) ? pagar : []);
     } catch (err: any) {
       setCpfSearchError(err.message || 'Erro ao buscar dados.');
     } finally {

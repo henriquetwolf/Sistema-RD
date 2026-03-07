@@ -2,25 +2,56 @@ import React, { useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
-import { StudentSession, CollaboratorSession, PartnerStudioSession } from '../types';
+import { StudentSession, CollaboratorSession, PartnerStudioSession, UserRole } from '../types';
+
+interface DetectedMultiRole {
+    cpf: string;
+    name: string;
+    email: string;
+    roles: UserRole[];
+}
 
 interface LoginPanelProps {
     onInstructorLogin?: (teacher: Teacher) => void;
     onStudentLogin?: (student: StudentSession) => void;
     onCollaboratorLogin?: (collab: CollaboratorSession) => void;
     onStudioLogin?: (studio: PartnerStudioSession) => void;
+    onMultiRoleLogin?: (data: DetectedMultiRole) => void;
 }
 
 export const LoginPanel: React.FC<LoginPanelProps> = ({ 
     onInstructorLogin, 
     onStudentLogin, 
     onCollaboratorLogin,
-    onStudioLogin
+    onStudioLogin,
+    onMultiRoleLogin
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const detectRolesByCpf = async (cpf: string): Promise<UserRole[]> => {
+    const clean = cpf.replace(/\D/g, '');
+    if (clean.length < 11) return [];
+    const roles: UserRole[] = [];
+
+    const [instrRes, alunoRes, collabRes, studioRes, franchiseRes] = await Promise.all([
+      appBackend.client.from('crm_teachers').select('id').ilike('cpf', `%${clean}%`).eq('is_active', true).limit(1),
+      appBackend.client.from('crm_alunos').select('id').eq('cpf', clean).limit(1),
+      appBackend.client.from('crm_collaborators').select('id').ilike('cpf', `%${clean}%`).eq('status', 'active').limit(1),
+      appBackend.client.from('crm_partner_studios').select('id').ilike('cpf', `%${clean}%`).eq('status', 'Ativo').limit(1),
+      appBackend.client.from('crm_franchises').select('id').ilike('cpf', `%${clean}%`).limit(1),
+    ]);
+
+    if (instrRes.data && instrRes.data.length > 0) roles.push('instructor');
+    if (alunoRes.data && alunoRes.data.length > 0) roles.push('student');
+    if (collabRes.data && collabRes.data.length > 0) roles.push('collaborator');
+    if (studioRes.data && studioRes.data.length > 0) roles.push('partner_studio');
+    if (franchiseRes.data && franchiseRes.data.length > 0) roles.push('franchisee');
+
+    return roles;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,22 +71,27 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
         try {
             const { data, error: authErr } = await appBackend.auth.signIn(cleanEmail, cleanPassword);
             if (data?.user && !authErr) {
-                // Se o login foi bem sucedido, o onAuthStateChange no App.tsx cuidará da sessão
                 return;
             }
-        } catch (e) {
-            // Ignora erro e tenta o próximo
-        }
+        } catch (e) {}
 
         // 2. TENTAR COLABORADOR (Equipe)
         const { data: collab } = await appBackend.client
             .from('crm_collaborators')
-            .select('id, full_name, email, password, photo_url, role_id, status')
+            .select('id, full_name, email, password, photo_url, cpf, role_id, status')
             .eq('email', cleanEmail)
             .eq('password', cleanPassword)
             .maybeSingle();
 
         if (collab && collab.status === 'active' && collab.role_id) {
+            const cpf = (collab.cpf || '').replace(/\D/g, '');
+            if (cpf.length >= 11 && onMultiRoleLogin) {
+                const allRoles = await detectRolesByCpf(cpf);
+                if (allRoles.length > 1) {
+                    onMultiRoleLogin({ cpf, name: collab.full_name, email: collab.email, roles: allRoles });
+                    return;
+                }
+            }
             const { data: roleData } = await appBackend.client
                 .from('crm_roles')
                 .select('*')
@@ -78,12 +114,20 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
         // 3. TENTAR STUDIO PARCEIRO
         const { data: studio } = await appBackend.client
             .from('crm_partner_studios')
-            .select('id, fantasy_name, responsible_name, email, cnpj, status, password')
+            .select('id, fantasy_name, responsible_name, email, cnpj, cpf, status, password')
             .eq('email', cleanEmail)
             .eq('password', cleanPassword)
             .maybeSingle();
 
         if (studio && studio.status === 'active') {
+            const cpf = (studio.cpf || '').replace(/\D/g, '');
+            if (cpf.length >= 11 && onMultiRoleLogin) {
+                const allRoles = await detectRolesByCpf(cpf);
+                if (allRoles.length > 1) {
+                    onMultiRoleLogin({ cpf, name: studio.responsible_name, email: studio.email, roles: allRoles });
+                    return;
+                }
+            }
             const session: PartnerStudioSession = {
                 id: studio.id,
                 fantasyName: studio.fantasy_name,
@@ -104,7 +148,14 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
             .maybeSingle();
 
         if (instr && instr.is_active) {
-            // MAPEAR TODOS OS CAMPOS DO BANCO PARA O OBJETO TEACHER
+            const cpf = (instr.cpf || '').replace(/\D/g, '');
+            if (cpf.length >= 11 && onMultiRoleLogin) {
+                const allRoles = await detectRolesByCpf(cpf);
+                if (allRoles.length > 1) {
+                    onMultiRoleLogin({ cpf, name: instr.full_name, email: instr.email, roles: allRoles });
+                    return;
+                }
+            }
             const teacher: Teacher = {
                 id: instr.id, 
                 fullName: instr.full_name, 
@@ -174,9 +225,17 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
         if (deals && deals.length > 0) {
             const studentDeals = deals.filter((d: any) => (d.cpf ? d.cpf.replace(/\D/g, '') : '') === cleanCpf);
             if (studentDeals.length > 0 && studentDeals.some((d: any) => d.student_access_enabled !== false)) {
-                // Tenta pegar o nome mais completo disponível
                 const bestName = studentDeals[0].company_name || studentDeals[0].contact_name || 'Aluno';
-                
+                const cpf = cleanCpf;
+
+                if (cpf.length >= 11 && onMultiRoleLogin) {
+                    const allRoles = await detectRolesByCpf(cpf);
+                    if (allRoles.length > 1) {
+                        onMultiRoleLogin({ cpf, name: bestName, email: studentDeals[0].email, roles: allRoles });
+                        return;
+                    }
+                }
+
                 const studentInfo: StudentSession = { 
                     email: studentDeals[0].email, 
                     cpf: studentDeals[0].cpf, 

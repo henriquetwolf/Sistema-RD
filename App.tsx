@@ -595,16 +595,39 @@ function App() {
   
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
 
-  if (!session && !currentInstructor && !currentStudent && !currentCollaborator && !currentStudio) {
+  if (!session && !currentInstructor && !currentStudent && !currentCollaborator && !currentStudio && !authenticatedUser) {
       return <LoginPanel 
         onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s));}} 
         onStudentLogin={s => {setCurrentStudent(s); sessionStorage.setItem('student_session', JSON.stringify(s));}} 
         onCollaboratorLogin={s => {setCurrentCollaborator(s); sessionStorage.setItem('collaborator_session', JSON.stringify(s));}}
         onStudioLogin={s => {setCurrentStudio(s); sessionStorage.setItem('studio_session', JSON.stringify(s));}}
+        onMultiRoleLogin={(data) => {
+          const roleEntries = data.roles.map(role => ({
+            id: crypto.randomUUID(),
+            user_id: '',
+            role,
+            permission_role_id: null,
+            is_active: true,
+          }));
+          setAuthenticatedUser({
+            profile: {
+              id: '',
+              cpf: data.cpf,
+              full_name: data.name,
+              email: data.email,
+              phone: null,
+              photo_url: null,
+              created_at: '',
+              updated_at: '',
+            },
+            roles: roleEntries,
+            activeRole: null,
+          });
+        }}
       />;
   }
 
-  if (session && authenticatedUser && authenticatedUser.roles.length > 1 && !authenticatedUser.activeRole) {
+  if (authenticatedUser && authenticatedUser.roles.length > 1 && !authenticatedUser.activeRole) {
       return <RoleSelector user={authenticatedUser} onSelect={handleRoleSelect} onLogout={handleLogout} logoUrl={appLogo} />;
   }
 
@@ -612,9 +635,18 @@ function App() {
       return <FranchiseeArea franchise={currentFranchise} cpf={authenticatedUser.profile.cpf} onLogout={handleLogout} onSwitchRole={authenticatedUser.roles.length > 1 ? handleSwitchRole : undefined} />;
   }
 
-  if (currentInstructor) return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
-  if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} logoUrl={appLogo} />;
-  if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
+  const multiRoleBanner = authenticatedUser && authenticatedUser.roles.length > 1 ? (
+    <div className="bg-indigo-600 text-white px-4 py-2 flex items-center justify-center gap-3 text-sm">
+      <span className="text-indigo-200 text-xs">Você tem {authenticatedUser.roles.length} perfis</span>
+      <button onClick={handleSwitchRole} className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors">
+        <ArrowLeftRight size={12} /> Trocar Perfil
+      </button>
+    </div>
+  ) : null;
+
+  if (currentInstructor) return <>{multiRoleBanner}<InstructorArea instructor={currentInstructor} onLogout={handleLogout} /></>;
+  if (currentStudent) return <>{multiRoleBanner}<StudentArea student={currentStudent} onLogout={handleLogout} logoUrl={appLogo} /></>;
+  if (currentStudio) return <>{multiRoleBanner}<PartnerStudioArea studio={currentStudio} onLogout={handleLogout} /></>;
 
   const currentUserName = currentCollaborator 
     ? currentCollaborator.name 

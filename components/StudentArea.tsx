@@ -426,7 +426,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             let fullResponse = '';
 
             const response = await ai.models.generateContentStream({
-                model: 'gemini-2.5-flash-preview-04-17',
+                model: 'gemini-2.5-flash',
                 contents: conversationContext,
                 config: { systemInstruction: systemPrompt, temperature: 0.7 },
             });

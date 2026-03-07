@@ -172,7 +172,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     return String(maxCode + 1);
   };
 
-  const handleOpenNew = () => { setFormData({ ...initialFormState, classCode: generateNextClassCode() }); setShowModal(true); };
+  const handleOpenNew = () => {
+    const code = generateNextClassCode();
+    setFormData({ ...initialFormState, classCode: code, mod1Code: `${code}M1`, mod2Code: `${code}M2` });
+    setShowModal(true);
+  };
   const handleEdit = (item: ClassItem) => { setFormData({ ...item }); setActiveMenuId(null); setShowModal(true); };
 
   const handleDelete = async (id: string) => {
@@ -200,7 +204,16 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     } catch(e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSaving(false); }
   };
 
-  const handleInputChange = (field: keyof ClassItem, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
+  const handleInputChange = (field: keyof ClassItem, value: any) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      if (field === 'classCode' && value) {
+        updated.mod1Code = `${value}M1`;
+        updated.mod2Code = `${value}M2`;
+      }
+      return updated;
+    });
+  };
 
   const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
@@ -692,7 +705,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                         <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-indigo-100 pb-2 flex items-center gap-2"><CalendarIcon size={16} /> Logística Módulo 1</h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Início</label><input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.dateMod1} onChange={e => handleInputChange('dateMod1', e.target.value)} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Módulo 1</label><input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white font-mono" value={formData.mod1Code} onChange={e => handleInputChange('mod1Code', e.target.value)} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Módulo 1 <span className="text-purple-400">(auto)</span></label><input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-purple-50 font-mono font-bold text-purple-700" value={formData.mod1Code} onChange={e => handleInputChange('mod1Code', e.target.value)} /></div>
                             <div className="md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Studio / Local</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.studioMod1} onChange={e => handleInputChange('studioMod1', e.target.value)}><option value="">Selecione...</option>{partnerStudios.filter(s => s.state === formData.state && s.city === formData.city).map(s => <option key={s.id} value={s.fantasyName}>{s.fantasyName}</option>)}</select></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Instrutor Mod 1</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.instructorMod1} onChange={e => handleInputChange('instructorMod1', e.target.value)}><option value="">Selecione...</option>{instructorsList.map(name => <option key={name} value={name}>{name}</option>)}</select></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Voo/Passagem</label><div className="relative"><Plane className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.ticketMod1} onChange={e => handleInputChange('ticketMod1', e.target.value)} /></div></div>
@@ -708,7 +721,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-orange-100 pb-2 flex items-center gap-2"><CalendarIcon size={16} /> Logística Módulo 2</h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Início</label><input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.dateMod2} onChange={e => handleInputChange('dateMod2', e.target.value)} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Módulo 2</label><input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white font-mono" value={formData.mod2Code} onChange={e => handleInputChange('mod2Code', e.target.value)} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Módulo 2 <span className="text-purple-400">(auto)</span></label><input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-purple-50 font-mono font-bold text-purple-700" value={formData.mod2Code} onChange={e => handleInputChange('mod2Code', e.target.value)} /></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Instrutor Mod 2</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.instructorMod2} onChange={e => handleInputChange('instructorMod2', e.target.value)}><option value="">Selecione...</option>{instructorsList.map(name => <option key={name} value={name}>{name}</option>)}</select></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Voo/Passagem</label><div className="relative"><Plane className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.ticketMod2} onChange={e => handleInputChange('ticketMod2', e.target.value)} /></div></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Coffee Break</label><div className="relative"><Coffee className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} /></div></div>

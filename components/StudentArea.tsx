@@ -376,7 +376,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             appBackend.client.from('crm_deals').select('product, stage_id, value').in('id', safeDealIds),
             appBackend.client.from('crm_student_certificates').select('*, crm_certificates(title)').in('student_deal_id', safeDealIds),
             appBackend.client.from('crm_student_course_access').select('course_id').in('student_deal_id', safeDealIds),
-            appBackend.client.from('crm_classes').select('id, course, city, state, status, date_mod_1, mod_1_code, mod_2_code').eq('status', 'active'),
+            appBackend.client.from('crm_classes').select('id, course, city, state, status, date_mod_1, mod_1_code, mod_2_code').eq('status', 'Confirmado'),
             appBackend.client.from('crm_events').select('id, name, description, location, dates, registration_open'),
             appBackend.client.from('crm_event_registrations').select('event_id, workshop_id').in('student_id', safeDealIds),
         ]);

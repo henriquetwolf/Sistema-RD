@@ -70,7 +70,7 @@ function extractItems<T>(body: any): T[] {
 async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 500): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
-  const size = 200;
+  const size = 1000;
   // API Conta Azul "buscar" é GET com query params (não POST): data_vencimento_de, data_vencimento_ate, pagina, tamanho_pagina
   for (let i = 0; i < maxPages; i++) {
     const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
@@ -227,15 +227,17 @@ async function syncReceivables(req: Request): Promise<Response> {
     };
 
     if (isIncremental) {
-      // Incremental: refresh records for the last 3 months + next month
-      const now = new Date();
-      const from = new Date(now);
-      from.setMonth(from.getMonth() - 3);
-      const to = new Date(now);
-      to.setMonth(to.getMonth() + 1);
-      params.data_vencimento_de = from.toISOString().split("T")[0];
-      params.data_vencimento_ate = to.toISOString().split("T")[0];
-      console.log(`[syncReceivables] Incremental: refreshing ${params.data_vencimento_de} to ${params.data_vencimento_ate} for account ${accountId}`);
+      const lastSync = await getLastSuccessfulSync("receivables", accountId)
+        || await getLastSuccessfulSync("receivables-incremental", accountId);
+      if (lastSync?.finished_at) {
+        const since = new Date(lastSync.finished_at);
+        since.setHours(since.getHours() - 1);
+        params.data_alteracao_de = since.toISOString().replace("Z", "");
+        params.data_alteracao_ate = new Date().toISOString().replace("Z", "");
+        console.log(`[syncReceivables] Incremental via data_alteracao_de: ${params.data_alteracao_de} for account ${accountId}`);
+      } else {
+        console.log(`[syncReceivables] No previous sync found, doing full date range for account ${accountId}`);
+      }
     }
 
     console.log(`[syncReceivables] Params: ${JSON.stringify(params)} for account ${accountId}`);
@@ -307,15 +309,17 @@ async function syncPayables(req: Request): Promise<Response> {
     };
 
     if (isIncremental) {
-      // Incremental: refresh records for the last 3 months + next month
-      const now = new Date();
-      const from = new Date(now);
-      from.setMonth(from.getMonth() - 3);
-      const to = new Date(now);
-      to.setMonth(to.getMonth() + 1);
-      params.data_vencimento_de = from.toISOString().split("T")[0];
-      params.data_vencimento_ate = to.toISOString().split("T")[0];
-      console.log(`[syncPayables] Incremental: refreshing ${params.data_vencimento_de} to ${params.data_vencimento_ate} for account ${accountId}`);
+      const lastSync = await getLastSuccessfulSync("payables", accountId)
+        || await getLastSuccessfulSync("payables-incremental", accountId);
+      if (lastSync?.finished_at) {
+        const since = new Date(lastSync.finished_at);
+        since.setHours(since.getHours() - 1);
+        params.data_alteracao_de = since.toISOString().replace("Z", "");
+        params.data_alteracao_ate = new Date().toISOString().replace("Z", "");
+        console.log(`[syncPayables] Incremental via data_alteracao_de: ${params.data_alteracao_de} for account ${accountId}`);
+      } else {
+        console.log(`[syncPayables] No previous sync found, doing full date range for account ${accountId}`);
+      }
     }
 
     console.log(`[syncPayables] Params: ${JSON.stringify(params)} for account ${accountId}`);

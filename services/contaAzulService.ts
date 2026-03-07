@@ -440,6 +440,7 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
     const st = (r.status || '').toLowerCase();
+    if (st.includes('perdido') || st.includes('renegociado')) continue;
     const isLiquidado = st.includes('liquidado') || st.includes('recebido')
       || st.includes('pago') || st.includes('quitado');
     total_periodo += valor;
@@ -492,6 +493,7 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
     const st = (r.status || '').toLowerCase();
+    if (st.includes('perdido') || st.includes('renegociado')) continue;
     const isLiquidado = st.includes('liquidado') || st.includes('recebido')
       || st.includes('pago') || st.includes('quitado');
     total_periodo += valor;
@@ -531,12 +533,13 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
   let totalOriginal = 0, totalRecebido = 0, paidCount = 0, pendingCount = 0, overdueCount = 0;
 
   for (const r of records) {
+    const st = (r.status || '').toLowerCase();
+    if (st.includes('perdido') || st.includes('renegociado')) continue;
     const valor = Number(r.valor || 0);
     const valorPago = Number(r.valor_pago || 0);
     totalOriginal += valor;
     totalRecebido += valorPago;
 
-    const st = (r.status || '').toLowerCase();
     const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago') || st.includes('quitado');
     if (isLiquidado || (valor > 0 && valorPago >= valor)) {
       paidCount++;
@@ -590,10 +593,17 @@ async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
     fetchAll('conta_azul_contas_financeiras', 'saldo_atual', (q: any) => q.eq('ativo', true)),
   ]);
 
-  const totalReceber = receberData.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-  const totalReceberPago = receberData.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
-  const totalPagar = pagarData.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-  const totalPagarPago = pagarData.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+  const isActive = (r: any) => {
+    const st = (r.status || '').toLowerCase();
+    return !st.includes('perdido') && !st.includes('renegociado');
+  };
+  const activeReceber = receberData.filter(isActive);
+  const activePagar = pagarData.filter(isActive);
+
+  const totalReceber = activeReceber.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
+  const totalReceberPago = activeReceber.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+  const totalPagar = activePagar.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
+  const totalPagarPago = activePagar.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
   const saldoContas = contasData.reduce((s: number, c: any) => s + Number(c.saldo_atual || 0), 0);
 
   return {
@@ -604,8 +614,8 @@ async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
     totalPagarPago,
     totalPagarPendente: totalPagar - totalPagarPago,
     saldoContas,
-    countReceber: receberData.length,
-    countPagar: pagarData.length,
+    countReceber: activeReceber.length,
+    countPagar: activePagar.length,
   };
 }
 

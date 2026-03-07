@@ -1174,4 +1174,80 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_conta_azul_product_mapping').delete().eq('id', id);
   },
+
+  // ── Sistema Unificado de Usuário (Multi-Papéis via CPF) ──
+
+  getUserProfile: async (userId: string) => {
+    if (!isConfigured) return null;
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    return data;
+  },
+
+  getUserRoles: async (userId: string) => {
+    if (!isConfigured) return [];
+    const { data } = await supabase
+      .from('user_roles')
+      .select('*, crm_roles(name, permissions)')
+      .eq('user_id', userId)
+      .eq('is_active', true);
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      user_id: r.user_id,
+      role: r.role,
+      permission_role_id: r.permission_role_id,
+      is_active: r.is_active,
+      permission_role_name: r.crm_roles?.name || null,
+      permissions: r.crm_roles?.permissions || {},
+    }));
+  },
+
+  refreshMyRoles: async () => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.rpc('refresh_my_roles');
+    return data || [];
+  },
+
+  getEntityDataByCpf: async (role: string, cpf: string) => {
+    if (!isConfigured) return null;
+    const clean = cpf.replace(/\D/g, '');
+    let table = '';
+    let cpfField = 'cpf';
+
+    switch (role) {
+      case 'instructor': table = 'crm_teachers'; break;
+      case 'student': table = 'crm_alunos'; break;
+      case 'collaborator': table = 'crm_collaborators'; break;
+      case 'partner_studio': table = 'crm_partner_studios'; break;
+      case 'franchisee': table = 'crm_franchises'; break;
+      default: return null;
+    }
+
+    const { data } = await supabase
+      .from(table)
+      .select('*')
+      .eq(cpfField, clean)
+      .maybeSingle();
+
+    if (!data) {
+      const { data: fuzzy } = await supabase
+        .from(table)
+        .select('*')
+        .ilike(cpfField, `%${clean}%`)
+        .limit(1)
+        .maybeSingle();
+      return fuzzy;
+    }
+    return data;
+  },
+
+  lookupCpfGlobal: async (cpf: string) => {
+    if (!isConfigured) return null;
+    const { data, error } = await supabase.rpc('lookup_cpf_global', { p_cpf: cpf });
+    if (error) { console.error('lookup_cpf_global error:', error); return null; }
+    return data;
+  },
 };

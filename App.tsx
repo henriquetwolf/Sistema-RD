@@ -33,6 +33,9 @@ import { WhatsAppInbox } from './components/WhatsAppInbox';
 import { WhatsAppAutomation } from './components/WhatsAppAutomation';
 import { BulkWhatsAppSender } from './components/BulkWhatsAppSender';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
+import { RoleSelector } from './components/RoleSelector';
+import { FranchiseeArea } from './components/FranchiseeArea';
+import { CpfLookup } from './components/CpfLookup';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
 import { SupportManager } from './components/SupportManager';
@@ -44,7 +47,7 @@ import { PagBankManager } from './components/PagBankManager';
 import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage } from './types';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -55,11 +58,12 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser, Smartphone
+  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser, Smartphone,
+  Fingerprint, ArrowLeftRight
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup';
 
 function App() {
   if (platformService.isNative()) {
@@ -89,6 +93,9 @@ function App() {
   const [currentStudent, setCurrentStudent] = useState<StudentSession | null>(null);
   const [currentCollaborator, setCurrentCollaborator] = useState<CollaboratorSession | null>(null);
   const [currentStudio, setCurrentStudio] = useState<PartnerStudioSession | null>(null);
+
+  const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(null);
+  const [currentFranchise, setCurrentFranchise] = useState<any>(null);
 
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); 
@@ -199,6 +206,109 @@ function App() {
     const { data: { subscription } } = appBackend.auth.onAuthStateChange((s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (session?.user?.id && !authenticatedUser) {
+      loadAuthenticatedUser(session.user.id);
+    }
+    if (!session) {
+      setAuthenticatedUser(null);
+    }
+  }, [session]);
+
+  const loadAuthenticatedUser = async (userId: string) => {
+    try {
+      const profile = await appBackend.getUserProfile(userId);
+      if (!profile) return;
+      const roles = await appBackend.getUserRoles(userId);
+      setAuthenticatedUser({
+        profile: {
+          id: profile.id,
+          cpf: profile.cpf,
+          full_name: profile.full_name,
+          email: profile.email,
+          phone: profile.phone,
+          photo_url: profile.photo_url,
+          created_at: profile.created_at,
+          updated_at: profile.updated_at,
+        },
+        roles,
+        activeRole: roles.length === 1 ? roles[0].role : null,
+      });
+      if (roles.length === 1) {
+        await applyActiveRole(roles[0].role, profile.cpf);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar perfil unificado:', e);
+    }
+  };
+
+  const applyActiveRole = async (role: UserRole, cpf: string) => {
+    try {
+      const entity = await appBackend.getEntityDataByCpf(role, cpf);
+      if (role === 'instructor' && entity) {
+        const t: Teacher = {
+          id: entity.id, fullName: entity.full_name, email: entity.email, phone: entity.phone, photoUrl: entity.photo_url || '',
+          rg: entity.rg || '', cpf: entity.cpf || '', birthDate: entity.birth_date || '', maritalStatus: entity.marital_status || '',
+          motherName: entity.mother_name || '', address: entity.address || '', district: entity.district || '', city: entity.city || '',
+          state: entity.state || '', cep: entity.cep || '', emergencyContactName: entity.emergency_contact_name || '',
+          emergencyContactPhone: entity.emergency_contact_phone || '', profession: entity.profession || '',
+          councilNumber: entity.council_number || '', isCouncilActive: !!entity.is_council_active,
+          cnpj: entity.cnpj || '', companyName: entity.company_name || '', hasCnpjActive: !!entity.has_cnpj_active,
+          academicFormation: entity.academic_formation || '', otherFormation: entity.other_formation || '',
+          courseType: entity.course_type || '', teacherLevel: entity.teacher_level || '',
+          levelHonorarium: Number(entity.level_honorarium || 0), isActive: !!entity.is_active,
+          bank: entity.bank || '', agency: entity.agency || '', accountNumber: entity.account_number || '',
+          accountDigit: entity.account_digit || '', hasPjAccount: !!entity.has_pj_account,
+          pixKeyPj: entity.pix_key_pj || '', pixKeyPf: entity.pix_key_pf || '',
+          regionAvailability: entity.region_availability || '', weekAvailability: entity.week_availability || '',
+          shirtSize: entity.shirt_size || '', hasNotebook: !!entity.has_notebook, hasVehicle: !!entity.has_vehicle,
+          hasStudio: !!entity.has_studio, studioAddress: entity.studio_address || '',
+          additional1: entity.additional1 || '', valueAdditional1: entity.value_additional1 || '', dateAdditional1: entity.date_additional1 || '',
+          additional2: entity.additional2 || '', valueAdditional2: entity.value_additional2 || '', dateAdditional2: entity.date_additional2 || '',
+          additional3: entity.additional3 || '', valueAdditional3: entity.value_additional3 || '', dateAdditional3: entity.date_additional3 || '',
+          password: entity.password || '',
+        };
+        setCurrentInstructor(t);
+      } else if (role === 'student' && entity) {
+        const { data: deals } = await appBackend.client.from('crm_deals').select('*').eq('cpf', cpf.replace(/\D/g, ''));
+        setCurrentStudent({ email: entity.email || (deals?.[0]?.email) || '', name: entity.full_name, cpf: entity.cpf, deals: deals || [] });
+      } else if (role === 'partner_studio' && entity) {
+        setCurrentStudio({ id: entity.id, fantasyName: entity.fantasy_name, responsibleName: entity.responsible_name, email: entity.email, cnpj: entity.cnpj });
+      } else if (role === 'franchisee' && entity) {
+        setCurrentFranchise(entity);
+      } else if (role === 'collaborator' && entity) {
+        const roleData = authenticatedUser?.roles.find(r => r.role === 'collaborator');
+        setCurrentCollaborator({
+          id: entity.id, name: entity.full_name, email: entity.email, photoUrl: entity.photo_url || '',
+          role: { id: roleData?.permission_role_id || '', name: roleData?.permission_role_name || 'Colaborador', permissions: roleData?.permissions || {} }
+        });
+      }
+    } catch (e) {
+      console.error('Erro ao carregar dados da entidade:', e);
+    }
+  };
+
+  const handleRoleSelect = async (role: UserRole) => {
+    if (!authenticatedUser) return;
+    setAuthenticatedUser(prev => prev ? { ...prev, activeRole: role } : null);
+    await applyActiveRole(role, authenticatedUser.profile.cpf);
+  };
+
+  const handleSwitchRole = () => {
+    setCurrentInstructor(null);
+    setCurrentStudent(null);
+    setCurrentCollaborator(null);
+    setCurrentStudio(null);
+    setCurrentFranchise(null);
+    sessionStorage.removeItem('instructor_session');
+    sessionStorage.removeItem('student_session');
+    sessionStorage.removeItem('collaborator_session');
+    sessionStorage.removeItem('studio_session');
+    if (authenticatedUser) {
+      setAuthenticatedUser(prev => prev ? { ...prev, activeRole: null } : null);
+    }
+  };
 
   useEffect(() => {
     if (dashboardTab === 'overview' && (session || currentCollaborator)) {
@@ -436,11 +546,13 @@ function App() {
   };
 
   const handleLogout = async () => {
+    setAuthenticatedUser(null);
+    setCurrentFranchise(null);
     if (currentInstructor) { setCurrentInstructor(null); sessionStorage.removeItem('instructor_session'); }
     else if (currentStudent) { setCurrentStudent(null); sessionStorage.removeItem('student_session'); }
     else if (currentCollaborator) { setCurrentCollaborator(null); sessionStorage.removeItem('collaborator_session'); }
     else if (currentStudio) { setCurrentStudio(null); sessionStorage.removeItem('studio_session'); }
-    else await appBackend.auth.signOut();
+    await appBackend.auth.signOut();
   };
 
   const canAccess = (module: string): boolean => {
@@ -491,6 +603,15 @@ function App() {
         onStudioLogin={s => {setCurrentStudio(s); sessionStorage.setItem('studio_session', JSON.stringify(s));}}
       />;
   }
+
+  if (session && authenticatedUser && authenticatedUser.roles.length > 1 && !authenticatedUser.activeRole) {
+      return <RoleSelector user={authenticatedUser} onSelect={handleRoleSelect} onLogout={handleLogout} logoUrl={appLogo} />;
+  }
+
+  if (currentFranchise && authenticatedUser?.activeRole === 'franchisee') {
+      return <FranchiseeArea franchise={currentFranchise} cpf={authenticatedUser.profile.cpf} onLogout={handleLogout} onSwitchRole={authenticatedUser.roles.length > 1 ? handleSwitchRole : undefined} />;
+  }
+
   if (currentInstructor) return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
   if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} logoUrl={appLogo} />;
   if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
@@ -549,7 +670,14 @@ function App() {
                     <img src={appLogo} alt="Logo" className="h-10 w-auto max-w-[180px] object-contain" />
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-100 uppercase tracking-wide">{currentCollaborator ? currentCollaborator.role.name : 'Super Admin'}</span>
                 </div>
-                <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1.5 font-medium transition-colors"><LogOut size={16} /> Sair</button>
+                <div className="flex items-center gap-3">
+                  {authenticatedUser && authenticatedUser.roles.length > 1 && (
+                    <button onClick={handleSwitchRole} className="text-xs text-slate-400 hover:text-indigo-600 flex items-center gap-1.5 font-medium transition-colors">
+                      <ArrowLeftRight size={14} /> Trocar Perfil
+                    </button>
+                  )}
+                  <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1.5 font-medium transition-colors"><LogOut size={16} /> Sair</button>
+                </div>
                 </div>
             </header>
 
@@ -583,6 +711,7 @@ function App() {
                                 <button onClick={() => setDashboardTab('conta_azul')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'conta_azul' ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Landmark size={18} /> Conta Azul</button>
                                 <button onClick={() => setDashboardTab('pagbank')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'pagbank' ? "bg-green-50 text-green-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> PagBank</button>
                                 <button onClick={() => setDashboardTab('app_manual')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'app_manual' ? "bg-purple-50 text-purple-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Smartphone size={18} /> Manual APP</button>
+                                {canAccess('cpf_lookup') && <button onClick={() => setDashboardTab('cpf_lookup')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'cpf_lookup' ? "bg-slate-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Fingerprint size={18} /> Busca por CPF</button>}
                             </nav>
                             {canAccess('global_settings') && <div className="mt-4 pt-4 border-t border-slate-100"><button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Cog size={18} /> Configurações</button></div>}
                         </div>
@@ -702,6 +831,7 @@ function App() {
                         {dashboardTab === 'conta_azul' && <ContaAzulManager />}
                         {dashboardTab === 'pagbank' && <PagBankManager />}
                         {dashboardTab === 'app_manual' && <AppManual />}
+                        {dashboardTab === 'cpf_lookup' && <CpfLookup />}
                     </div>
                 </div>
             </main>

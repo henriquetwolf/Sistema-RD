@@ -65,6 +65,40 @@ export const MobileLogin: React.FC<MobileLoginProps> = ({
     const cleanPassword = loginPassword.trim();
 
     try {
+      // Tentar Supabase Auth primeiro (sistema unificado)
+      try {
+        const { data, error: authErr } = await appBackend.auth.signIn(cleanEmail, cleanPassword);
+        if (data?.user && !authErr) {
+          const profile = await appBackend.getUserProfile(data.user.id);
+          if (profile && profile.cpf) {
+            const roles = await appBackend.getUserRoles(data.user.id);
+            const hasInstructor = roles.some((r: any) => r.role === 'instructor');
+            const hasStudent = roles.some((r: any) => r.role === 'student');
+
+            if (hasInstructor) {
+              const entity = await appBackend.getEntityDataByCpf('instructor', profile.cpf);
+              if (entity) {
+                const teacher: Teacher = {
+                  id: entity.id, fullName: entity.full_name || '', email: entity.email || '', phone: entity.phone || '',
+                  cpf: entity.cpf || '', photoUrl: entity.photo_url || '', password: '',
+                };
+                onInstructorLogin(teacher);
+                return;
+              }
+            }
+            if (hasStudent) {
+              const entity = await appBackend.getEntityDataByCpf('student', profile.cpf);
+              if (entity) {
+                const { data: deals } = await appBackend.client.from('crm_deals').select('*').eq('cpf', profile.cpf.replace(/\D/g, ''));
+                onStudentLogin({ email: profile.email || deals?.[0]?.email || '', name: entity.full_name, cpf: entity.cpf, deals: deals || [] });
+                return;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+
+      // Fallback: tentar login legado
       const { data: instructorData } = await appBackend.client
         .from('crm_teachers')
         .select('*')

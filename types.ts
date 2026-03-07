@@ -211,6 +211,64 @@ export interface PartnerStudioSession {
   cnpj: string;
 }
 
+// ── Sistema Unificado de Usuário (Multi-Papéis via CPF) ──
+
+export type UserRole = 'admin' | 'collaborator' | 'instructor' | 'student' | 'franchisee' | 'partner_studio';
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador',
+  collaborator: 'Colaborador',
+  instructor: 'Instrutor(a)',
+  student: 'Aluno(a)',
+  franchisee: 'Franqueado(a)',
+  partner_studio: 'Studio Parceiro',
+};
+
+export interface UserProfile {
+  id: string;
+  cpf: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  photo_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserRoleEntry {
+  id: string;
+  user_id: string;
+  role: UserRole;
+  permission_role_id: string | null;
+  is_active: boolean;
+  permissions?: Record<string, boolean>;
+  permission_role_name?: string;
+}
+
+export interface AuthenticatedUser {
+  profile: UserProfile;
+  roles: UserRoleEntry[];
+  activeRole: UserRole | null;
+}
+
+export interface CpfLookupResult {
+  cpf: string;
+  profile: any | null;
+  roles: any[];
+  collaborator: any | null;
+  instructor: any | null;
+  student: any | null;
+  student_emails: any[];
+  deals: any[];
+  partner_studio: any | null;
+  franchise: any | null;
+  conta_azul_receber: any[];
+  conta_azul_pagar: any[];
+  pagbank_orders: any[];
+  certificates: any[];
+  knowledge_base: any | null;
+}
+
 export interface CertificateModel {
   id: string;
   title: string;

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
 import { 
@@ -10,7 +10,7 @@ import {
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
     Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode,
-    Mail, Phone, Hash, Edit2, Home, Bot, Sparkles, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap, Gift
+    Mail, Phone, Hash, Edit2, Home, Bot, Sparkles, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap, Gift, Store
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -27,7 +27,7 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation'>('classes');
     const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
     const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -108,6 +108,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [pendingNotifications, setPendingNotifications] = useState<AiTutorNotification[]>([]);
     const popupCheckedRef = useRef(false);
 
+    // Apresentação Franquia VOLL (Área do Aluno)
+    const [franchisePresentationSections, setFranchisePresentationSections] = useState<FranchisePresentationSection[]>([]);
+    const [franchisePresentationLoading, setFranchisePresentationLoading] = useState(false);
+    const [franchiseLeadSending, setFranchiseLeadSending] = useState(false);
+    const [franchiseLeadSuccess, setFranchiseLeadSuccess] = useState(false);
+
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
 
@@ -129,7 +135,40 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'my_data') loadMyData();
         if (activeTab === 'learning_profile') loadKnowledgeBase();
         if (activeTab === 'ai_tutor') { loadAvatarsAndSelection(); loadChatHistory(); }
+        if (activeTab === 'franchise_presentation') loadFranchisePresentation();
     }, [activeTab]);
+
+    const loadFranchisePresentation = async () => {
+        setFranchisePresentationLoading(true);
+        try {
+            const data = await appBackend.getFranchisePresentation();
+            setFranchisePresentationSections(data);
+        } catch (e) {
+            console.error('Erro ao carregar apresentação da franquia:', e);
+        } finally {
+            setFranchisePresentationLoading(false);
+        }
+    };
+
+    const handleFranchiseInterest = async () => {
+        setFranchiseLeadSending(true);
+        setFranchiseLeadSuccess(false);
+        try {
+            const deal = student.deals?.[0];
+            await appBackend.createFranchiseLead({
+                contact_name: student.name || '',
+                email: student.email || '',
+                phone: deal?.phone || '',
+                cpf: student.cpf?.replace(/\D/g, '') || '',
+            });
+            setFranchiseLeadSuccess(true);
+        } catch (e: any) {
+            console.error('Erro ao registrar interesse:', e);
+            alert('Não foi possível registrar seu interesse. Tente novamente ou entre em contato.');
+        } finally {
+            setFranchiseLeadSending(false);
+        }
+    };
 
     const loadStudentOrders = async () => {
         if (!mainDealId) return;
@@ -1382,7 +1421,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' },
                         { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' },
                         { id: 'learning_profile', label: 'Meu Perfil', icon: Brain, color: 'text-pink-600' },
-                        { id: 'ai_tutor', label: 'Tutor IA', icon: Bot, color: 'text-purple-600' }
+                        { id: 'ai_tutor', label: 'Tutor IA', icon: Bot, color: 'text-purple-600' },
+                        { id: 'franchise_presentation', label: 'Apresentação Franquia', icon: Store, color: 'text-teal-600' }
                     ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
@@ -1942,6 +1982,59 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                             </button>
                                         </div>
                                     </form>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Apresentação Franquia VOLL Studios ───────────────────── */}
+                    {activeTab === 'franchise_presentation' && (
+                        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="bg-gradient-to-br from-teal-600 to-teal-800 rounded-[2.5rem] p-8 text-white shadow-xl">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Store size={32} className="text-teal-200" />
+                                    <h2 className="text-2xl font-black">Apresentação da Franquia VOLL Studios</h2>
+                                </div>
+                                <p className="text-teal-100 text-sm">Conheça a maior rede de Pilates do Brasil e veja como empreender com a marca VOLL.</p>
+                            </div>
+                            {franchisePresentationLoading ? (
+                                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32}/></div>
+                            ) : franchisePresentationSections.length === 0 ? (
+                                <div className="py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-400">
+                                    <Store size={48} className="mb-4 opacity-40"/>
+                                    <p className="font-bold">Conteúdo em preparação.</p>
+                                    <p className="text-xs mt-1">Em breve você poderá conhecer todos os detalhes da Franquia VOLL aqui.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {franchisePresentationSections.map(section => (
+                                        <div key={section.section_key} className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all">
+                                            <h3 className="text-lg font-black text-slate-800 mb-3 border-b border-slate-100 pb-2">{section.title}</h3>
+                                            <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{section.content}</div>
+                                        </div>
+                                    ))}
+                                    <div className="bg-white rounded-[2.5rem] border-2 border-teal-200 p-8 shadow-lg text-center">
+                                        {franchiseLeadSuccess ? (
+                                            <div className="flex flex-col items-center gap-3">
+                                                <CheckCircle className="w-14 h-14 text-teal-600" />
+                                                <h4 className="text-xl font-black text-slate-800">Seu interesse foi registrado!</h4>
+                                                <p className="text-slate-600 text-sm max-w-md">Nossa equipe entrará em contato em breve para falar sobre a Franquia VOLL Studios.</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <h4 className="text-xl font-black text-slate-800 mb-2">Interessado em ser franqueado?</h4>
+                                                <p className="text-slate-500 text-sm mb-6 max-w-lg mx-auto">Registre seu interesse e nossa equipe de franquias entrará em contato com você.</p>
+                                                <button
+                                                    onClick={handleFranchiseInterest}
+                                                    disabled={franchiseLeadSending}
+                                                    className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-teal-600/20 flex items-center justify-center gap-2 mx-auto transition-all active:scale-95"
+                                                >
+                                                    {franchiseLeadSending ? <Loader2 size={20} className="animate-spin" /> : <Store size={20} />}
+                                                    Tenho interesse em ser franqueado!
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

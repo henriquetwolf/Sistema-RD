@@ -529,6 +529,16 @@ export interface Pipeline {
   stages: PipelineStage[];
 }
 
+export interface FranchisePresentationSection {
+  id: string;
+  section_key: string;
+  title: string;
+  content: string;
+  order_index: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface WebhookTrigger {
   id: string;
   pipelineName: string;

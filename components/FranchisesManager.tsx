@@ -5,13 +5,14 @@ import {
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
   DollarSign, User, Building, Map as MapIcon, List,
   Navigation, AlertTriangle, CheckCircle, Briefcase, Globe, Info, Ruler, Dumbbell,
-  AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned
+  AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned, Sparkles, Presentation
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
-import { Franchise } from '../types';
+import { GoogleGenAI } from '@google/genai';
+import { Franchise, FranchisePresentationSection } from '../types';
 
 interface FranchisesManagerProps {
   onBack: () => void;
@@ -86,11 +87,17 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'map' | 'presentation'>('list');
   const [activeTab, setActiveTab] = useState<'dados' | 'local' | 'studio'>('dados');
   
   const [formData, setFormData] = useState<Franchise>(INITIAL_FORM_STATE);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Apresentação da Franquia (base de conhecimento)
+  const [presentationSections, setPresentationSections] = useState<FranchisePresentationSection[]>([]);
+  const [presentationLoading, setPresentationLoading] = useState(false);
+  const [presentationSaving, setPresentationSaving] = useState(false);
+  const [aiHelpKey, setAiHelpKey] = useState<string | null>(null);
 
   // Estados de Simulação no Mapa
   const [simAddress, setSimAddress] = useState('');
@@ -351,6 +358,65 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
       }
   };
 
+  useEffect(() => {
+      if (viewMode === 'presentation') loadPresentation();
+  }, [viewMode]);
+
+  const loadPresentation = async () => {
+      setPresentationLoading(true);
+      try {
+          const data = await appBackend.getFranchisePresentation();
+          setPresentationSections(data);
+      } catch (e) {
+          console.error('Erro ao carregar apresentação:', e);
+      } finally {
+          setPresentationLoading(false);
+      }
+  };
+
+  const savePresentation = async () => {
+      setPresentationSaving(true);
+      try {
+          await appBackend.saveFranchisePresentation(presentationSections);
+          alert('Apresentação salva com sucesso.');
+      } catch (e: any) {
+          alert('Erro ao salvar: ' + (e.message || e));
+      } finally {
+          setPresentationSaving(false);
+      }
+  };
+
+  const FRANQUIA_SITE_CONTEXT = `A Franquia VOLL Pilates Studios é o maior grupo de Pilates do Brasil. Site: franquiadepilates.com.br. Dados: 229+ unidades, 15 anos, 100 mil alunos/mês, investimento facilitado, kit completo (Cadillac, Reformer, Step Chair, Ladder Barrel), payback 8-12 meses, breakeven 2-4 meses, royalties R$990/mês fixo, sem fundo de propaganda, formação técnica, projeto arquitetônico, plataforma do franqueado, associados ABF.`;
+
+  const handleAiHelp = async (section: FranchisePresentationSection) => {
+      if (!process.env.API_KEY) {
+          alert('Configure a chave da API Gemini nas variáveis de ambiente para usar a Ajuda IA.');
+          return;
+      }
+      setAiHelpKey(section.section_key);
+      try {
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: `Gere conteúdo em português para a seção "${section.title}" da apresentação da Franquia VOLL Pilates Studios. Contexto: ${FRANQUIA_SITE_CONTEXT}. O texto deve ser claro, profissional e adequado para futuros franqueados. Use markdown se útil (listas, negrito). Responda APENAS com o texto da seção, sem título.`,
+              config: { temperature: 0.7 },
+          });
+          const text = (response.text || '').trim();
+          if (text) {
+              setPresentationSections(prev => prev.map(s => s.section_key === section.section_key ? { ...s, content: text } : s));
+          }
+      } catch (e) {
+          console.error('Erro Ajuda IA:', e);
+          alert('Não foi possível gerar sugestão. Tente novamente.');
+      } finally {
+          setAiHelpKey(null);
+      }
+  };
+
+  const updatePresentationSection = (sectionKey: string, field: 'title' | 'content', value: string) => {
+      setPresentationSections(prev => prev.map(s => s.section_key === sectionKey ? { ...s, [field]: value } : s));
+  };
+
   const filtered = useMemo(() => {
     return franchises.filter(f => 
         f.franchiseeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -381,6 +447,9 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                     <button onClick={() => setViewMode('map')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'map' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
                         <MapIcon size={16} /> Mapa
                     </button>
+                    <button onClick={() => setViewMode('presentation')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'presentation' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
+                        <Presentation size={16} /> Apresentação da Franquia
+                    </button>
                 </div>
                 <button 
                     onClick={() => { setFormData(INITIAL_FORM_STATE); setActiveTab('dados'); setShowModal(true); }}
@@ -391,7 +460,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
             </div>
         </div>
 
-        {viewMode === 'list' ? (
+        {viewMode === 'list' && (
             <>
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <div className="relative">
@@ -446,7 +515,45 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                     )}
                 </div>
             </>
-        ) : (
+        )}
+
+        {viewMode === 'presentation' && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <Presentation size={20} className="text-teal-600" /> Apresentação da Franquia VOLL Studios
+                    </h3>
+                    <button onClick={savePresentation} disabled={presentationSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm disabled:opacity-50">
+                        {presentationSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        Salvar alterações
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto max-h-[70vh] custom-scrollbar space-y-6">
+                    {presentationLoading ? (
+                        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
+                    ) : presentationSections.length === 0 ? (
+                        <p className="text-slate-500 text-center py-8">Nenhuma seção cadastrada. Execute a migration 020 para popular as seções iniciais.</p>
+                    ) : (
+                        presentationSections.map(section => (
+                            <div key={section.section_key} className="bg-slate-50 rounded-xl border border-slate-200 p-5 space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Título</label>
+                                    <button type="button" onClick={() => handleAiHelp(section)} disabled={!!aiHelpKey} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition-colors disabled:opacity-50">
+                                        {aiHelpKey === section.section_key ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                        Ajuda IA
+                                    </button>
+                                </div>
+                                <input type="text" className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 bg-white" value={section.title} onChange={e => updatePresentationSection(section.section_key, 'title', e.target.value)} />
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Conteúdo (markdown)</label>
+                                <textarea className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white min-h-[120px] resize-y" value={section.content} onChange={e => updatePresentationSection(section.section_key, 'content', e.target.value)} placeholder="Conteúdo da seção..." />
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        )}
+
+        {viewMode === 'map' && (
             <div className="flex flex-col lg:flex-row gap-6 h-[700px]">
                 {/* Lado Esquerdo: Mapa */}
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative z-0">

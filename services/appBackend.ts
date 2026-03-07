@@ -8,7 +8,7 @@ import {
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
   WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig,
-  ContaAzulProductMapping
+  ContaAzulProductMapping, FranchisePresentationSection
 } from '../types';
 import { whatsappService } from './whatsappService';
 
@@ -623,6 +623,62 @@ export const appBackend = {
   deletePipeline: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_pipelines').delete().eq('id', id);
+  },
+
+  getFranchisePresentation: async (): Promise<FranchisePresentationSection[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_franchise_presentation').select('*').order('order_index', { ascending: true });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      section_key: row.section_key || '',
+      title: row.title || '',
+      content: row.content || '',
+      order_index: row.order_index ?? 0,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+  },
+
+  saveFranchisePresentation: async (sections: FranchisePresentationSection[]): Promise<void> => {
+    if (!isConfigured) return;
+    for (const s of sections) {
+      await supabase.from('crm_franchise_presentation').upsert({
+        id: s.id,
+        section_key: s.section_key,
+        title: s.title,
+        content: s.content,
+        order_index: s.order_index,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'section_key' });
+    }
+  },
+
+  createFranchiseLead: async (dealData: { contact_name?: string; email?: string; phone?: string; cpf?: string; [key: string]: any }): Promise<string> => {
+    if (!isConfigured) throw new Error('Backend não configurado');
+    const pipelines = await supabase.from('crm_pipelines').select('*').eq('name', 'Franquia').maybeSingle();
+    const pipeline = pipelines.data;
+    const firstStageId = pipeline?.stages?.[0]?.id ?? 'novo_lead';
+    const dealPayload = {
+      deal_number: generateDealNumber(),
+      pipeline: 'Franquia',
+      stage: firstStageId,
+      status: 'hot',
+      source: 'Área do Aluno - Apresentação Franquia',
+      product_type: 'Franquia',
+      product_name: 'Franquia VOLL Studios',
+      contact_name: dealData.contact_name || '',
+      company_name: dealData.contact_name || '',
+      email: dealData.email || '',
+      phone: dealData.phone || '',
+      cpf: dealData.cpf ? String(dealData.cpf).replace(/\D/g, '') : null,
+      title: (dealData.contact_name || 'Lead Franquia') + ' - Franquia VOLL',
+      created_at: new Date().toISOString(),
+      ...dealData,
+    };
+    const { data, error } = await supabase.from('crm_deals').insert([dealPayload]).select('id').single();
+    if (error) throw error;
+    return data?.id ?? '';
   },
 
   getAppLogo: async (): Promise<string | null> => {

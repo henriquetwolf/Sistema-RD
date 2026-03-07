@@ -166,7 +166,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       }
   }, [stateFilter]);
 
-  const handleOpenNew = () => { setFormData(initialFormState); setShowModal(true); };
+  const generateNextClassCode = () => {
+    const numericCodes = classes.map(c => parseInt(c.classCode)).filter(n => !isNaN(n));
+    const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 0;
+    return String(maxCode + 1);
+  };
+
+  const handleOpenNew = () => { setFormData({ ...initialFormState, classCode: generateNextClassCode() }); setShowModal(true); };
   const handleEdit = (item: ClassItem) => { setFormData({ ...item }); setActiveMenuId(null); setShowModal(true); };
 
   const handleDelete = async (id: string) => {
@@ -185,7 +191,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studio_mod_1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffee_mod_1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.dateMod2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffeeMod2, hotel_mod_2: formData.hotelMod2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);

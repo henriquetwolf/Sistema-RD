@@ -100,6 +100,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [isStreamingChat, setIsStreamingChat] = useState(false);
     const chatScrollRef = useRef<HTMLDivElement>(null);
     const [streamingText, setStreamingText] = useState('');
+    const [enrollmentSuccess, setEnrollmentSuccess] = useState<string | null>(null);
 
     // Popup proativo do tutor
     const [tutorPopup, setTutorPopup] = useState<{ avatar: AiAvatar; message: string; type: string } | null>(null);
@@ -490,9 +491,89 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         prompt += `7. Considere o nível do aluno e adapte a linguagem.\n`;
         prompt += `8. Incentive o progresso do aluno mencionando conquistas (certificados, cursos concluídos).\n`;
         prompt += `9. Responda sempre em Português do Brasil.\n`;
-        prompt += `10. Seja conciso mas completo.`;
+        prompt += `10. Seja conciso mas completo.\n\n`;
+
+        prompt += `[FLUXO DE INSCRIÇÃO EM TURMA OU EVENTO]\n`;
+        prompt += `Quando o aluno demonstrar interesse em se inscrever em uma turma presencial ou em um evento, siga EXATAMENTE este fluxo:\n`;
+        prompt += `PASSO 1: Identifique qual turma ou evento o aluno deseja. Se ele não especificou, pergunte.\n`;
+        prompt += `PASSO 2: Confirme com o aluno apresentando TODOS os detalhes:\n`;
+        prompt += `  - Para TURMA: nome do curso, cidade/estado, data de início\n`;
+        prompt += `  - Para EVENTO: nome do evento, local, datas\n`;
+        prompt += `  Pergunte: "Posso confirmar seu interesse e registrar sua inscrição?"\n`;
+        prompt += `PASSO 3: SOMENTE quando o aluno confirmar explicitamente (ex: "sim", "pode", "ok", "confirma", "quero"), `;
+        prompt += `inclua no FINAL da sua resposta uma tag especial invisível no formato abaixo. `;
+        prompt += `Esta tag DEVE estar na ÚLTIMA linha da sua resposta, após sua mensagem ao aluno:\n`;
+        prompt += `  Para turma: <<<ENROLLMENT_ACTION:{"type":"class","course":"NOME DO CURSO","city":"CIDADE","state":"UF","date":"DATA DO MÓDULO 1","class_id":"ID_DA_TURMA_SE_DISPONIVEL"}>>>\n`;
+        prompt += `  Para evento: <<<ENROLLMENT_ACTION:{"type":"event","event_name":"NOME DO EVENTO","location":"LOCAL","dates":"DATAS","event_id":"ID_DO_EVENTO_SE_DISPONIVEL"}>>>\n`;
+        prompt += `IMPORTANTE: Só inclua a tag ENROLLMENT_ACTION quando o aluno CONFIRMAR. Nunca inclua apenas por ele perguntar ou demonstrar interesse inicial.\n`;
+        prompt += `IMPORTANTE: Use os dados EXATOS dos catálogos acima. Não invente informações.\n`;
+        prompt += `Após incluir a tag, diga ao aluno que seu interesse foi registrado e que a equipe entrará em contato em breve.`;
 
         return prompt;
+    };
+
+    const processEnrollmentAction = async (fullResponse: string): Promise<string> => {
+        const actionMatch = fullResponse.match(/<<<ENROLLMENT_ACTION:(.*?)>>>/s);
+        if (!actionMatch) return fullResponse;
+
+        try {
+            const actionData = JSON.parse(actionMatch[1]);
+            const now = new Date();
+            const dealNumber = Number(`${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${Math.floor(1000 + Math.random() * 9000)}`);
+
+            let observation = '';
+            let productName = '';
+            let productType: 'Presencial' | 'Evento' = 'Presencial';
+            let courseCity = '';
+            let courseState = '';
+
+            if (actionData.type === 'class') {
+                productType = 'Presencial';
+                productName = actionData.course || '';
+                courseCity = actionData.city || '';
+                courseState = actionData.state || '';
+                observation = `[Inscrição via Tutor IA] Aluno demonstrou interesse e confirmou inscrição na turma presencial: ${actionData.course || 'N/A'} em ${actionData.city || ''}/${actionData.state || ''}, início: ${actionData.date || 'A definir'}.`;
+                if (actionData.class_id) observation += ` ID da turma: ${actionData.class_id}.`;
+            } else if (actionData.type === 'event') {
+                productType = 'Evento';
+                productName = actionData.event_name || '';
+                observation = `[Inscrição via Tutor IA] Aluno demonstrou interesse e confirmou inscrição no evento: ${actionData.event_name || 'N/A'}, local: ${actionData.location || 'N/A'}, datas: ${actionData.dates || 'A definir'}.`;
+                if (actionData.event_id) observation += ` ID do evento: ${actionData.event_id}.`;
+            }
+
+            const dealPayload = {
+                deal_number: dealNumber,
+                title: `${student.name} – ${productName}`,
+                company_name: student.name,
+                contact_name: student.name,
+                email: student.email,
+                phone: '',
+                cpf: student.cpf || '',
+                pipeline: 'Padrão',
+                stage: 'new',
+                status: 'hot',
+                source: 'Tutor IA',
+                product_type: productType,
+                product_name: productName,
+                observation: observation,
+                course_city: courseCity,
+                course_state: courseState,
+                value: 0,
+                created_at: new Date().toISOString(),
+            };
+
+            const { error } = await appBackend.client.from('crm_deals').insert([dealPayload]);
+            if (error) {
+                console.error('Erro ao criar lead via Tutor IA:', error);
+            } else {
+                setEnrollmentSuccess(productName);
+                setTimeout(() => setEnrollmentSuccess(null), 8000);
+            }
+        } catch (parseErr) {
+            console.error('Erro ao processar ação de inscrição:', parseErr);
+        }
+
+        return fullResponse.replace(/<<<ENROLLMENT_ACTION:.*?>>>/s, '').trim();
     };
 
     const handleSendChat = async (customMsg?: string) => {
@@ -530,16 +611,18 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             for await (const chunk of response) {
                 const t = chunk.text || '';
                 fullResponse += t;
-                setStreamingText(fullResponse);
+                setStreamingText(fullResponse.replace(/<<<ENROLLMENT_ACTION:.*?>>>/s, ''));
             }
 
             setIsStreamingChat(false);
             setStreamingText('');
 
-            const botMsg: AiChatMessage = { id: crypto.randomUUID(), aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: fullResponse, created_at: new Date().toISOString() };
+            const cleanResponse = await processEnrollmentAction(fullResponse);
+
+            const botMsg: AiChatMessage = { id: crypto.randomUUID(), aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: cleanResponse, created_at: new Date().toISOString() };
             setChatMessages(prev => [...prev, botMsg]);
 
-            await appBackend.client.from('crm_ai_chat_messages').insert([{ aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: fullResponse }]);
+            await appBackend.client.from('crm_ai_chat_messages').insert([{ aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: cleanResponse }]);
         } catch (e: any) {
             console.error('Chat error:', e);
             setIsStreamingChat(false);
@@ -1782,6 +1865,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                         </div>
                                     </div>
 
+                                    {enrollmentSuccess && (
+                                        <div className="mx-4 mt-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-3 animate-pulse">
+                                            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0"/>
+                                            <div className="flex-1">
+                                                <p className="text-sm font-semibold text-green-800">Interesse registrado com sucesso!</p>
+                                                <p className="text-xs text-green-600">Seu interesse em <strong>{enrollmentSuccess}</strong> foi enviado para nossa equipe. Entraremos em contato em breve!</p>
+                                            </div>
+                                            <button onClick={() => setEnrollmentSuccess(null)} className="text-green-400 hover:text-green-600"><X className="w-4 h-4"/></button>
+                                        </div>
+                                    )}
+
                                     {/* Messages Area */}
                                     <div ref={chatScrollRef} className="flex-1 bg-gradient-to-b from-slate-50 to-white border-x border-slate-200 overflow-y-auto px-6 py-6 space-y-4 custom-scrollbar">
                                         {chatMessages.length === 0 && !isStreamingChat && (
@@ -1794,7 +1888,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                 <p className="text-slate-400 font-bold text-sm mb-1">Olá {student.name.split(' ')[0]}!</p>
                                                 <p className="text-slate-300 text-xs mb-6">Comece uma conversa comigo ou use as sugestões abaixo.</p>
                                                 <div className="flex flex-wrap gap-2 justify-center max-w-md">
-                                                    {['Que curso devo fazer em seguida?', 'Qual meu progresso?', 'Sugerir conteúdo para esta semana'].map(q => (
+                                                    {['Que curso devo fazer em seguida?', 'Qual meu progresso?', 'Sugerir conteúdo para esta semana', 'Quero me inscrever em uma turma presencial', 'Quero participar de um evento'].map(q => (
                                                         <button key={q} onClick={() => handleSendChat(q)} className="px-4 py-2.5 bg-white border-2 border-purple-200 hover:border-purple-400 text-purple-700 rounded-2xl text-xs font-bold transition-all active:scale-95 hover:shadow-md flex items-center gap-1.5"><Zap size={12}/> {q}</button>
                                                     ))}
                                                 </div>
@@ -1833,7 +1927,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                     {/* Quick Actions (below chat when there are messages) */}
                                     {chatMessages.length > 0 && (
                                         <div className="bg-white border-x border-slate-200 px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
-                                            {['Que curso devo fazer em seguida?', 'Qual meu progresso?', 'Sugerir conteúdo para esta semana'].map(q => (
+                                            {['Que curso devo fazer em seguida?', 'Qual meu progresso?', 'Sugerir conteúdo para esta semana', 'Quero me inscrever em uma turma', 'Quero participar de um evento'].map(q => (
                                                 <button key={q} onClick={() => handleSendChat(q)} disabled={isChatLoading} className="shrink-0 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-600 rounded-full text-[10px] font-bold hover:bg-purple-100 transition-all disabled:opacity-40 flex items-center gap-1"><Zap size={10}/> {q}</button>
                                             ))}
                                         </div>

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
 import { 
@@ -10,12 +10,13 @@ import {
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
     Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode,
-    Mail, Phone, Hash, Edit2, Home
+    Mail, Phone, Hash, Edit2, Home, Bot, Sparkles, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
 import { CheckoutPage } from './CheckoutPage';
 import { FormViewer } from './FormViewer';
+import { GoogleGenAI } from "@google/genai";
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
@@ -26,7 +27,7 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor'>('classes');
     const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
     const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -81,6 +82,25 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [myNewEmail, setMyNewEmail] = useState('');
     const [myDataSaved, setMyDataSaved] = useState(false);
 
+    // Perfil de Aprendizagem (Knowledge Base)
+    const [knowledgeBase, setKnowledgeBase] = useState<Partial<AlunoKnowledgeBase>>({});
+    const [isLoadingKB, setIsLoadingKB] = useState(false);
+    const [isSavingKB, setIsSavingKB] = useState(false);
+    const [kbSaved, setKbSaved] = useState(false);
+
+    // Tutor IA / Avatares
+    const [availableAvatars, setAvailableAvatars] = useState<AiAvatar[]>([]);
+    const [selectedAvatar, setSelectedAvatar] = useState<AiAvatar | null>(null);
+    const [isLoadingAvatars, setIsLoadingAvatars] = useState(false);
+
+    // Chat IA
+    const [chatMessages, setChatMessages] = useState<AiChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const [isStreamingChat, setIsStreamingChat] = useState(false);
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+    const [streamingText, setStreamingText] = useState('');
+
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
 
@@ -100,6 +120,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'events') loadEvents();
         if (activeTab === 'purchases') loadStudentOrders();
         if (activeTab === 'my_data') loadMyData();
+        if (activeTab === 'learning_profile') loadKnowledgeBase();
+        if (activeTab === 'ai_tutor') { loadAvatarsAndSelection(); loadChatHistory(); }
     }, [activeTab]);
 
     const loadStudentOrders = async () => {
@@ -242,6 +264,204 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             }));
         } catch {}
     };
+
+    // ── Perfil de Aprendizagem (Knowledge Base) ──────────────
+    const getAlunoId = async (): Promise<string | null> => {
+        const cleanCpf = student.cpf?.replace(/\D/g, '') || '';
+        if (!cleanCpf) return null;
+        const { data } = await appBackend.client.from('crm_alunos').select('id').eq('cpf', cleanCpf).maybeSingle();
+        return data?.id || null;
+    };
+
+    const loadKnowledgeBase = async () => {
+        setIsLoadingKB(true);
+        try {
+            const alunoId = await getAlunoId();
+            if (!alunoId) { setIsLoadingKB(false); return; }
+            const { data } = await appBackend.client.from('crm_aluno_knowledge_base').select('*').eq('aluno_id', alunoId).maybeSingle();
+            if (data) setKnowledgeBase(data);
+            else setKnowledgeBase({ aluno_id: alunoId, objectives: '', experience_level: 'beginner', interest_areas: [], academic_background: '', specialties: '', available_hours_per_week: 0, learning_style: 'practical', additional_notes: '' });
+        } catch (e) { console.error(e); } finally { setIsLoadingKB(false); }
+    };
+
+    const handleSaveKB = async () => {
+        setIsSavingKB(true);
+        try {
+            let alunoId = knowledgeBase.aluno_id;
+            if (!alunoId) { alunoId = await getAlunoId(); if (!alunoId) throw new Error('Cadastro do aluno não encontrado'); }
+            const payload = {
+                aluno_id: alunoId,
+                objectives: knowledgeBase.objectives || '',
+                experience_level: knowledgeBase.experience_level || 'beginner',
+                interest_areas: knowledgeBase.interest_areas || [],
+                academic_background: knowledgeBase.academic_background || '',
+                specialties: knowledgeBase.specialties || '',
+                available_hours_per_week: knowledgeBase.available_hours_per_week || 0,
+                learning_style: knowledgeBase.learning_style || 'practical',
+                additional_notes: knowledgeBase.additional_notes || '',
+            };
+            if (knowledgeBase.id) {
+                await appBackend.client.from('crm_aluno_knowledge_base').update(payload).eq('id', knowledgeBase.id);
+            } else {
+                const { data } = await appBackend.client.from('crm_aluno_knowledge_base').insert([payload]).select().single();
+                if (data) setKnowledgeBase(data);
+            }
+            setKbSaved(true);
+            setTimeout(() => setKbSaved(false), 3000);
+        } catch (e: any) { alert('Erro ao salvar: ' + e.message); } finally { setIsSavingKB(false); }
+    };
+
+    const INTEREST_OPTIONS = ['Pilates Clássico', 'Pilates Contemporâneo', 'Pilates para Gestantes', 'Reabilitação', 'Anatomia', 'Biomecânica', 'Gestão de Studio', 'Marketing para Profissionais', 'Pilates Solo', 'Pilates com Aparelhos', 'Treinamento Funcional', 'Saúde da Mulher'];
+
+    const toggleInterest = (area: string) => {
+        const current = knowledgeBase.interest_areas || [];
+        setKnowledgeBase({
+            ...knowledgeBase,
+            interest_areas: current.includes(area) ? current.filter(a => a !== area) : [...current, area]
+        });
+    };
+
+    // ── Avatares / Tutor IA ─────────────────────────────────
+    const loadAvatarsAndSelection = async () => {
+        setIsLoadingAvatars(true);
+        try {
+            const [avatarsRes, alunoRes] = await Promise.all([
+                appBackend.client.from('crm_ai_avatars').select('*').eq('is_active', true).order('name'),
+                (async () => { const cleanCpf = student.cpf?.replace(/\D/g, '') || ''; return appBackend.client.from('crm_alunos').select('id, selected_avatar_id').eq('cpf', cleanCpf).maybeSingle(); })(),
+            ]);
+            const avatars = avatarsRes.data || [];
+            setAvailableAvatars(avatars);
+            if (alunoRes.data?.selected_avatar_id) {
+                const sel = avatars.find(a => a.id === alunoRes.data.selected_avatar_id);
+                setSelectedAvatar(sel || null);
+            }
+        } catch (e) { console.error(e); } finally { setIsLoadingAvatars(false); }
+    };
+
+    const handleSelectAvatar = async (avatar: AiAvatar) => {
+        setSelectedAvatar(avatar);
+        const cleanCpf = student.cpf?.replace(/\D/g, '') || '';
+        await appBackend.client.from('crm_alunos').update({ selected_avatar_id: avatar.id }).eq('cpf', cleanCpf);
+    };
+
+    // ── Chat IA ─────────────────────────────────────────────
+    useEffect(() => {
+        if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }, [chatMessages, streamingText]);
+
+    const loadChatHistory = async () => {
+        const alunoId = await getAlunoId();
+        if (!alunoId) return;
+        const { data } = await appBackend.client.from('crm_ai_chat_messages').select('*').eq('aluno_id', alunoId).order('created_at', { ascending: true }).limit(100);
+        setChatMessages(data || []);
+    };
+
+    const buildSystemPrompt = async (): Promise<string> => {
+        if (!selectedAvatar) return '';
+        const alunoId = await getAlunoId();
+
+        const [kbRes, productsRes, coursesRes, dealsRes, certsRes] = await Promise.all([
+            alunoId ? appBackend.client.from('crm_aluno_knowledge_base').select('*').eq('aluno_id', alunoId).maybeSingle() : Promise.resolve({ data: null }),
+            appBackend.client.from('crm_products').select('name, category, price, description, target_areas').eq('status', 'active'),
+            appBackend.client.from('crm_online_courses').select('title, description, price'),
+            appBackend.client.from('crm_deals').select('product, stage_id, value').in('id', studentDealIds.length ? studentDealIds : ['-']),
+            alunoId ? appBackend.client.from('crm_student_certificates').select('course_name').eq('student_deal_id', studentDealIds[0] || '-') : Promise.resolve({ data: [] }),
+        ]);
+
+        const kb = kbRes.data;
+        const products = productsRes.data || [];
+        const courses = coursesRes.data || [];
+        const deals = dealsRes.data || [];
+        const certs = certsRes.data || [];
+
+        const TONE_DESC: Record<string, string> = { formal: 'formal e profissional', friendly: 'amigável e acolhedor', motivational: 'motivacional e encorajador', technical: 'técnico e didático' };
+
+        let prompt = `${selectedAvatar.personality_prompt}\n\n`;
+        prompt += `[TOM DE COMUNICAÇÃO]\nComunique-se de forma ${TONE_DESC[selectedAvatar.tone] || 'amigável'}.\n\n`;
+        prompt += `[ESPECIALIDADES DO TUTOR]\n${(selectedAvatar.specialties || []).join(', ')}\n\n`;
+
+        if (kb) {
+            prompt += `[PERFIL DO ALUNO]\nNome: ${student.name}\nNível: ${kb.experience_level}\nObjetivos: ${kb.objectives}\nÁreas de interesse: ${(kb.interest_areas || []).join(', ')}\nFormação: ${kb.academic_background}\nEspecialidades: ${kb.specialties}\nEstilo de aprendizagem: ${kb.learning_style}\nHoras disponíveis/semana: ${kb.available_hours_per_week}\n\n`;
+        } else {
+            prompt += `[PERFIL DO ALUNO]\nNome: ${student.name}\n(Perfil de aprendizagem ainda não preenchido)\n\n`;
+        }
+
+        const purchasedCourses = deals.filter(d => d.stage_id && ['won', 'closed', 'ganho'].some(s => String(d.stage_id).toLowerCase().includes(s))).map(d => d.product).filter(Boolean);
+        const interestedCourses = deals.filter(d => !['won', 'closed', 'ganho', 'lost', 'perdido'].some(s => String(d.stage_id || '').toLowerCase().includes(s))).map(d => d.product).filter(Boolean);
+
+        prompt += `[HISTÓRICO DO ALUNO]\nCursos comprados: ${purchasedCourses.length ? purchasedCourses.join(', ') : 'Nenhum'}\nCursos com interesse: ${interestedCourses.length ? interestedCourses.join(', ') : 'Nenhum'}\nCertificados: ${certs.length ? certs.map((c: any) => c.course_name).join(', ') : 'Nenhum'}\n\n`;
+
+        const catalog = [...products.map(p => `- ${p.name} (${p.category || 'Produto'}) – R$${(p.price || 0).toFixed(2)}: ${p.description || ''}`), ...courses.map(c => `- ${c.title} (Curso Online) – R$${(c.price || 0).toFixed(2)}: ${c.description || ''}`)];
+        prompt += `[CATÁLOGO DE CURSOS/PRODUTOS DISPONÍVEIS]\n${catalog.length ? catalog.join('\n') : 'Catálogo vazio'}\n\n`;
+
+        prompt += `[REGRAS]\n1. Sempre personalize as respostas com base no perfil do aluno.\n2. Recomende cursos do catálogo quando relevante, citando nome e preço.\n3. NÃO invente cursos que não existem no catálogo.\n4. Use o tom definido para este avatar.\n5. Considere o nível do aluno e adapte a linguagem.\n6. Incentive o progresso do aluno mencionando conquistas.\n7. Responda sempre em Português do Brasil.\n8. Seja conciso mas completo.`;
+
+        return prompt;
+    };
+
+    const handleSendChat = async (customMsg?: string) => {
+        const text = customMsg || chatInput.trim();
+        if (!text || isChatLoading || !selectedAvatar) return;
+        if (!customMsg) setChatInput('');
+
+        const alunoId = await getAlunoId();
+        if (!alunoId) { alert('Cadastro não encontrado. Verifique seus dados em "Meus Dados".'); return; }
+
+        const userMsg: AiChatMessage = { id: crypto.randomUUID(), aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'user', content: text, created_at: new Date().toISOString() };
+        setChatMessages(prev => [...prev, userMsg]);
+        setIsChatLoading(true);
+        setStreamingText('');
+
+        try {
+            await appBackend.client.from('crm_ai_chat_messages').insert([{ aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'user', content: text }]);
+
+            const systemPrompt = await buildSystemPrompt();
+            const conversationContext = chatMessages.slice(-20).map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }));
+            conversationContext.push({ role: 'user', parts: [{ text }] });
+
+            if (!process.env.API_KEY) { throw new Error('Chave da API Gemini não configurada.'); }
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+            setIsStreamingChat(true);
+            let fullResponse = '';
+
+            const response = await ai.models.generateContentStream({
+                model: 'gemini-2.0-flash',
+                contents: conversationContext,
+                config: { systemInstruction: systemPrompt, temperature: 0.7 },
+            });
+
+            for await (const chunk of response) {
+                const t = chunk.text || '';
+                fullResponse += t;
+                setStreamingText(fullResponse);
+            }
+
+            setIsStreamingChat(false);
+            setStreamingText('');
+
+            const botMsg: AiChatMessage = { id: crypto.randomUUID(), aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: fullResponse, created_at: new Date().toISOString() };
+            setChatMessages(prev => [...prev, botMsg]);
+
+            await appBackend.client.from('crm_ai_chat_messages').insert([{ aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: fullResponse }]);
+        } catch (e: any) {
+            console.error('Chat error:', e);
+            setIsStreamingChat(false);
+            setStreamingText('');
+            const errMsg: AiChatMessage = { id: crypto.randomUUID(), aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: `Desculpe, tive um problema ao processar sua mensagem. Tente novamente. (${e.message || 'Erro desconhecido'})`, created_at: new Date().toISOString() };
+            setChatMessages(prev => [...prev, errMsg]);
+        } finally { setIsChatLoading(false); }
+    };
+
+    const handleClearChat = async () => {
+        if (!window.confirm('Limpar todo o histórico de conversa?')) return;
+        const alunoId = await getAlunoId();
+        if (alunoId) await appBackend.client.from('crm_ai_chat_messages').delete().eq('aluno_id', alunoId);
+        setChatMessages([]);
+    };
+
+    const TONE_LABELS: Record<string, string> = { formal: 'Formal', friendly: 'Amigável', motivational: 'Motivacional', technical: 'Técnico' };
+    const TONE_COLORS_BADGE: Record<string, string> = { formal: 'bg-slate-100 text-slate-600', friendly: 'bg-emerald-50 text-emerald-600', motivational: 'bg-amber-50 text-amber-600', technical: 'bg-indigo-50 text-indigo-600' };
 
     const handleCheckoutSuccess = () => {
         setCheckoutCourseId(null);
@@ -861,7 +1081,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length },
                         { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' },
-                        { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' }
+                        { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' },
+                        { id: 'learning_profile', label: 'Meu Perfil', icon: Brain, color: 'text-pink-600' },
+                        { id: 'ai_tutor', label: 'Tutor IA', icon: Bot, color: 'text-purple-600' }
                     ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
@@ -1189,6 +1411,232 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                             )}
                         </div>
                     )}
+                    {/* ── Meu Perfil de Aprendizagem ──────────────────── */}
+                    {activeTab === 'learning_profile' && (
+                        <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {isLoadingKB ? (
+                                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-pink-600" size={32}/></div>
+                            ) : (
+                                <>
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8">
+                                        <div className="flex items-center gap-4 mb-6">
+                                            <div className="p-3 bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl text-white shadow-lg shadow-pink-500/20"><Brain size={24}/></div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-800">Meu Perfil de Aprendizagem</h3>
+                                                <p className="text-xs text-slate-500 font-medium">Preencha suas informações para que seu Tutor IA personalize o atendimento.</p>
+                                            </div>
+                                        </div>
+                                        {kbSaved && (
+                                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 flex items-center gap-3 animate-in fade-in slide-in-from-top-2"><CheckCircle size={20} className="text-emerald-600"/><span className="text-sm font-bold text-emerald-700">Perfil salvo com sucesso!</span></div>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8 space-y-6">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-slate-100"><Target size={14}/> Objetivos e Nível</h4>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">O que você quer alcançar com a VOLL?</label>
+                                            <textarea className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-pink-500/20 resize-none" rows={3} value={knowledgeBase.objectives || ''} onChange={e => setKnowledgeBase({...knowledgeBase, objectives: e.target.value})} placeholder="Ex: Me especializar em Pilates para reabilitação, abrir meu próprio studio..."/>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nível de Experiência</label>
+                                                <select className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white rounded-2xl text-sm font-bold" value={knowledgeBase.experience_level || 'beginner'} onChange={e => setKnowledgeBase({...knowledgeBase, experience_level: e.target.value as ExperienceLevel})}>
+                                                    <option value="beginner">Iniciante</option>
+                                                    <option value="intermediate">Intermediário</option>
+                                                    <option value="advanced">Avançado</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Estilo de Aprendizagem</label>
+                                                <select className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white rounded-2xl text-sm font-bold" value={knowledgeBase.learning_style || 'practical'} onChange={e => setKnowledgeBase({...knowledgeBase, learning_style: e.target.value as LearningStyle})}>
+                                                    <option value="visual">Visual (vídeos, imagens)</option>
+                                                    <option value="reading">Leitura (textos, artigos)</option>
+                                                    <option value="practical">Prático (exercícios, prática)</option>
+                                                    <option value="auditory">Auditivo (áudio, podcasts)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Horas disponíveis por semana para estudo</label>
+                                            <input type="number" min={0} max={168} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 rounded-2xl text-sm font-bold transition-all outline-none max-w-xs" value={knowledgeBase.available_hours_per_week || 0} onChange={e => setKnowledgeBase({...knowledgeBase, available_hours_per_week: parseInt(e.target.value) || 0})}/>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8 space-y-6">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-slate-100"><Sparkles size={14}/> Áreas de Interesse</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {INTEREST_OPTIONS.map(area => (
+                                                <button key={area} onClick={() => toggleInterest(area)} className={clsx("px-4 py-2.5 rounded-2xl text-xs font-bold border-2 transition-all active:scale-95", (knowledgeBase.interest_areas || []).includes(area) ? "bg-pink-50 border-pink-400 text-pink-700 shadow-sm" : "bg-white border-slate-200 text-slate-500 hover:border-pink-200 hover:text-pink-600")}>{area}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8 space-y-6">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-slate-100"><GraduationCap size={14}/> Formação e Especialidades</h4>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Formação Acadêmica</label>
+                                            <textarea className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 rounded-2xl text-sm font-bold transition-all outline-none resize-none" rows={2} value={knowledgeBase.academic_background || ''} onChange={e => setKnowledgeBase({...knowledgeBase, academic_background: e.target.value})} placeholder="Ex: Fisioterapia, Educação Física, etc."/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Especialidades atuais</label>
+                                            <textarea className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 rounded-2xl text-sm font-bold transition-all outline-none resize-none" rows={2} value={knowledgeBase.specialties || ''} onChange={e => setKnowledgeBase({...knowledgeBase, specialties: e.target.value})} placeholder="Em que você já se especializou?"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Notas Adicionais</label>
+                                            <textarea className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 rounded-2xl text-sm font-bold transition-all outline-none resize-none" rows={2} value={knowledgeBase.additional_notes || ''} onChange={e => setKnowledgeBase({...knowledgeBase, additional_notes: e.target.value})} placeholder="Algo mais que gostaria que seu tutor IA soubesse sobre você?"/>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-center pb-8">
+                                        <button onClick={handleSaveKB} disabled={isSavingKB} className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 disabled:opacity-50 text-white px-12 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 transition-all active:scale-95 shadow-xl shadow-pink-600/20">
+                                            {isSavingKB ? <Loader2 size={20} className="animate-spin"/> : <Save size={20}/>}
+                                            {isSavingKB ? 'Salvando...' : 'Salvar Meu Perfil'}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Tutor IA (Avatar + Chat) ───────────────────── */}
+                    {activeTab === 'ai_tutor' && (
+                        <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {isLoadingAvatars ? (
+                                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-purple-600" size={32}/></div>
+                            ) : !selectedAvatar ? (
+                                /* ── Seleção de Avatar ──────── */
+                                <div className="space-y-6">
+                                    <div className="text-center">
+                                        <div className="inline-flex p-4 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-3xl text-white shadow-xl shadow-purple-500/20 mb-4"><Bot size={40}/></div>
+                                        <h3 className="text-2xl font-black text-slate-800">Escolha seu Tutor IA</h3>
+                                        <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">Selecione o avatar que vai te acompanhar nessa jornada. Cada tutor tem um estilo único de comunicação.</p>
+                                    </div>
+                                    {availableAvatars.length === 0 ? (
+                                        <div className="py-16 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                            <Bot size={48} className="mb-4 opacity-20"/>
+                                            <p className="font-bold">Nenhum tutor disponível no momento.</p>
+                                            <p className="text-xs mt-1">Os tutores serão configurados pela equipe.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {availableAvatars.map(av => (
+                                                <button key={av.id} onClick={() => handleSelectAvatar(av)} className="bg-white rounded-[2rem] border-2 border-slate-200 p-8 shadow-sm hover:shadow-xl hover:border-purple-300 transition-all text-left group active:scale-[0.98]">
+                                                    <div className="flex flex-col items-center text-center">
+                                                        {av.avatar_image_url ? (
+                                                            <img src={av.avatar_image_url} alt={av.name} className="w-24 h-24 rounded-3xl object-cover border-4 border-purple-100 mb-4 group-hover:scale-105 transition-transform shadow-lg"/>
+                                                        ) : (
+                                                            <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-3xl flex items-center justify-center text-white text-3xl font-black mb-4 group-hover:scale-105 transition-transform shadow-lg">{av.name.charAt(0)}</div>
+                                                        )}
+                                                        <h4 className="text-lg font-black text-slate-800 mb-1">{av.name}</h4>
+                                                        <span className={clsx("text-[9px] font-black px-3 py-1 rounded-full uppercase mb-3", TONE_COLORS_BADGE[av.tone] || TONE_COLORS_BADGE.friendly)}>{TONE_LABELS[av.tone] || av.tone}</span>
+                                                        <p className="text-xs text-slate-500 mb-4 line-clamp-3">{av.description || 'Tutor IA personalizado'}</p>
+                                                        <div className="flex flex-wrap gap-1 justify-center">
+                                                            {(av.specialties || []).slice(0, 3).map((s, i) => (
+                                                                <span key={i} className="text-[8px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full border border-purple-100">{s}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* ── Chat com Avatar Selecionado ── */
+                                <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px]">
+                                    {/* Chat Header */}
+                                    <div className="bg-white rounded-t-[2.5rem] border border-b-0 border-slate-200 p-5 flex items-center justify-between shadow-sm">
+                                        <div className="flex items-center gap-4">
+                                            {selectedAvatar.avatar_image_url ? (
+                                                <img src={selectedAvatar.avatar_image_url} alt={selectedAvatar.name} className="w-12 h-12 rounded-2xl object-cover border-2 border-purple-200"/>
+                                            ) : (
+                                                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-lg font-black">{selectedAvatar.name.charAt(0)}</div>
+                                            )}
+                                            <div>
+                                                <h4 className="font-black text-slate-800">{selectedAvatar.name}</h4>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={clsx("text-[8px] font-black px-2 py-0.5 rounded-full uppercase", TONE_COLORS_BADGE[selectedAvatar.tone] || TONE_COLORS_BADGE.friendly)}>{TONE_LABELS[selectedAvatar.tone]}</span>
+                                                    <span className="text-[8px] text-emerald-500 font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"/> Online</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setSelectedAvatar(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all">Trocar Tutor</button>
+                                            <button onClick={handleClearChat} className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl text-xs font-bold transition-all">Limpar Chat</button>
+                                        </div>
+                                    </div>
+
+                                    {/* Messages Area */}
+                                    <div ref={chatScrollRef} className="flex-1 bg-gradient-to-b from-slate-50 to-white border-x border-slate-200 overflow-y-auto px-6 py-6 space-y-4 custom-scrollbar">
+                                        {chatMessages.length === 0 && !isStreamingChat && (
+                                            <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                                                {selectedAvatar.avatar_image_url ? (
+                                                    <img src={selectedAvatar.avatar_image_url} alt="" className="w-20 h-20 rounded-3xl object-cover border-4 border-purple-100 mb-4 opacity-50"/>
+                                                ) : (
+                                                    <div className="w-20 h-20 bg-gradient-to-br from-purple-300 to-indigo-400 rounded-3xl flex items-center justify-center text-white text-2xl font-black mb-4 opacity-50">{selectedAvatar.name.charAt(0)}</div>
+                                                )}
+                                                <p className="text-slate-400 font-bold text-sm mb-1">Olá {student.name.split(' ')[0]}!</p>
+                                                <p className="text-slate-300 text-xs mb-6">Comece uma conversa comigo ou use as sugestões abaixo.</p>
+                                                <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                                                    {['Que curso devo fazer em seguida?', 'Qual meu progresso?', 'Sugerir conteúdo para esta semana'].map(q => (
+                                                        <button key={q} onClick={() => handleSendChat(q)} className="px-4 py-2.5 bg-white border-2 border-purple-200 hover:border-purple-400 text-purple-700 rounded-2xl text-xs font-bold transition-all active:scale-95 hover:shadow-md flex items-center gap-1.5"><Zap size={12}/> {q}</button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {chatMessages.map(msg => (
+                                            <div key={msg.id} className={clsx("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
+                                                <div className={clsx("max-w-[80%] px-5 py-3.5 rounded-3xl text-sm leading-relaxed", msg.role === 'user' ? "bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-br-lg shadow-lg shadow-purple-600/10" : "bg-white border border-slate-200 text-slate-700 rounded-bl-lg shadow-sm")}>
+                                                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                                                    <div className={clsx("text-[9px] mt-2 font-bold", msg.role === 'user' ? "text-purple-200" : "text-slate-300")}>{new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {isStreamingChat && streamingText && (
+                                            <div className="flex justify-start">
+                                                <div className="max-w-[80%] px-5 py-3.5 rounded-3xl rounded-bl-lg bg-white border border-slate-200 text-slate-700 text-sm leading-relaxed shadow-sm">
+                                                    <div className="whitespace-pre-wrap">{streamingText}<span className="inline-block w-1.5 h-4 bg-purple-500 ml-0.5 animate-pulse rounded-full"/></div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {isChatLoading && !streamingText && (
+                                            <div className="flex justify-start">
+                                                <div className="px-5 py-3.5 rounded-3xl rounded-bl-lg bg-white border border-slate-200 shadow-sm">
+                                                    <div className="flex items-center gap-2 text-slate-400">
+                                                        <Loader2 size={16} className="animate-spin"/>
+                                                        <span className="text-xs font-bold">Pensando...</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Actions (below chat when there are messages) */}
+                                    {chatMessages.length > 0 && (
+                                        <div className="bg-white border-x border-slate-200 px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
+                                            {['Que curso devo fazer em seguida?', 'Qual meu progresso?', 'Sugerir conteúdo para esta semana'].map(q => (
+                                                <button key={q} onClick={() => handleSendChat(q)} disabled={isChatLoading} className="shrink-0 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-600 rounded-full text-[10px] font-bold hover:bg-purple-100 transition-all disabled:opacity-40 flex items-center gap-1"><Zap size={10}/> {q}</button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Input Area */}
+                                    <form onSubmit={e => { e.preventDefault(); handleSendChat(); }} className="bg-white rounded-b-[2.5rem] border border-t-0 border-slate-200 p-4 shadow-lg">
+                                        <div className="flex gap-3">
+                                            <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} disabled={isChatLoading} className="flex-1 px-5 py-3.5 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20 disabled:opacity-50" placeholder={`Converse com ${selectedAvatar.name}...`}/>
+                                            <button type="submit" disabled={isChatLoading || !chatInput.trim()} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20">
+                                                {isChatLoading ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                 </div>
             </main>
 

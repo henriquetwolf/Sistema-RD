@@ -702,6 +702,7 @@ export interface Aluno {
   city: string;
   state: string;
   observation: string;
+  selected_avatar_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -733,6 +734,50 @@ export interface TimelineEvent {
   value?: number;
   status?: string;
   meta?: Record<string, any>;
+}
+
+// ── Tutor IA / Avatares ─────────────────────────────────────
+
+export type AvatarTone = 'formal' | 'friendly' | 'motivational' | 'technical';
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+export type LearningStyle = 'visual' | 'reading' | 'practical' | 'auditory';
+
+export interface AiAvatar {
+  id: string;
+  name: string;
+  description: string;
+  avatar_image_url: string;
+  personality_prompt: string;
+  specialties: string[];
+  tone: AvatarTone;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlunoKnowledgeBase {
+  id: string;
+  aluno_id: string;
+  objectives: string;
+  experience_level: ExperienceLevel;
+  interest_areas: string[];
+  academic_background: string;
+  specialties: string;
+  available_hours_per_week: number;
+  learning_style: LearningStyle;
+  additional_notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiChatMessage {
+  id: string;
+  aluno_id: string;
+  avatar_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  metadata?: Record<string, any>;
+  created_at: string;
 }
 
 // ── Conta Azul Integration Types ────────────────────────────

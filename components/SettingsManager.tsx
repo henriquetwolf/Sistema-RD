@@ -7,10 +7,10 @@ import {
     Zap, Loader2, Table, DollarSign, Terminal, Tag as TagIcon, Layout, Globe,
     Search, Info, AlertTriangle, AlertCircle, ChevronDown, CheckCircle2,
     Target, Briefcase, Mail, Key, Shield, GraduationCap, School, ListChecks,
-    Eye, Link as LinkIcon, Award, Monitor, BookOpen
+    Eye, Link as LinkIcon, Award, Monitor, BookOpen, Bot, Sparkles, MessageSquare
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
-import { Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, CourseInfo, SupportTag } from '../types';
+import { Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, CourseInfo, SupportTag, AiAvatar, AvatarTone } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -21,7 +21,7 @@ interface SettingsManagerProps {
   onDeleteJob: (id: string) => void;
 }
 
-type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database' | 'sql_script';
+type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database' | 'sql_script' | 'ai_tutors';
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
   onLogoChange, 
@@ -71,6 +71,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [webhookTriggers, setWebhookTriggers] = useState<WebhookTrigger[]>([]);
   const [editingTrigger, setEditingTrigger] = useState<Partial<WebhookTrigger> | null>(null);
   const [isLoadingTriggers, setIsLoadingTriggers] = useState(false);
+
+  // AI Avatars
+  const [aiAvatars, setAiAvatars] = useState<AiAvatar[]>([]);
+  const [editingAvatar, setEditingAvatar] = useState<Partial<AiAvatar> | null>(null);
+  const [isLoadingAvatars, setIsLoadingAvatars] = useState(false);
+  const [avatarSpecInput, setAvatarSpecInput] = useState('');
 
   const PERMISSION_MODULES = [
       { id: 'overview', label: 'Visão Geral' },
@@ -290,6 +296,50 @@ NOTIFY pgrst, 'reload schema';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
 
+  const loadAvatars = async () => {
+      setIsLoadingAvatars(true);
+      try {
+          const { data } = await appBackend.client.from('crm_ai_avatars').select('*').order('created_at', { ascending: false });
+          setAiAvatars(data || []);
+      } catch (e) { console.error(e); } finally { setIsLoadingAvatars(false); }
+  };
+
+  useEffect(() => { if (activeTab === 'ai_tutors') loadAvatars(); }, [activeTab]);
+
+  const handleSaveAvatar = async () => {
+      if (!editingAvatar?.name || !editingAvatar?.personality_prompt) { alert('Preencha nome e prompt de personalidade.'); return; }
+      setIsSavingItem(true);
+      try {
+          const payload = {
+              name: editingAvatar.name,
+              description: editingAvatar.description || '',
+              avatar_image_url: editingAvatar.avatar_image_url || '',
+              personality_prompt: editingAvatar.personality_prompt,
+              specialties: editingAvatar.specialties || [],
+              tone: editingAvatar.tone || 'friendly',
+              is_active: editingAvatar.is_active !== false,
+          };
+          if (editingAvatar.id) {
+              await appBackend.client.from('crm_ai_avatars').update(payload).eq('id', editingAvatar.id);
+          } else {
+              await appBackend.client.from('crm_ai_avatars').insert([payload]);
+          }
+          setEditingAvatar(null);
+          loadAvatars();
+      } catch (e: any) { alert('Erro ao salvar avatar: ' + e.message); } finally { setIsSavingItem(false); }
+  };
+
+  const handleDeleteAvatar = async (id: string) => {
+      if (!window.confirm('Excluir este tutor IA permanentemente?')) return;
+      try {
+          await appBackend.client.from('crm_ai_avatars').delete().eq('id', id);
+          loadAvatars();
+      } catch (e: any) { alert('Erro: ' + e.message); }
+  };
+
+  const TONE_LABELS: Record<AvatarTone, string> = { formal: 'Formal', friendly: 'Amigável', motivational: 'Motivacional', technical: 'Técnico' };
+  const TONE_COLORS: Record<AvatarTone, string> = { formal: 'bg-slate-100 text-slate-700', friendly: 'bg-emerald-50 text-emerald-700', motivational: 'bg-amber-50 text-amber-700', technical: 'bg-indigo-50 text-indigo-700' };
+
   return (
     <div className="animate-in fade-in duration-300 space-y-8 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -309,7 +359,8 @@ NOTIFY pgrst, 'reload schema';
                 { id: 'support_tags', label: 'Tags', color: 'text-emerald-700' },
                 { id: 'logs', label: 'Logs', color: 'text-slate-600' },
                 { id: 'database', label: 'Banco', color: 'text-amber-700' },
-                { id: 'sql_script', label: 'SQL', color: 'text-red-700' }
+                { id: 'sql_script', label: 'SQL', color: 'text-red-700' },
+                { id: 'ai_tutors', label: 'Tutores IA', color: 'text-purple-700' }
             ].map(tab => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id as SettingsTab)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700")}>{tab.label}</button>
             ))}
@@ -616,7 +667,130 @@ NOTIFY pgrst, 'reload schema';
                 </div>
             </div>
         )}
+        {activeTab === 'ai_tutors' && (
+            <div className="space-y-6 animate-in slide-in-from-left-2">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 text-purple-600 rounded-xl"><Bot size={20}/></div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800">Tutores IA (Avatares)</h3>
+                            <p className="text-xs text-slate-500">Crie avatares com personalidades únicas para serem tutores dos alunos.</p>
+                        </div>
+                    </div>
+                    <button onClick={() => { setEditingAvatar({ name: '', description: '', avatar_image_url: '', personality_prompt: '', specialties: [], tone: 'friendly', is_active: true }); setAvatarSpecInput(''); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg active:scale-95"><Plus size={16}/> Novo Tutor</button>
+                </div>
+                {isLoadingAvatars ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-purple-600" size={32}/></div> : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {aiAvatars.map(av => (
+                            <div key={av.id} className={clsx("bg-white rounded-2xl border-2 p-6 transition-all hover:shadow-lg", av.is_active ? "border-slate-200" : "border-red-200 opacity-60")}>
+                                <div className="flex items-start gap-4 mb-4">
+                                    {av.avatar_image_url ? (
+                                        <img src={av.avatar_image_url} alt={av.name} className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-100"/>
+                                    ) : (
+                                        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-xl font-black">{av.name.charAt(0)}</div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-black text-slate-800 text-lg truncate">{av.name}</h4>
+                                        <span className={clsx("text-[9px] font-black px-2 py-0.5 rounded-full uppercase", TONE_COLORS[av.tone as AvatarTone] || TONE_COLORS.friendly)}>{TONE_LABELS[av.tone as AvatarTone] || av.tone}</span>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-slate-500 mb-3 line-clamp-2">{av.description || 'Sem descrição'}</p>
+                                <div className="flex flex-wrap gap-1 mb-4">
+                                    {(av.specialties || []).slice(0, 4).map((s, i) => (
+                                        <span key={i} className="text-[8px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full border border-purple-100">{s}</span>
+                                    ))}
+                                    {(av.specialties || []).length > 4 && <span className="text-[8px] text-slate-400 font-bold">+{av.specialties.length - 4}</span>}
+                                </div>
+                                <div className="flex gap-2 border-t pt-3">
+                                    <button onClick={() => { setEditingAvatar({ ...av }); setAvatarSpecInput(''); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all"><Edit2 size={14}/> Editar</button>
+                                    <button onClick={() => handleDeleteAvatar(av.id)} className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all"><Trash2 size={14}/></button>
+                                </div>
+                            </div>
+                        ))}
+                        {aiAvatars.length === 0 && (
+                            <div className="col-span-full py-20 bg-white rounded-2xl border-2 border-dashed flex flex-col items-center text-slate-300">
+                                <Bot size={48} className="mb-4 opacity-20"/>
+                                <p className="font-bold">Nenhum tutor IA criado</p>
+                                <p className="text-xs mt-1">Clique em "Novo Tutor" para criar o primeiro avatar.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
       </div>
+
+      {/* AVATAR EDITOR MODAL */}
+      {editingAvatar && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-8 py-5 border-b flex justify-between items-center bg-purple-50 shrink-0 rounded-t-[2rem]">
+                      <div className="flex items-center gap-3">
+                          <div className="p-2 bg-purple-600 text-white rounded-xl"><Bot size={20}/></div>
+                          <h3 className="text-lg font-black text-slate-800">{editingAvatar.id ? 'Editar Tutor IA' : 'Novo Tutor IA'}</h3>
+                      </div>
+                      <button onClick={() => setEditingAvatar(null)} className="p-2 hover:bg-purple-100 rounded-full text-slate-400"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Nome do Tutor *</label>
+                              <input type="text" className="w-full px-4 py-3 border rounded-xl text-sm font-bold bg-slate-50 focus:bg-white outline-none transition-all" value={editingAvatar.name || ''} onChange={e => setEditingAvatar({...editingAvatar, name: e.target.value})} placeholder="Ex: Prof. Ana, Coach Rodrigo"/>
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Descrição (visível para o aluno)</label>
+                              <textarea className="w-full px-4 py-3 border rounded-xl text-sm bg-slate-50 focus:bg-white outline-none transition-all resize-none" rows={2} value={editingAvatar.description || ''} onChange={e => setEditingAvatar({...editingAvatar, description: e.target.value})} placeholder="Instrutora com 20 anos de experiência em Pilates Clássico..."/>
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">URL da Imagem do Avatar</label>
+                              <input type="text" className="w-full px-4 py-3 border rounded-xl text-sm font-mono bg-slate-50 focus:bg-white outline-none transition-all" value={editingAvatar.avatar_image_url || ''} onChange={e => setEditingAvatar({...editingAvatar, avatar_image_url: e.target.value})} placeholder="https://..."/>
+                              {editingAvatar.avatar_image_url && <img src={editingAvatar.avatar_image_url} alt="Preview" className="w-20 h-20 rounded-2xl object-cover mt-2 border"/>}
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Tom de Comunicação</label>
+                              <select className="w-full px-4 py-3 border rounded-xl text-sm font-bold bg-slate-50" value={editingAvatar.tone || 'friendly'} onChange={e => setEditingAvatar({...editingAvatar, tone: e.target.value as AvatarTone})}>
+                                  <option value="friendly">Amigável</option>
+                                  <option value="formal">Formal</option>
+                                  <option value="motivational">Motivacional</option>
+                                  <option value="technical">Técnico</option>
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status</label>
+                              <select className="w-full px-4 py-3 border rounded-xl text-sm font-bold bg-slate-50" value={editingAvatar.is_active !== false ? 'true' : 'false'} onChange={e => setEditingAvatar({...editingAvatar, is_active: e.target.value === 'true'})}>
+                                  <option value="true">Ativo</option>
+                                  <option value="false">Inativo</option>
+                              </select>
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Especialidades</label>
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {(editingAvatar.specialties || []).map((s, i) => (
+                                      <span key={i} className="flex items-center gap-1 text-xs font-bold bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full border border-purple-200">
+                                          {s}
+                                          <button onClick={() => setEditingAvatar({...editingAvatar, specialties: (editingAvatar.specialties || []).filter((_, idx) => idx !== i)})} className="text-purple-400 hover:text-red-500"><X size={12}/></button>
+                                      </span>
+                                  ))}
+                              </div>
+                              <div className="flex gap-2">
+                                  <input type="text" className="flex-1 px-4 py-2 border rounded-xl text-sm bg-slate-50" value={avatarSpecInput} onChange={e => setAvatarSpecInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && avatarSpecInput.trim()) { e.preventDefault(); setEditingAvatar({...editingAvatar, specialties: [...(editingAvatar.specialties || []), avatarSpecInput.trim()]}); setAvatarSpecInput(''); }}} placeholder="Pilates Clássico, Anatomia..."/>
+                                  <button onClick={() => { if (avatarSpecInput.trim()) { setEditingAvatar({...editingAvatar, specialties: [...(editingAvatar.specialties || []), avatarSpecInput.trim()]}); setAvatarSpecInput(''); }}} className="px-3 py-2 bg-purple-100 text-purple-600 rounded-xl font-bold text-xs"><Plus size={14}/></button>
+                              </div>
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Prompt de Personalidade * <span className="text-purple-500">(System Prompt do Avatar)</span></label>
+                              <textarea className="w-full px-4 py-3 border rounded-xl text-sm bg-slate-50 focus:bg-white outline-none transition-all resize-none font-mono" rows={6} value={editingAvatar.personality_prompt || ''} onChange={e => setEditingAvatar({...editingAvatar, personality_prompt: e.target.value})} placeholder="Você é uma instrutora de Pilates com 20 anos de experiência, focada em método clássico. Sempre incentive o aluno e use analogias práticas do dia-a-dia para explicar conceitos complexos de biomecânica..."/>
+                              <p className="text-[10px] text-slate-400 mt-1">Este texto define como o avatar vai se comportar nas conversas com os alunos.</p>
+                          </div>
+                      </div>
+                  </div>
+                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 shrink-0 rounded-b-[2rem]">
+                      <button onClick={() => setEditingAvatar(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
+                      <button onClick={handleSaveAvatar} disabled={isSavingItem} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-xl flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18}/>} Salvar Tutor</button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* MODALS CRUD SETTINGS */}
       {editingRole && (

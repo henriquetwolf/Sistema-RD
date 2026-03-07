@@ -3,7 +3,7 @@ import {
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
   Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2, Calendar, BookOpen, X, MonitorPlay, Zap, ChevronRight, Check, Save, FileText, ShoppingBag, CreditCard,
   List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map, FileSpreadsheet, RotateCcw,
-  Clock, Star, Ticket, GraduationCap, Edit2, Plus, MessageCircle, Activity
+  Clock, Star, Ticket, GraduationCap, Edit2, Plus, MessageCircle, Activity, Landmark
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { OnlineCourse, Pipeline, Aluno, AlunoEmail, TimelineEvent, TimelineEventType } from '../types';
@@ -112,7 +112,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [profileTickets, setProfileTickets] = useState<any[]>([]);
   const [profileCourseAccess, setProfileCourseAccess] = useState<any[]>([]);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-  const [profileTab, setProfileTab] = useState<'timeline' | 'courses' | 'financial' | 'certificates' | 'notes'>('timeline');
+  const [profileTab, setProfileTab] = useState<'timeline' | 'courses' | 'financial' | 'certificates' | 'notes' | 'conta_azul'>('timeline');
+  const [profileReceivables, setProfileReceivables] = useState<any[]>([]);
+  const [profilePayables, setProfilePayables] = useState<any[]>([]);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Aluno>>({});
   const [newEmail, setNewEmail] = useState('');
@@ -418,6 +420,29 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
           const timeline = buildTimeline(student.deals, ordersRes?.data || [], certsRes?.data || [], enrolledClasses, eventsRes?.data || [], ticketsRes?.data || [], courseAccessRes?.data || []);
           setProfileTimeline(timeline);
+
+          const contactNames = [...new Set(student.deals.map(d => d.company_name || d.contact_name).filter(Boolean))];
+          if (contactNames.length > 0) {
+              const receivePromises = contactNames.map(name =>
+                  appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${name}%`).order('data_vencimento', { ascending: false })
+              );
+              const payPromises = contactNames.map(name =>
+                  appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${name}%`).order('data_vencimento', { ascending: false })
+              );
+              const [receiveResults, payResults] = await Promise.all([
+                  Promise.all(receivePromises),
+                  Promise.all(payPromises),
+              ]);
+              const allReceivables = receiveResults.flatMap(r => r.data || []);
+              const allPayables = payResults.flatMap(r => r.data || []);
+              const uniqueReceivables = Array.from(new Map(allReceivables.map(r => [r.id, r])).values());
+              const uniquePayables = Array.from(new Map(allPayables.map(p => [p.id, p])).values());
+              setProfileReceivables(uniqueReceivables);
+              setProfilePayables(uniquePayables);
+          } else {
+              setProfileReceivables([]);
+              setProfilePayables([]);
+          }
       } catch (err) {
           console.error('Erro ao carregar perfil do aluno:', err);
       } finally {
@@ -944,6 +969,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                 { key: 'courses' as const, label: 'Cursos / Produtos', icon: BookOpen },
                                 { key: 'financial' as const, label: 'Financeiro', icon: DollarSign },
                                 { key: 'certificates' as const, label: 'Certificados', icon: Award },
+                                { key: 'conta_azul' as const, label: 'Conta Azul', icon: Landmark },
                                 { key: 'notes' as const, label: 'Dados & Notas', icon: FileText },
                             ]).map(tab => (
                                 <button key={tab.key} onClick={() => setProfileTab(tab.key)}
@@ -1143,6 +1169,178 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                         </div>
                                                     );
                                                 })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* CONTA AZUL TAB */}
+                                {profileTab === 'conta_azul' && (
+                                    <div className="space-y-8">
+                                        {/* Contas a Receber */}
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <DollarSign size={16} className="text-emerald-600"/> Contas a Receber
+                                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200">{profileReceivables.length}</span>
+                                            </h3>
+                                            {profileReceivables.length === 0 ? (
+                                                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
+                                                    <Landmark size={40} className="mx-auto opacity-20 mb-3"/>
+                                                    <p className="font-bold text-sm">Nenhuma conta a receber encontrada</p>
+                                                    <p className="text-xs mt-1">Os registros do Conta Azul vinculados ao nome deste aluno aparecerão aqui.</p>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-sm">
+                                                            <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                                                                <tr>
+                                                                    <th className="px-4 py-3 text-left">Descrição</th>
+                                                                    <th className="px-4 py-3 text-left">Categoria</th>
+                                                                    <th className="px-4 py-3 text-center">Parcela</th>
+                                                                    <th className="px-4 py-3 text-left">Vencimento</th>
+                                                                    <th className="px-4 py-3 text-right">Valor</th>
+                                                                    <th className="px-4 py-3 text-right">Pago</th>
+                                                                    <th className="px-4 py-3 text-center">Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100">
+                                                                {profileReceivables.map((r: any) => {
+                                                                    const isPaid = r.status?.toUpperCase() === 'RECEBIDO' || r.status?.toUpperCase() === 'LIQUIDADO';
+                                                                    const isOverdue = !isPaid && r.data_vencimento && new Date(r.data_vencimento) < new Date();
+                                                                    return (
+                                                                        <tr key={r.id} className="hover:bg-slate-50">
+                                                                            <td className="px-4 py-3">
+                                                                                <p className="font-bold text-slate-700 truncate max-w-[250px]">{r.descricao || '--'}</p>
+                                                                                {r.numero_documento && <p className="text-[10px] text-slate-400 mt-0.5">Doc: {r.numero_documento}</p>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-slate-500 text-xs">{r.categoria_nome || '--'}</td>
+                                                                            <td className="px-4 py-3 text-center text-xs font-bold text-slate-600">
+                                                                                {r.parcela_numero && r.total_parcelas ? `${r.parcela_numero}/${r.total_parcelas}` : '--'}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-xs">
+                                                                                <span className={clsx("font-bold", isOverdue ? "text-red-600" : "text-slate-600")}>
+                                                                                    {r.data_vencimento ? new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(Number(r.valor) || 0)}</td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatCurrency(Number(r.valor_pago) || 0)}</td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                <span className={clsx("text-[9px] font-black px-2.5 py-1 rounded-full border uppercase",
+                                                                                    isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                                                                    isOverdue ? "bg-red-50 text-red-700 border-red-200" :
+                                                                                    "bg-amber-50 text-amber-700 border-amber-200"
+                                                                                )}>{r.status || 'PENDENTE'}</span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div className="px-4 py-3 bg-slate-50 border-t flex items-center justify-between text-xs font-bold text-slate-500">
+                                                        <span>Total: {profileReceivables.length} registro(s)</span>
+                                                        <div className="flex gap-4">
+                                                            <span>Valor total: <span className="text-slate-800">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</span></span>
+                                                            <span>Total pago: <span className="text-emerald-600">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</span></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Contas a Pagar */}
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <CreditCard size={16} className="text-red-500"/> Contas a Pagar
+                                                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-200">{profilePayables.length}</span>
+                                            </h3>
+                                            {profilePayables.length === 0 ? (
+                                                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
+                                                    <Landmark size={40} className="mx-auto opacity-20 mb-3"/>
+                                                    <p className="font-bold text-sm">Nenhuma conta a pagar encontrada</p>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-sm">
+                                                            <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                                                                <tr>
+                                                                    <th className="px-4 py-3 text-left">Descrição</th>
+                                                                    <th className="px-4 py-3 text-left">Fornecedor</th>
+                                                                    <th className="px-4 py-3 text-left">Categoria</th>
+                                                                    <th className="px-4 py-3 text-center">Parcela</th>
+                                                                    <th className="px-4 py-3 text-left">Vencimento</th>
+                                                                    <th className="px-4 py-3 text-right">Valor</th>
+                                                                    <th className="px-4 py-3 text-right">Pago</th>
+                                                                    <th className="px-4 py-3 text-center">Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100">
+                                                                {profilePayables.map((p: any) => {
+                                                                    const isPaid = p.status?.toUpperCase() === 'PAGO' || p.status?.toUpperCase() === 'LIQUIDADO';
+                                                                    const isOverdue = !isPaid && p.data_vencimento && new Date(p.data_vencimento) < new Date();
+                                                                    return (
+                                                                        <tr key={p.id} className="hover:bg-slate-50">
+                                                                            <td className="px-4 py-3">
+                                                                                <p className="font-bold text-slate-700 truncate max-w-[200px]">{p.descricao || '--'}</p>
+                                                                                {p.numero_documento && <p className="text-[10px] text-slate-400 mt-0.5">Doc: {p.numero_documento}</p>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-xs text-slate-600 font-medium">{p.fornecedor_nome || '--'}</td>
+                                                                            <td className="px-4 py-3 text-xs text-slate-500">{p.categoria_nome || '--'}</td>
+                                                                            <td className="px-4 py-3 text-center text-xs font-bold text-slate-600">
+                                                                                {p.parcela_numero && p.total_parcelas ? `${p.parcela_numero}/${p.total_parcelas}` : '--'}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-xs">
+                                                                                <span className={clsx("font-bold", isOverdue ? "text-red-600" : "text-slate-600")}>
+                                                                                    {p.data_vencimento ? new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(Number(p.valor) || 0)}</td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatCurrency(Number(p.valor_pago) || 0)}</td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                <span className={clsx("text-[9px] font-black px-2.5 py-1 rounded-full border uppercase",
+                                                                                    isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                                                                    isOverdue ? "bg-red-50 text-red-700 border-red-200" :
+                                                                                    "bg-amber-50 text-amber-700 border-amber-200"
+                                                                                )}>{p.status || 'PENDENTE'}</span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div className="px-4 py-3 bg-slate-50 border-t flex items-center justify-between text-xs font-bold text-slate-500">
+                                                        <span>Total: {profilePayables.length} registro(s)</span>
+                                                        <div className="flex gap-4">
+                                                            <span>Valor total: <span className="text-slate-800">{formatCurrency(profilePayables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</span></span>
+                                                            <span>Total pago: <span className="text-emerald-600">{formatCurrency(profilePayables.reduce((s: number, p: any) => s + (Number(p.valor_pago) || 0), 0))}</span></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Resumo */}
+                                        {(profileReceivables.length > 0 || profilePayables.length > 0) && (
+                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100">
+                                                    <p className="text-[10px] font-black text-emerald-600 uppercase">A Receber (Total)</p>
+                                                    <p className="text-xl font-black text-emerald-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</p>
+                                                </div>
+                                                <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase">Já Recebido</p>
+                                                    <p className="text-xl font-black text-blue-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</p>
+                                                </div>
+                                                <div className="bg-red-50 rounded-2xl p-5 border border-red-100">
+                                                    <p className="text-[10px] font-black text-red-600 uppercase">A Pagar (Total)</p>
+                                                    <p className="text-xl font-black text-red-700 mt-1">{formatCurrency(profilePayables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</p>
+                                                </div>
+                                                <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100">
+                                                    <p className="text-[10px] font-black text-amber-600 uppercase">Em Aberto (Receber)</p>
+                                                    <p className="text-xl font-black text-amber-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + ((Number(r.valor) || 0) - (Number(r.valor_pago) || 0)), 0))}</p>
+                                                </div>
                                             </div>
                                         )}
                                     </div>

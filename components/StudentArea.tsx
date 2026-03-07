@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
 import { 
@@ -9,7 +9,8 @@ import {
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
-    Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode
+    Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode,
+    Mail, Phone, Hash, Edit2, Home
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -25,7 +26,7 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data'>('classes');
     const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
     const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -71,6 +72,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [showSupportModal, setShowSupportModal] = useState(false);
     const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
 
+    // Meus Dados (Cadastro do Aluno)
+    const [myAluno, setMyAluno] = useState<Aluno | null>(null);
+    const [myEmails, setMyEmails] = useState<AlunoEmail[]>([]);
+    const [isLoadingMyData, setIsLoadingMyData] = useState(false);
+    const [isSavingMyData, setIsSavingMyData] = useState(false);
+    const [myDataForm, setMyDataForm] = useState<Partial<Aluno>>({});
+    const [myNewEmail, setMyNewEmail] = useState('');
+    const [myDataSaved, setMyDataSaved] = useState(false);
+
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
 
@@ -89,6 +99,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'contracts') fetchPendingContracts();
         if (activeTab === 'events') loadEvents();
         if (activeTab === 'purchases') loadStudentOrders();
+        if (activeTab === 'my_data') loadMyData();
     }, [activeTab]);
 
     const loadStudentOrders = async () => {
@@ -97,6 +108,139 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             const orders = await pagBankService.getStudentOrders(String(mainDealId));
             setStudentOrders(orders);
         } catch (e) { console.error(e); }
+    };
+
+    const loadMyData = async () => {
+        const cleanCpf = student.cpf?.replace(/\D/g, '') || '';
+        if (!cleanCpf || cleanCpf.length < 11) return;
+        setIsLoadingMyData(true);
+        try {
+            const { data: aluno } = await appBackend.client
+                .from('crm_alunos')
+                .select('*')
+                .eq('cpf', cleanCpf)
+                .maybeSingle();
+
+            if (aluno) {
+                setMyAluno(aluno);
+                setMyDataForm({ ...aluno });
+                const { data: emails } = await appBackend.client
+                    .from('crm_aluno_emails')
+                    .select('*')
+                    .eq('aluno_id', aluno.id)
+                    .order('is_primary', { ascending: false });
+                setMyEmails(emails || []);
+            } else {
+                const deal = student.deals[0];
+                const newAluno: Partial<Aluno> = {
+                    cpf: cleanCpf,
+                    full_name: student.name || '',
+                    phone: deal?.phone || '',
+                    zip_code: deal?.zip_code || '',
+                    address: deal?.address || '',
+                    address_number: deal?.address_number || '',
+                    neighborhood: deal?.neighborhood || '',
+                    city: deal?.address_city || '',
+                    state: deal?.address_state || '',
+                };
+                setMyDataForm(newAluno);
+            }
+        } catch (err) {
+            console.error('Erro ao carregar dados cadastrais:', err);
+        } finally {
+            setIsLoadingMyData(false);
+        }
+    };
+
+    const handleSaveMyData = async () => {
+        const cleanCpf = student.cpf?.replace(/\D/g, '') || '';
+        if (!cleanCpf) return;
+        setIsSavingMyData(true);
+        setMyDataSaved(false);
+        try {
+            const payload = {
+                cpf: cleanCpf,
+                full_name: myDataForm.full_name || '',
+                phone: myDataForm.phone || '',
+                birth_date: myDataForm.birth_date || null,
+                zip_code: myDataForm.zip_code || '',
+                address: myDataForm.address || '',
+                address_number: myDataForm.address_number || '',
+                neighborhood: myDataForm.neighborhood || '',
+                city: myDataForm.city || '',
+                state: myDataForm.state || '',
+            };
+
+            if (myAluno?.id) {
+                await appBackend.client.from('crm_alunos').update(payload).eq('id', myAluno.id);
+                setMyAluno(prev => prev ? { ...prev, ...payload } : prev);
+            } else {
+                const { data: created } = await appBackend.client.from('crm_alunos').insert([payload]).select().single();
+                if (created) {
+                    setMyAluno(created);
+                    if (student.email) {
+                        await appBackend.client.from('crm_aluno_emails').insert({ aluno_id: created.id, email: student.email.toLowerCase().trim(), is_primary: true });
+                        const { data: emails } = await appBackend.client.from('crm_aluno_emails').select('*').eq('aluno_id', created.id).order('is_primary', { ascending: false });
+                        setMyEmails(emails || []);
+                    }
+                }
+            }
+            setMyDataSaved(true);
+            setTimeout(() => setMyDataSaved(false), 3000);
+        } catch (err) {
+            console.error('Erro ao salvar dados:', err);
+            alert('Erro ao salvar seus dados. Tente novamente.');
+        } finally {
+            setIsSavingMyData(false);
+        }
+    };
+
+    const handleAddMyEmail = async () => {
+        if (!myNewEmail.trim() || !myAluno?.id) return;
+        try {
+            const emailLower = myNewEmail.trim().toLowerCase();
+            const { error } = await appBackend.client.from('crm_aluno_emails').insert({ aluno_id: myAluno.id, email: emailLower, is_primary: myEmails.length === 0 });
+            if (error) throw error;
+            const { data } = await appBackend.client.from('crm_aluno_emails').select('*').eq('aluno_id', myAluno.id).order('is_primary', { ascending: false });
+            setMyEmails(data || []);
+            setMyNewEmail('');
+        } catch (err: any) {
+            alert(err.message?.includes('duplicate') ? 'Este email já está cadastrado.' : 'Erro ao adicionar email.');
+        }
+    };
+
+    const handleRemoveMyEmail = async (emailId: string) => {
+        if (!window.confirm('Deseja remover este email?')) return;
+        try {
+            await appBackend.client.from('crm_aluno_emails').delete().eq('id', emailId);
+            setMyEmails(prev => prev.filter(e => e.id !== emailId));
+        } catch { alert('Erro ao remover email.'); }
+    };
+
+    const handleSetMyPrimaryEmail = async (emailId: string) => {
+        if (!myAluno?.id) return;
+        try {
+            await appBackend.client.from('crm_aluno_emails').update({ is_primary: false }).eq('aluno_id', myAluno.id);
+            await appBackend.client.from('crm_aluno_emails').update({ is_primary: true }).eq('id', emailId);
+            setMyEmails(prev => prev.map(e => ({ ...e, is_primary: e.id === emailId })));
+        } catch { alert('Erro ao alterar email principal.'); }
+    };
+
+    const fetchAddressByCepStudent = async (rawCep: string) => {
+        const digits = rawCep.replace(/\D/g, '');
+        if (digits.length !== 8) return;
+        try {
+            const resp = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+            const data = await resp.json();
+            if (data.erro) return;
+            setMyDataForm(prev => ({
+                ...prev,
+                address: data.logradouro || prev.address,
+                neighborhood: data.bairro || prev.neighborhood,
+                city: data.localidade || prev.city,
+                state: data.uf || prev.state,
+            }));
+        } catch {}
     };
 
     const handleCheckoutSuccess = () => {
@@ -716,7 +860,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'events', label: 'Eventos', icon: Mic, color: 'text-amber-600' },
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length },
-                        { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' }
+                        { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' },
+                        { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' }
                     ].map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
@@ -907,6 +1052,140 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                         </div>
                                     ))}
                                 </div>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'my_data' && (
+                        <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {isLoadingMyData ? (
+                                <div className="flex justify-center items-center py-20"><Loader2 className="animate-spin text-purple-600" size={32}/></div>
+                            ) : (
+                                <>
+                                    {/* Header */}
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8">
+                                        <div className="flex items-center gap-5 mb-6">
+                                            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-purple-500/20">
+                                                {(myDataForm.full_name || student.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-800">{myDataForm.full_name || student.name}</h3>
+                                                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5"><Hash size={12}/> CPF: {student.cpf}</p>
+                                            </div>
+                                        </div>
+
+                                        {myDataSaved && (
+                                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                                                <CheckCircle size={20} className="text-emerald-600"/>
+                                                <span className="text-sm font-bold text-emerald-700">Dados salvos com sucesso!</span>
+                                            </div>
+                                        )}
+
+                                        {/* Dados Pessoais */}
+                                        <div className="space-y-6">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-slate-100"><User size={14}/> Dados Pessoais</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome Completo</label>
+                                                    <input type="text" value={myDataForm.full_name || ''} onChange={e => setMyDataForm({...myDataForm, full_name: e.target.value})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Telefone / WhatsApp</label>
+                                                    <div className="relative">
+                                                        <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"/>
+                                                        <input type="text" value={myDataForm.phone || ''} onChange={e => setMyDataForm({...myDataForm, phone: e.target.value})} className="w-full pl-11 pr-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20" placeholder="(00) 00000-0000"/>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Data de Nascimento</label>
+                                                    <input type="date" value={myDataForm.birth_date || ''} onChange={e => setMyDataForm({...myDataForm, birth_date: e.target.value})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Endereço */}
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-slate-100 mb-6"><Home size={14}/> Endereço</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">CEP</label>
+                                                <input type="text" value={myDataForm.zip_code || ''} onChange={e => {
+                                                    const val = e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 9);
+                                                    setMyDataForm({...myDataForm, zip_code: val});
+                                                    if (val.replace(/\D/g, '').length === 8) fetchAddressByCepStudent(val);
+                                                }} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20" placeholder="00000-000" maxLength={9}/>
+                                            </div>
+                                            <div className="md:col-span-4">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Rua / Logradouro</label>
+                                                <input type="text" value={myDataForm.address || ''} onChange={e => setMyDataForm({...myDataForm, address: e.target.value})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                            </div>
+                                            <div className="md:col-span-1">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nº</label>
+                                                <input type="text" value={myDataForm.address_number || ''} onChange={e => setMyDataForm({...myDataForm, address_number: e.target.value})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Bairro</label>
+                                                <input type="text" value={myDataForm.neighborhood || ''} onChange={e => setMyDataForm({...myDataForm, neighborhood: e.target.value})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Cidade</label>
+                                                <input type="text" value={myDataForm.city || ''} onChange={e => setMyDataForm({...myDataForm, city: e.target.value})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                            </div>
+                                            <div className="md:col-span-1">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">UF</label>
+                                                <input type="text" value={myDataForm.state || ''} onChange={e => setMyDataForm({...myDataForm, state: e.target.value.toUpperCase()})} className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20" maxLength={2}/>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Emails */}
+                                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-slate-100 mb-6"><Mail size={14}/> Meus Emails</h4>
+                                        
+                                        <div className="space-y-3 mb-6">
+                                            {myEmails.map(em => (
+                                                <div key={em.id} className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 group hover:border-purple-200 transition-all">
+                                                    <Mail size={16} className="text-slate-400 shrink-0"/>
+                                                    <span className="flex-1 text-sm font-bold text-slate-700">{em.email}</span>
+                                                    {em.is_primary ? (
+                                                        <span className="text-[9px] font-black bg-purple-50 text-purple-600 px-3 py-1 rounded-full border border-purple-200 flex items-center gap-1"><CheckCircle size={10}/> PRINCIPAL</span>
+                                                    ) : (
+                                                        <button onClick={() => handleSetMyPrimaryEmail(em.id)} className="text-[9px] font-bold text-slate-400 hover:text-purple-600 px-2 py-1 rounded-lg hover:bg-purple-50 transition-all">Definir principal</button>
+                                                    )}
+                                                    {!em.is_primary && (
+                                                        <button onClick={() => handleRemoveMyEmail(em.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"><X size={16}/></button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {myEmails.length === 0 && (
+                                                <div className="text-center py-8 text-slate-300">
+                                                    <Mail size={32} className="mx-auto mb-2 opacity-30"/>
+                                                    <p className="text-sm font-bold">Nenhum email cadastrado</p>
+                                                    <p className="text-xs text-slate-400 mt-1">{myAluno ? 'Adicione seu primeiro email abaixo.' : 'Salve seus dados primeiro para cadastrar emails.'}</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {myAluno && (
+                                            <div className="flex gap-3">
+                                                <div className="relative flex-1">
+                                                    <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"/>
+                                                    <input type="email" placeholder="novo@email.com" value={myNewEmail} onChange={e => setMyNewEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMyEmail(); } }} className="w-full pl-11 pr-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 rounded-2xl text-sm font-bold transition-all outline-none focus:ring-2 focus:ring-purple-500/20"/>
+                                                </div>
+                                                <button onClick={handleAddMyEmail} disabled={!myNewEmail.trim()} className="bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20"><Plus size={16}/> Adicionar</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Botão Salvar */}
+                                    <div className="flex justify-center pb-8">
+                                        <button onClick={handleSaveMyData} disabled={isSavingMyData} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white px-12 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 transition-all active:scale-95 shadow-xl shadow-purple-600/20">
+                                            {isSavingMyData ? <Loader2 size={20} className="animate-spin"/> : <Save size={20}/>}
+                                            {isSavingMyData ? 'Salvando...' : 'Salvar Meus Dados'}
+                                        </button>
+                                    </div>
+                                </>
                             )}
                         </div>
                     )}

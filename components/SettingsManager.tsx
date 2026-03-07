@@ -77,6 +77,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [editingAvatar, setEditingAvatar] = useState<Partial<AiAvatar> | null>(null);
   const [isLoadingAvatars, setIsLoadingAvatars] = useState(false);
   const [avatarSpecInput, setAvatarSpecInput] = useState('');
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   const PERMISSION_MODULES = [
       { id: 'overview', label: 'Visão Geral' },
@@ -327,6 +328,18 @@ NOTIFY pgrst, 'reload schema';
           setEditingAvatar(null);
           loadAvatars();
       } catch (e: any) { alert('Erro ao salvar avatar: ' + e.message); } finally { setIsSavingItem(false); }
+  };
+
+  const handleAvatarImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          if (file.size > 2 * 1024 * 1024) { alert('Imagem muito grande. Máximo: 2MB.'); return; }
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setEditingAvatar(prev => prev ? { ...prev, avatar_image_url: reader.result as string } : null);
+          };
+          reader.readAsDataURL(file);
+      }
   };
 
   const handleDeleteAvatar = async (id: string) => {
@@ -742,9 +755,26 @@ NOTIFY pgrst, 'reload schema';
                               <textarea className="w-full px-4 py-3 border rounded-xl text-sm bg-slate-50 focus:bg-white outline-none transition-all resize-none" rows={2} value={editingAvatar.description || ''} onChange={e => setEditingAvatar({...editingAvatar, description: e.target.value})} placeholder="Instrutora com 20 anos de experiência em Pilates Clássico..."/>
                           </div>
                           <div className="md:col-span-2">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">URL da Imagem do Avatar</label>
-                              <input type="text" className="w-full px-4 py-3 border rounded-xl text-sm font-mono bg-slate-50 focus:bg-white outline-none transition-all" value={editingAvatar.avatar_image_url || ''} onChange={e => setEditingAvatar({...editingAvatar, avatar_image_url: e.target.value})} placeholder="https://..."/>
-                              {editingAvatar.avatar_image_url && <img src={editingAvatar.avatar_image_url} alt="Preview" className="w-20 h-20 rounded-2xl object-cover mt-2 border"/>}
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Foto do Tutor</label>
+                              <div className="flex items-center gap-6 bg-slate-50 p-5 rounded-2xl border-2 border-dashed border-slate-200">
+                                  <div className="w-24 h-24 rounded-2xl border-2 border-purple-100 flex items-center justify-center overflow-hidden shrink-0 bg-white shadow-lg">
+                                      {editingAvatar.avatar_image_url ? (
+                                          <img src={editingAvatar.avatar_image_url} alt="Preview" className="w-full h-full object-cover"/>
+                                      ) : (
+                                          <Bot className="text-slate-200" size={40}/>
+                                      )}
+                                  </div>
+                                  <div className="flex-1 space-y-3">
+                                      <p className="text-xs text-slate-500">Envie uma imagem do avatar (JPG, PNG, até 2MB).</p>
+                                      <div className="flex gap-2">
+                                          <button type="button" onClick={() => avatarFileInputRef.current?.click()} className="bg-white border-2 border-slate-200 text-slate-700 px-5 py-2 rounded-xl text-xs font-black uppercase hover:border-purple-500 shadow-sm flex items-center gap-2 transition-all active:scale-95"><Upload size={14}/> Enviar Imagem</button>
+                                          {editingAvatar.avatar_image_url && (
+                                              <button type="button" onClick={() => setEditingAvatar({...editingAvatar, avatar_image_url: ''})} className="px-3 py-2 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100 transition-all"><Trash2 size={14}/></button>
+                                          )}
+                                      </div>
+                                      <input type="file" ref={avatarFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarImageUpload}/>
+                                  </div>
+                              </div>
                           </div>
                           <div>
                               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Tom de Comunicação</label>

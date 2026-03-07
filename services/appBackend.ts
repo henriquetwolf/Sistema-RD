@@ -1250,4 +1250,24 @@ export const appBackend = {
     if (error) { console.error('lookup_cpf_global error:', error); return null; }
     return data;
   },
+
+  lookupContaAzulByName: async (names: string[]) => {
+    if (!isConfigured || names.length === 0) return { receber: [], pagar: [] };
+    const validNames = names.filter(n => n && n.trim());
+    if (validNames.length === 0) return { receber: [], pagar: [] };
+
+    const [receber, pagar] = await Promise.all([
+      supabase.from('conta_azul_contas_receber')
+        .select('*').in('contato_nome', validNames)
+        .order('data_vencimento', { ascending: false }),
+      supabase.from('conta_azul_contas_pagar')
+        .select('*').in('fornecedor_nome', validNames)
+        .order('data_vencimento', { ascending: false }),
+    ]);
+
+    return {
+      receber: receber.data || [],
+      pagar: pagar.data || [],
+    };
+  },
 };

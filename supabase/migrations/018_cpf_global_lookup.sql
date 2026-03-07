@@ -34,6 +34,7 @@ DECLARE
     v_pagbank JSONB;
     v_certificates JSONB;
     v_knowledge_base JSONB;
+    v_known_names TEXT[];
 BEGIN
     IF LENGTH(clean) < 11 THEN
         RETURN jsonb_build_object('error', 'CPF inválido (menos de 11 dígitos)');
@@ -95,17 +96,30 @@ BEGIN
     WHERE REGEXP_REPLACE(f.cpf, '[^0-9]', '', 'g') = clean
     LIMIT 1;
 
-    -- Conta Azul - Contas a Receber
+    -- Coletar nomes conhecidos da pessoa para fallback no Conta Azul
+    SELECT array_agg(DISTINCT nm) INTO v_known_names
+    FROM (
+        SELECT full_name AS nm FROM user_profiles WHERE cpf = clean
+        UNION SELECT full_name FROM crm_collaborators WHERE REGEXP_REPLACE(cpf, '[^0-9]', '', 'g') = clean
+        UNION SELECT full_name FROM crm_teachers WHERE REGEXP_REPLACE(cpf, '[^0-9]', '', 'g') = clean
+        UNION SELECT full_name FROM crm_alunos WHERE cpf = clean
+        UNION SELECT company_name FROM crm_deals WHERE REGEXP_REPLACE(cpf, '[^0-9]', '', 'g') = clean
+        UNION SELECT contact_name FROM crm_deals WHERE REGEXP_REPLACE(cpf, '[^0-9]', '', 'g') = clean
+    ) names WHERE nm IS NOT NULL AND TRIM(nm) <> '';
+
+    -- Conta Azul - Contas a Receber (por contato_cpf OU fallback por contato_nome)
     SELECT COALESCE(jsonb_agg(to_jsonb(cr.*) ORDER BY cr.data_vencimento DESC), '[]'::JSONB)
     INTO v_ca_receber
     FROM conta_azul_contas_receber cr
-    WHERE cr.contato_cpf = clean;
+    WHERE cr.contato_cpf = clean
+       OR (v_known_names IS NOT NULL AND cr.contato_nome = ANY(v_known_names));
 
-    -- Conta Azul - Contas a Pagar
+    -- Conta Azul - Contas a Pagar (por contato_cpf OU fallback por fornecedor_nome)
     SELECT COALESCE(jsonb_agg(to_jsonb(cp.*) ORDER BY cp.data_vencimento DESC), '[]'::JSONB)
     INTO v_ca_pagar
     FROM conta_azul_contas_pagar cp
-    WHERE cp.contato_cpf = clean;
+    WHERE cp.contato_cpf = clean
+       OR (v_known_names IS NOT NULL AND cp.fornecedor_nome = ANY(v_known_names));
 
     -- PagBank - Pedidos
     SELECT COALESCE(jsonb_agg(to_jsonb(po.*) ORDER BY po.created_at DESC), '[]'::JSONB)

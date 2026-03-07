@@ -7,13 +7,14 @@ import {
   PieChart as PieIcon, TrendingUp, Monitor, BarChart, Wallet, ArrowDownToLine,
   ArrowUpRight, ArrowDownRight, Plus, Save, X, Link2, Unlink,
   CreditCard, Layers, Building2, Tag, FileText, List, Trash2, Pencil,
-  Download, Calendar, XCircle, Database
+  Download, Calendar, XCircle, Database, Fingerprint, Hash, Copy, Check, Package, User
 } from 'lucide-react';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { contaAzulService } from '../services/contaAzulService';
+import { appBackend } from '../services/appBackend';
 import type {
   ContaAzulAuthStatus, ContaAzulReceivable, ContaAzulPayable,
   ContaAzulCategory, ContaAzulCostCenter, ContaAzulFinancialAccount,
@@ -29,7 +30,7 @@ const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 const formatDate = (d?: string) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '--';
 
-type TabId = 'overview' | 'receivables' | 'payables' | 'accounts' | 'categories' | 'create' | 'contas' | 'powerbi';
+type TabId = 'overview' | 'receivables' | 'payables' | 'accounts' | 'categories' | 'create' | 'contas' | 'powerbi' | 'cpf_search';
 
 export const ContaAzulManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -91,6 +92,62 @@ export const ContaAzulManager: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
 
   const PAGE_SIZE = 30;
+
+  // CPF Search (Conta Azul)
+  const [cpfInput, setCpfInput] = useState('');
+  const [cpfSearchLoading, setCpfSearchLoading] = useState(false);
+  const [cpfReceber, setCpfReceber] = useState<any[]>([]);
+  const [cpfPagar, setCpfPagar] = useState<any[]>([]);
+  const [cpfSearchDone, setCpfSearchDone] = useState(false);
+  const [cpfSearchError, setCpfSearchError] = useState<string | null>(null);
+  const [cpfCopied, setCpfCopied] = useState(false);
+
+  const formatCPF = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  };
+
+  const handleCpfSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = cpfInput.replace(/\D/g, '');
+    if (clean.length < 11) { setCpfSearchError('CPF deve ter 11 dígitos.'); return; }
+
+    setCpfSearchLoading(true);
+    setCpfSearchError(null);
+    setCpfReceber([]);
+    setCpfPagar([]);
+    setCpfSearchDone(false);
+    try {
+      const result = await appBackend.lookupCpfGlobal(clean);
+      const names = new Set<string>();
+      if (result?.profile?.full_name) names.add(result.profile.full_name);
+      if (result?.collaborator?.full_name) names.add(result.collaborator.full_name);
+      if (result?.instructor?.full_name) names.add(result.instructor.full_name);
+      if (result?.student?.full_name) names.add(result.student.full_name);
+      if (result?.partner_studio?.responsible_name) names.add(result.partner_studio.responsible_name);
+      if (result?.franchise?.franchisee_name) names.add(result.franchise.franchisee_name);
+      (result?.deals || []).forEach((d: any) => {
+        if (d.company_name) names.add(d.company_name);
+        if (d.contact_name) names.add(d.contact_name);
+      });
+      const nameList = Array.from(names).filter(n => n.trim());
+      if (nameList.length === 0) {
+        setCpfSearchError('Nenhum nome encontrado para este CPF no sistema.');
+        return;
+      }
+      const { receber, pagar } = await appBackend.lookupContaAzulByName(nameList);
+      setCpfReceber(receber);
+      setCpfPagar(pagar);
+    } catch (err: any) {
+      setCpfSearchError(err.message || 'Erro ao buscar dados.');
+    } finally {
+      setCpfSearchLoading(false);
+      setCpfSearchDone(true);
+    }
+  };
 
   // ── Derived state ─────────────────────────────────────────
 
@@ -758,6 +815,7 @@ export const ContaAzulManager: React.FC = () => {
     { id: 'categories', label: 'Categorias', icon: <Tag size={15} /> },
     { id: 'create', label: 'Criar Lançamento', icon: <Plus size={15} /> },
     { id: 'contas', label: 'Contas', icon: <Building2 size={15} /> },
+    { id: 'cpf_search', label: 'Busca CPF', icon: <Fingerprint size={15} /> },
     { id: 'powerbi', label: 'Power BI', icon: <Monitor size={15} /> },
   ];
 
@@ -944,7 +1002,7 @@ export const ContaAzulManager: React.FC = () => {
       </div>
 
       {/* Not connected state */}
-      {!isSelectedConnected && !isCheckingAuth && activeTab !== 'powerbi' && activeTab !== 'contas' && (
+      {!isSelectedConnected && !isCheckingAuth && activeTab !== 'powerbi' && activeTab !== 'contas' && activeTab !== 'cpf_search' && (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-20">
           <Landmark size={80} className="text-slate-200 mb-6" />
           <h3 className="text-xl font-black text-slate-400 mb-2">
@@ -1734,6 +1792,198 @@ export const ContaAzulManager: React.FC = () => {
                   </p>
                 </div>
                 <Building2 size={48} className="text-white/10" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ BUSCA CPF ═══ */}
+        {activeTab === 'cpf_search' && (
+          <div className="space-y-5 animate-in slide-in-from-right-4 duration-500">
+            <div className="bg-gradient-to-r from-blue-700 to-blue-900 rounded-[2rem] p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/5 rounded-full blur-3xl"></div>
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/20">
+                    <Fingerprint size={24} className="text-blue-200" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black">Busca por CPF — Conta Azul</h2>
+                    <p className="text-blue-300 text-xs">Encontre todas as contas a receber e a pagar de um CPF</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleCpfSearch} className="flex gap-2 mt-4">
+                  <div className="relative flex-1">
+                    <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" />
+                    <input
+                      type="text"
+                      placeholder="000.000.000-00"
+                      value={cpfInput}
+                      onChange={e => setCpfInput(formatCPF(e.target.value))}
+                      className="w-full pl-10 pr-10 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-blue-400 outline-none focus:ring-2 focus:ring-blue-300 font-mono text-lg tracking-wider"
+                      maxLength={14}
+                    />
+                    {cpfInput && (
+                      <button
+                        type="button"
+                        onClick={() => { navigator.clipboard.writeText(cpfInput.replace(/\D/g, '')); setCpfCopied(true); setTimeout(() => setCpfCopied(false), 2000); }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300 hover:text-white transition-colors"
+                      >
+                        {cpfCopied ? <Check size={16} /> : <Copy size={16} />}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={cpfSearchLoading || cpfInput.replace(/\D/g, '').length < 11}
+                    className="bg-white/20 hover:bg-white/30 disabled:bg-white/5 disabled:cursor-not-allowed text-white font-bold px-6 rounded-xl flex items-center gap-2 transition-colors border border-white/20"
+                  >
+                    {cpfSearchLoading ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
+                    Buscar
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {cpfSearchError && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+                <AlertTriangle className="text-red-500 shrink-0" size={20} />
+                <p className="text-sm text-red-700 font-medium">{cpfSearchError}</p>
+              </div>
+            )}
+
+            {cpfSearchLoading && (
+              <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                <Loader2 className="mx-auto text-blue-400 mb-3 animate-spin" size={36} />
+                <p className="text-slate-500 font-medium">Buscando registros no Conta Azul...</p>
+              </div>
+            )}
+
+            {cpfSearchDone && !cpfSearchLoading && (cpfReceber.length > 0 || cpfPagar.length > 0) && (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-white rounded-2xl p-4 border border-blue-100 shadow-sm">
+                    <p className="text-[10px] font-bold text-blue-400 uppercase">A Receber (Total)</p>
+                    <p className="text-xl font-black text-blue-700">
+                      {formatCurrency(cpfReceber.reduce((s, r) => s + Number(r.valor || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-blue-400">{cpfReceber.length} registros</p>
+                  </div>
+                  <div className="bg-white rounded-2xl p-4 border border-green-100 shadow-sm">
+                    <p className="text-[10px] font-bold text-green-400 uppercase">Recebido</p>
+                    <p className="text-xl font-black text-green-700">
+                      {formatCurrency(cpfReceber.filter(r => r.status === 'PAGO').reduce((s, r) => s + Number(r.valor || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-green-400">{cpfReceber.filter(r => r.status === 'PAGO').length} pagos</p>
+                  </div>
+                  <div className="bg-white rounded-2xl p-4 border border-orange-100 shadow-sm">
+                    <p className="text-[10px] font-bold text-orange-400 uppercase">A Pagar (Total)</p>
+                    <p className="text-xl font-black text-orange-700">
+                      {formatCurrency(cpfPagar.reduce((s, r) => s + Number(r.valor || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-orange-400">{cpfPagar.length} registros</p>
+                  </div>
+                  <div className="bg-white rounded-2xl p-4 border border-red-100 shadow-sm">
+                    <p className="text-[10px] font-bold text-red-400 uppercase">Pendente (Pagar)</p>
+                    <p className="text-xl font-black text-red-700">
+                      {formatCurrency(cpfPagar.filter(r => r.status === 'PENDENTE').reduce((s, r) => s + Number(r.valor || 0), 0))}
+                    </p>
+                    <p className="text-[10px] text-red-400">{cpfPagar.filter(r => r.status === 'PENDENTE').length} pendentes</p>
+                  </div>
+                </div>
+
+                {cpfReceber.length > 0 && (
+                  <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                        <DollarSign size={16} className="text-blue-600" />
+                      </div>
+                      <h4 className="text-sm font-black text-slate-700 uppercase tracking-widest">Contas a Receber</h4>
+                      <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{cpfReceber.length}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[10px] font-bold text-blue-400 uppercase border-b border-blue-50 bg-blue-50/30">
+                            <th className="p-3 pr-4">Descrição</th>
+                            <th className="p-3 pr-4">Valor</th>
+                            <th className="p-3 pr-4">Status</th>
+                            <th className="p-3 pr-4">Vencimento</th>
+                            <th className="p-3">Categoria</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cpfReceber.map((r: any, idx: number) => (
+                            <tr key={r.id || idx} className="border-b border-blue-50/50 hover:bg-blue-50/20">
+                              <td className="p-3 pr-4 font-medium text-slate-700">{r.descricao || '—'}</td>
+                              <td className="p-3 pr-4 text-blue-700 font-bold">{r.valor ? formatCurrency(Number(r.valor)) : '—'}</td>
+                              <td className="p-3 pr-4">
+                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                  r.status === 'PAGO' ? "bg-green-100 text-green-700" :
+                                  r.status === 'PENDENTE' ? "bg-amber-100 text-amber-700" :
+                                  "bg-slate-100 text-slate-600"
+                                )}>{r.status}</span>
+                              </td>
+                              <td className="p-3 pr-4 text-slate-500">{r.data_vencimento ? formatDate(r.data_vencimento) : '—'}</td>
+                              <td className="p-3 text-slate-500">{r.categoria_nome || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {cpfPagar.length > 0 && (
+                  <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                      <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+                        <Package size={16} className="text-orange-600" />
+                      </div>
+                      <h4 className="text-sm font-black text-slate-700 uppercase tracking-widest">Contas a Pagar</h4>
+                      <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{cpfPagar.length}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[10px] font-bold text-orange-400 uppercase border-b border-orange-50 bg-orange-50/30">
+                            <th className="p-3 pr-4">Descrição</th>
+                            <th className="p-3 pr-4">Valor</th>
+                            <th className="p-3 pr-4">Status</th>
+                            <th className="p-3 pr-4">Vencimento</th>
+                            <th className="p-3">Fornecedor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cpfPagar.map((p: any, idx: number) => (
+                            <tr key={p.id || idx} className="border-b border-orange-50/50 hover:bg-orange-50/20">
+                              <td className="p-3 pr-4 font-medium text-slate-700">{p.descricao || '—'}</td>
+                              <td className="p-3 pr-4 text-orange-700 font-bold">{p.valor ? formatCurrency(Number(p.valor)) : '—'}</td>
+                              <td className="p-3 pr-4">
+                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                  p.status === 'PAGO' ? "bg-green-100 text-green-700" :
+                                  p.status === 'PENDENTE' ? "bg-amber-100 text-amber-700" :
+                                  "bg-slate-100 text-slate-600"
+                                )}>{p.status}</span>
+                              </td>
+                              <td className="p-3 pr-4 text-slate-500">{p.data_vencimento ? formatDate(p.data_vencimento) : '—'}</td>
+                              <td className="p-3 text-slate-500">{p.fornecedor_nome || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {cpfSearchDone && !cpfSearchLoading && cpfReceber.length === 0 && cpfPagar.length === 0 && !cpfSearchError && (
+              <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                <DollarSign className="mx-auto text-slate-300 mb-3" size={48} />
+                <p className="text-slate-500 font-medium">Nenhum registro financeiro encontrado no Conta Azul para este CPF.</p>
+                <p className="text-xs text-slate-400 mt-1">Verifique se o CPF possui lançamentos sincronizados.</p>
               </div>
             )}
           </div>

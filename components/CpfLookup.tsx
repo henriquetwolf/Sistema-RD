@@ -73,6 +73,42 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [subTab, setSubTab] = useState<'geral' | 'conta_azul'>('geral');
+  const [contaAzulReceber, setContaAzulReceber] = useState<any[]>([]);
+  const [contaAzulPagar, setContaAzulPagar] = useState<any[]>([]);
+  const [isLoadingContaAzul, setIsLoadingContaAzul] = useState(false);
+  const [contaAzulLoaded, setContaAzulLoaded] = useState(false);
+
+  const extractKnownNames = (r: CpfLookupResult): string[] => {
+    const names = new Set<string>();
+    if (r.profile?.full_name) names.add(r.profile.full_name);
+    if (r.collaborator?.full_name) names.add(r.collaborator.full_name);
+    if (r.instructor?.full_name) names.add(r.instructor.full_name);
+    if (r.student?.full_name) names.add(r.student.full_name);
+    if (r.partner_studio?.responsible_name) names.add(r.partner_studio.responsible_name);
+    if (r.franchise?.franchisee_name) names.add(r.franchise.franchisee_name);
+    (r.deals || []).forEach((d: any) => {
+      if (d.company_name) names.add(d.company_name);
+      if (d.contact_name) names.add(d.contact_name);
+    });
+    return Array.from(names).filter(n => n.trim());
+  };
+
+  const loadContaAzulData = async (r: CpfLookupResult) => {
+    if (contaAzulLoaded) return;
+    const names = extractKnownNames(r);
+    if (names.length === 0) { setContaAzulLoaded(true); return; }
+    setIsLoadingContaAzul(true);
+    try {
+      const { receber, pagar } = await appBackend.lookupContaAzulByName(names);
+      setContaAzulReceber(receber);
+      setContaAzulPagar(pagar);
+    } catch (e: any) {
+      console.error('Erro ao buscar Conta Azul:', e);
+    } finally {
+      setIsLoadingContaAzul(false);
+      setContaAzulLoaded(true);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +119,9 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
     setError(null);
     setResult(null);
     setSubTab('geral');
+    setContaAzulReceber([]);
+    setContaAzulPagar([]);
+    setContaAzulLoaded(false);
     try {
       const data = await appBackend.lookupCpfGlobal(clean);
       if (!data) { setError('Erro ao consultar. Tente novamente.'); return; }
@@ -216,7 +255,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                 Geral
               </button>
               <button
-                onClick={() => setSubTab('conta_azul')}
+                onClick={() => { setSubTab('conta_azul'); if (result) loadContaAzulData(result); }}
                 className={clsx(
                   "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold transition-colors",
                   subTab === 'conta_azul'
@@ -226,9 +265,9 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
               >
                 <DollarSign size={16} />
                 Conta Azul
-                {(hasData(result.conta_azul_receber) || hasData(result.conta_azul_pagar)) && (
+                {contaAzulLoaded && (contaAzulReceber.length > 0 || contaAzulPagar.length > 0) && (
                   <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    {(result.conta_azul_receber?.length || 0) + (result.conta_azul_pagar?.length || 0)}
+                    {contaAzulReceber.length + contaAzulPagar.length}
                   </span>
                 )}
               </button>
@@ -444,7 +483,12 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
           {/* ===== SUB-ABA CONTA AZUL ===== */}
           {subTab === 'conta_azul' && (
             <>
-              {(hasData(result.conta_azul_receber) || hasData(result.conta_azul_pagar)) ? (
+              {isLoadingContaAzul ? (
+                <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                  <Loader2 className="mx-auto text-blue-400 mb-3 animate-spin" size={36} />
+                  <p className="text-slate-500 font-medium">Buscando registros no Conta Azul...</p>
+                </div>
+              ) : (contaAzulReceber.length > 0 || contaAzulPagar.length > 0) ? (
                 <div className="space-y-4 animate-in fade-in duration-300">
                   <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 space-y-6">
                     <div className="flex items-center gap-3 mb-2">
@@ -461,36 +505,36 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                       <div className="bg-white rounded-xl p-3 border border-blue-100">
                         <p className="text-[10px] font-bold text-blue-400 uppercase">A Receber (Total)</p>
                         <p className="text-lg font-black text-blue-700">
-                          {formatCurrency((result.conta_azul_receber || []).reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                          {formatCurrency(contaAzulReceber.reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
                         </p>
-                        <p className="text-[10px] text-blue-400">{result.conta_azul_receber?.length || 0} registros</p>
+                        <p className="text-[10px] text-blue-400">{contaAzulReceber.length} registros</p>
                       </div>
                       <div className="bg-white rounded-xl p-3 border border-green-100">
                         <p className="text-[10px] font-bold text-green-400 uppercase">Recebido</p>
                         <p className="text-lg font-black text-green-700">
-                          {formatCurrency((result.conta_azul_receber || []).filter((r: any) => r.status === 'PAGO').reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                          {formatCurrency(contaAzulReceber.filter((r: any) => r.status === 'PAGO').reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
                         </p>
-                        <p className="text-[10px] text-green-400">{(result.conta_azul_receber || []).filter((r: any) => r.status === 'PAGO').length} pagos</p>
+                        <p className="text-[10px] text-green-400">{contaAzulReceber.filter((r: any) => r.status === 'PAGO').length} pagos</p>
                       </div>
                       <div className="bg-white rounded-xl p-3 border border-orange-100">
                         <p className="text-[10px] font-bold text-orange-400 uppercase">A Pagar (Total)</p>
                         <p className="text-lg font-black text-orange-700">
-                          {formatCurrency((result.conta_azul_pagar || []).reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                          {formatCurrency(contaAzulPagar.reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
                         </p>
-                        <p className="text-[10px] text-orange-400">{result.conta_azul_pagar?.length || 0} registros</p>
+                        <p className="text-[10px] text-orange-400">{contaAzulPagar.length} registros</p>
                       </div>
                       <div className="bg-white rounded-xl p-3 border border-red-100">
                         <p className="text-[10px] font-bold text-red-400 uppercase">Pendente (Pagar)</p>
                         <p className="text-lg font-black text-red-700">
-                          {formatCurrency((result.conta_azul_pagar || []).filter((r: any) => r.status === 'PENDENTE').reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                          {formatCurrency(contaAzulPagar.filter((r: any) => r.status === 'PENDENTE').reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
                         </p>
-                        <p className="text-[10px] text-red-400">{(result.conta_azul_pagar || []).filter((r: any) => r.status === 'PENDENTE').length} pendentes</p>
+                        <p className="text-[10px] text-red-400">{contaAzulPagar.filter((r: any) => r.status === 'PENDENTE').length} pendentes</p>
                       </div>
                     </div>
                   </div>
 
-                  {hasData(result.conta_azul_receber) && (
-                    <Section title="Contas a Receber" icon={DollarSign} color="bg-blue-50 text-blue-600" count={result.conta_azul_receber.length} defaultOpen>
+                  {contaAzulReceber.length > 0 && (
+                    <Section title="Contas a Receber" icon={DollarSign} color="bg-blue-50 text-blue-600" count={contaAzulReceber.length} defaultOpen>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
@@ -503,7 +547,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                             </tr>
                           </thead>
                           <tbody>
-                            {result.conta_azul_receber.map((r: any) => (
+                            {contaAzulReceber.map((r: any) => (
                               <tr key={r.id} className="border-b border-blue-50 hover:bg-blue-50/30">
                                 <td className="p-3 pr-4 font-medium text-slate-700">{r.descricao || '—'}</td>
                                 <td className="p-3 pr-4 text-blue-700 font-bold">{r.valor ? formatCurrency(Number(r.valor)) : '—'}</td>
@@ -524,8 +568,8 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                     </Section>
                   )}
 
-                  {hasData(result.conta_azul_pagar) && (
-                    <Section title="Contas a Pagar" icon={Package} color="bg-orange-50 text-orange-600" count={result.conta_azul_pagar.length} defaultOpen>
+                  {contaAzulPagar.length > 0 && (
+                    <Section title="Contas a Pagar" icon={Package} color="bg-orange-50 text-orange-600" count={contaAzulPagar.length} defaultOpen>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
@@ -538,7 +582,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                             </tr>
                           </thead>
                           <tbody>
-                            {result.conta_azul_pagar.map((p: any) => (
+                            {contaAzulPagar.map((p: any) => (
                               <tr key={p.id} className="border-b border-orange-50 hover:bg-orange-50/30">
                                 <td className="p-3 pr-4 font-medium text-slate-700">{p.descricao || '—'}</td>
                                 <td className="p-3 pr-4 text-orange-700 font-bold">{p.valor ? formatCurrency(Number(p.valor)) : '—'}</td>
@@ -559,13 +603,13 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                     </Section>
                   )}
                 </div>
-              ) : (
+              ) : contaAzulLoaded ? (
                 <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                   <DollarSign className="mx-auto text-slate-300 mb-3" size={48} />
                   <p className="text-slate-500 font-medium">Nenhum registro financeiro encontrado no Conta Azul para este CPF.</p>
                   <p className="text-xs text-slate-400 mt-1">Verifique se o CPF possui dados sincronizados no Conta Azul.</p>
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </div>

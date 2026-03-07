@@ -1996,7 +1996,7 @@ export const CrmBoard: React.FC = () => {
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Responsável Comercial</label>
                         <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
                             <option value="">Selecione...</option>
-                            {(collaborators || []).map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                            {(collaborators || []).filter(c => c.department === 'Comercial').map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
                         </select>
                     </div>
                     <div>

@@ -172,9 +172,23 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     return String(maxCode + 1);
   };
 
+  const buildModCode = (data: ClassItem, mod: 1 | 2): string => {
+    const date = mod === 1 ? data.dateMod1 : data.dateMod2;
+    const parts = [
+      data.city,
+      data.state,
+      data.course,
+      data.classCode,
+      data.extraClass,
+      date ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR') : '',
+    ].filter(Boolean);
+    return parts.join(' - ');
+  };
+
   const handleOpenNew = () => {
     const code = generateNextClassCode();
-    setFormData({ ...initialFormState, classCode: code, mod1Code: `${code}M1`, mod2Code: `${code}M2` });
+    const base = { ...initialFormState, classCode: code };
+    setFormData({ ...base, mod1Code: buildModCode(base, 1), mod2Code: buildModCode(base, 2) });
     setShowModal(true);
   };
   const handleEdit = (item: ClassItem) => { setFormData({ ...item }); setActiveMenuId(null); setShowModal(true); };
@@ -204,12 +218,14 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     } catch(e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSaving(false); }
   };
 
+  const modCodeFields: (keyof ClassItem)[] = ['city', 'state', 'course', 'classCode', 'extraClass', 'dateMod1', 'dateMod2'];
+
   const handleInputChange = (field: keyof ClassItem, value: any) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
-      if (field === 'classCode' && value) {
-        updated.mod1Code = `${value}M1`;
-        updated.mod2Code = `${value}M2`;
+      if (modCodeFields.includes(field)) {
+        updated.mod1Code = buildModCode(updated, 1);
+        updated.mod2Code = buildModCode(updated, 2);
       }
       return updated;
     });

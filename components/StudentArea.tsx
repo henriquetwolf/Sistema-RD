@@ -113,6 +113,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [franchisePresentationLoading, setFranchisePresentationLoading] = useState(false);
     const [franchiseLeadSending, setFranchiseLeadSending] = useState(false);
     const [franchiseLeadSuccess, setFranchiseLeadSuccess] = useState(false);
+    const [franchiseInterestObservation, setFranchiseInterestObservation] = useState('');
 
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
@@ -155,13 +156,19 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         setFranchiseLeadSuccess(false);
         try {
             const deal = student.deals?.[0];
+            const observation = [
+                '[Interesse registrado via Área do Aluno - Apresentação Franquia.]',
+                franchiseInterestObservation.trim() ? `\n\nInteresse do aluno: ${franchiseInterestObservation.trim()}` : '',
+            ].join('');
             await appBackend.createFranchiseLead({
                 contact_name: student.name || '',
                 email: student.email || '',
                 phone: deal?.phone || '',
                 cpf: student.cpf?.replace(/\D/g, '') || '',
+                observation: observation.trim() || '[Interesse registrado via Área do Aluno - Apresentação Franquia.]',
             });
             setFranchiseLeadSuccess(true);
+            setFranchiseInterestObservation('');
         } catch (e: any) {
             console.error('Erro ao registrar interesse:', e);
             alert('Não foi possível registrar seu interesse. Tente novamente ou entre em contato.');
@@ -2023,7 +2030,18 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                         ) : (
                                             <>
                                                 <h4 className="text-xl font-black text-slate-800 mb-2">Interessado em ser franqueado?</h4>
-                                                <p className="text-slate-500 text-sm mb-6 max-w-lg mx-auto">Registre seu interesse e nossa equipe de franquias entrará em contato com você.</p>
+                                                <p className="text-slate-500 text-sm mb-4 max-w-lg mx-auto">Registre seu interesse e nossa equipe de franquias entrará em contato com você.</p>
+                                                <div className="max-w-lg mx-auto mb-6 text-left">
+                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Conte-nos seu interesse (opcional)</label>
+                                                    <textarea
+                                                        value={franchiseInterestObservation}
+                                                        onChange={e => setFranchiseInterestObservation(e.target.value)}
+                                                        placeholder="Ex: Pretendo abrir em São Paulo; tenho experiência em gestão; gostaria de saber sobre investimento..."
+                                                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none resize-none min-h-[100px]"
+                                                        maxLength={2000}
+                                                    />
+                                                    <p className="text-[10px] text-slate-400 mt-1">{franchiseInterestObservation.length}/2000</p>
+                                                </div>
                                                 <button
                                                     onClick={handleFranchiseInterest}
                                                     disabled={franchiseLeadSending}

@@ -673,6 +673,7 @@ export const appBackend = {
       phone: dealData.phone || '',
       cpf: dealData.cpf ? String(dealData.cpf).replace(/\D/g, '') : null,
       title: (dealData.contact_name || 'Lead Franquia') + ' - Franquia VOLL',
+      observation: dealData.observation || '[Interesse registrado via Área do Aluno - Apresentação Franquia.]',
       created_at: new Date().toISOString(),
       ...dealData,
     };

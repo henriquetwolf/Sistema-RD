@@ -215,6 +215,8 @@ export const CrmBoard: React.FC = () => {
   const [activeMapping, setActiveMapping] = useState<any | null>(null);
   const [dealProductMapping, setDealProductMapping] = useState<any | null>(null);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [isFetchingAluno, setIsFetchingAluno] = useState(false);
+  const [alunoFound, setAlunoFound] = useState<{ id: string; full_name: string } | null>(null);
   const [pendingCloseMove, setPendingCloseMove] = useState<{ dealId: string; pipeline: string; targetStage: string; previousStage: string } | null>(null);
   const [caAccounts, setCaAccounts] = useState<ContaAzulAccount[]>([]);
   const [selectedCaAccountId, setSelectedCaAccountId] = useState<string | null>(null);
@@ -1164,6 +1166,94 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
+  const fetchAlunoByCpf = async (rawCpf: string) => {
+      const digits = rawCpf.replace(/\D/g, '');
+      if (digits.length < 11) { setAlunoFound(null); return; }
+      setIsFetchingAluno(true);
+      try {
+          const { data: aluno } = await appBackend.client
+              .from('crm_alunos')
+              .select('*')
+              .eq('cpf', digits)
+              .maybeSingle();
+          if (!aluno) { setAlunoFound(null); return; }
+          setAlunoFound({ id: aluno.id, full_name: aluno.full_name });
+
+          const { data: emails } = await appBackend.client
+              .from('crm_aluno_emails')
+              .select('email, is_primary')
+              .eq('aluno_id', aluno.id)
+              .order('is_primary', { ascending: false });
+
+          const primaryEmail = emails?.find(e => e.is_primary)?.email || emails?.[0]?.email || '';
+
+          setDealFormData(prev => ({
+              ...prev,
+              companyName: prev.companyName || aluno.full_name || '',
+              phone: prev.phone || aluno.phone || '',
+              email: prev.email || primaryEmail,
+              zipCode: prev.zipCode || aluno.zip_code || '',
+              address: prev.address || aluno.address || '',
+              addressNumber: prev.addressNumber || aluno.address_number || '',
+              neighborhood: prev.neighborhood || aluno.neighborhood || '',
+              addressCity: prev.addressCity || aluno.city || '',
+              addressState: prev.addressState || aluno.state || '',
+          }));
+      } catch (err) {
+          console.error('Erro ao buscar aluno por CPF:', err);
+          setAlunoFound(null);
+      } finally {
+          setIsFetchingAluno(false);
+      }
+  };
+
+  const upsertAlunoCadastro = async (cpf: string, dealData: any) => {
+      const digits = cpf?.replace(/\D/g, '') || '';
+      if (digits.length < 11) return;
+      try {
+          const { data: existing } = await appBackend.client
+              .from('crm_alunos')
+              .select('id')
+              .eq('cpf', digits)
+              .maybeSingle();
+
+          const alunoPayload = {
+              cpf: digits,
+              full_name: dealData.company_name || dealData.contact_name || '',
+              phone: dealData.phone || '',
+              zip_code: dealData.zip_code || '',
+              address: dealData.address || '',
+              address_number: dealData.address_number || '',
+              neighborhood: dealData.neighborhood || '',
+              city: dealData.address_city || '',
+              state: dealData.address_state || '',
+          };
+
+          let alunoId: string;
+          if (existing) {
+              await appBackend.client.from('crm_alunos').update(alunoPayload).eq('id', existing.id);
+              alunoId = existing.id;
+          } else {
+              const { data: created } = await appBackend.client.from('crm_alunos').insert([alunoPayload]).select('id').single();
+              alunoId = created?.id;
+          }
+
+          if (alunoId && dealData.email && dealData.email.trim()) {
+              const emailLower = dealData.email.trim().toLowerCase();
+              const { data: existingEmails } = await appBackend.client
+                  .from('crm_aluno_emails')
+                  .select('id')
+                  .eq('aluno_id', alunoId);
+
+              const hasNone = !existingEmails || existingEmails.length === 0;
+              await appBackend.client.from('crm_aluno_emails')
+                  .upsert({ aluno_id: alunoId, email: emailLower, is_primary: hasNone }, { onConflict: 'aluno_id,email' });
+          }
+      } catch (err) {
+          console.error('Erro ao atualizar cadastro do aluno:', err);
+      }
+  };
+
   const handleSaveDeal = async () => {
       if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
       const payload = {
@@ -1199,7 +1289,8 @@ export const CrmBoard: React.FC = () => {
                   triggerWhatsAppAutomation(data);
               }
           }
-          await fetchData(); setShowDealModal(false);
+          upsertAlunoCadastro(payload.cpf || '', payload);
+          await fetchData(); setShowDealModal(false); setAlunoFound(null);
       } catch (e: any) { handleDbError(e); }
   };
 
@@ -1918,7 +2009,21 @@ export const CrmBoard: React.FC = () => {
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">CPF</label>
-                        <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: formatCPF(e.target.value)})} maxLength={14} />
+                        <div className="relative">
+                            <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm pr-8" value={dealFormData.cpf} onChange={e => {
+                                const formatted = formatCPF(e.target.value);
+                                setDealFormData({...dealFormData, cpf: formatted});
+                                const digits = formatted.replace(/\D/g, '');
+                                if (digits.length === 11) fetchAlunoByCpf(formatted);
+                                else setAlunoFound(null);
+                            }} maxLength={14} />
+                            {isFetchingAluno && <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-indigo-500" />}
+                        </div>
+                        {dealFormData.cpf && dealFormData.cpf.replace(/\D/g, '').length === 11 && !isFetchingAluno && (
+                            <div className={clsx("mt-1.5 flex items-center gap-1.5 text-xs font-semibold rounded-md px-2 py-1", alunoFound ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                                {alunoFound ? <><CheckCircle size={12}/> Aluno encontrado: {alunoFound.full_name}</> : <><User size={12}/> Novo aluno — será cadastrado automaticamente</>}
+                            </div>
+                        )}
                     </div>
 
                     <div className="lg:col-span-3 border-t pt-4">

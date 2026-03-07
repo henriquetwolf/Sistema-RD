@@ -687,6 +687,54 @@ export interface EmailConfig {
   senderName: string;
 }
 
+// ── Cadastro Geral de Alunos ────────────────────────────────
+
+export interface Aluno {
+  id: string;
+  cpf: string;
+  full_name: string;
+  phone: string;
+  birth_date?: string;
+  zip_code: string;
+  address: string;
+  address_number: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  observation: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlunoEmail {
+  id: string;
+  aluno_id: string;
+  email: string;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export type TimelineEventType =
+  | 'lead_created'
+  | 'interest'
+  | 'purchase'
+  | 'course_access'
+  | 'certificate'
+  | 'event_registration'
+  | 'class_enrolled'
+  | 'support_ticket';
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  date: string;
+  title: string;
+  description: string;
+  value?: number;
+  status?: string;
+  meta?: Record<string, any>;
+}
+
 // ── Conta Azul Integration Types ────────────────────────────
 
 export interface ContaAzulAccount {

@@ -270,9 +270,17 @@ function App() {
           password: entity.password || '',
         };
         setCurrentInstructor(t);
-      } else if (role === 'student' && entity) {
-        const { data: deals } = await appBackend.client.from('crm_deals').select('*').eq('cpf', cpf.replace(/\D/g, ''));
-        setCurrentStudent({ email: entity.email || (deals?.[0]?.email) || '', name: entity.full_name, cpf: entity.cpf, deals: deals || [] });
+      } else if (role === 'student') {
+        const cleanCpf = cpf.replace(/\D/g, '');
+        const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        const { data: allDeals } = await appBackend.client
+          .from('crm_deals')
+          .select('*')
+          .or(`cpf.eq.${cleanCpf},cpf.eq.${formattedCpf},cpf.ilike.%${cleanCpf}%`);
+        const deals = (allDeals || []).filter((d: any) => d.student_access_enabled !== false);
+        const studentEmail = deals[0]?.email || authenticatedUser?.profile.email || '';
+        const studentName = entity?.full_name || deals[0]?.company_name || deals[0]?.contact_name || authenticatedUser?.profile.full_name || 'Aluno';
+        setCurrentStudent({ email: studentEmail, name: studentName, cpf: cleanCpf, deals });
       } else if (role === 'partner_studio' && entity) {
         setCurrentStudio({ id: entity.id, fantasyName: entity.fantasy_name, responsibleName: entity.responsible_name, email: entity.email, cnpj: entity.cnpj });
       } else if (role === 'franchisee' && entity) {

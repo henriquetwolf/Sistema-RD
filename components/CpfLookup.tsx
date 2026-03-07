@@ -72,6 +72,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
   const [result, setResult] = useState<CpfLookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showContaAzul, setShowContaAzul] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +82,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setShowContaAzul(false);
     try {
       const data = await appBackend.lookupCpfGlobal(clean);
       if (!data) { setError('Erro ao consultar. Tente novamente.'); return; }
@@ -195,8 +197,145 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                   )}
                 </div>
               </div>
+              {(hasData(result.conta_azul_receber) || hasData(result.conta_azul_pagar)) && (
+                <button
+                  onClick={() => setShowContaAzul(!showContaAzul)}
+                  className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 transition-colors shadow-lg shadow-blue-600/20"
+                >
+                  <DollarSign size={18} />
+                  Conta Azul
+                  <span className="bg-white/20 text-xs px-2 py-0.5 rounded-full font-bold">
+                    {(result.conta_azul_receber?.length || 0) + (result.conta_azul_pagar?.length || 0)}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
+
+          {showContaAzul && (hasData(result.conta_azul_receber) || hasData(result.conta_azul_pagar)) && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+                  <DollarSign size={20} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-blue-900">Conta Azul — Resumo Financeiro</h3>
+                  <p className="text-xs text-blue-600">CPF: {formatCPF(result.cpf)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white rounded-xl p-3 border border-blue-100">
+                  <p className="text-[10px] font-bold text-blue-400 uppercase">A Receber (Total)</p>
+                  <p className="text-lg font-black text-blue-700">
+                    {formatCurrency((result.conta_azul_receber || []).reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                  </p>
+                  <p className="text-[10px] text-blue-400">{result.conta_azul_receber?.length || 0} registros</p>
+                </div>
+                <div className="bg-white rounded-xl p-3 border border-green-100">
+                  <p className="text-[10px] font-bold text-green-400 uppercase">Recebido</p>
+                  <p className="text-lg font-black text-green-700">
+                    {formatCurrency((result.conta_azul_receber || []).filter((r: any) => r.status === 'PAGO').reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                  </p>
+                  <p className="text-[10px] text-green-400">{(result.conta_azul_receber || []).filter((r: any) => r.status === 'PAGO').length} pagos</p>
+                </div>
+                <div className="bg-white rounded-xl p-3 border border-orange-100">
+                  <p className="text-[10px] font-bold text-orange-400 uppercase">A Pagar (Total)</p>
+                  <p className="text-lg font-black text-orange-700">
+                    {formatCurrency((result.conta_azul_pagar || []).reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                  </p>
+                  <p className="text-[10px] text-orange-400">{result.conta_azul_pagar?.length || 0} registros</p>
+                </div>
+                <div className="bg-white rounded-xl p-3 border border-red-100">
+                  <p className="text-[10px] font-bold text-red-400 uppercase">Pendente (Pagar)</p>
+                  <p className="text-lg font-black text-red-700">
+                    {formatCurrency((result.conta_azul_pagar || []).filter((r: any) => r.status === 'PENDENTE').reduce((s: number, r: any) => s + Number(r.valor || 0), 0))}
+                  </p>
+                  <p className="text-[10px] text-red-400">{(result.conta_azul_pagar || []).filter((r: any) => r.status === 'PENDENTE').length} pendentes</p>
+                </div>
+              </div>
+
+              {hasData(result.conta_azul_receber) && (
+                <div>
+                  <h4 className="text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
+                    <DollarSign size={14} /> Contas a Receber ({result.conta_azul_receber.length})
+                  </h4>
+                  <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[10px] font-bold text-blue-400 uppercase border-b border-blue-50 bg-blue-50/50">
+                            <th className="p-3 pr-4">Descrição</th>
+                            <th className="p-3 pr-4">Valor</th>
+                            <th className="p-3 pr-4">Status</th>
+                            <th className="p-3 pr-4">Vencimento</th>
+                            <th className="p-3">Categoria</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.conta_azul_receber.map((r: any) => (
+                            <tr key={r.id} className="border-b border-blue-50 hover:bg-blue-50/30">
+                              <td className="p-3 pr-4 font-medium text-slate-700">{r.descricao || '—'}</td>
+                              <td className="p-3 pr-4 text-blue-700 font-bold">{r.valor ? formatCurrency(Number(r.valor)) : '—'}</td>
+                              <td className="p-3 pr-4">
+                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                  r.status === 'PAGO' ? "bg-green-100 text-green-700" :
+                                  r.status === 'PENDENTE' ? "bg-amber-100 text-amber-700" :
+                                  "bg-slate-100 text-slate-600"
+                                )}>{r.status}</span>
+                              </td>
+                              <td className="p-3 pr-4 text-slate-500">{formatDate(r.data_vencimento)}</td>
+                              <td className="p-3 text-slate-500">{r.categoria_nome || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {hasData(result.conta_azul_pagar) && (
+                <div>
+                  <h4 className="text-sm font-bold text-orange-800 mb-2 flex items-center gap-2">
+                    <Package size={14} /> Contas a Pagar ({result.conta_azul_pagar.length})
+                  </h4>
+                  <div className="bg-white rounded-xl border border-orange-100 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[10px] font-bold text-orange-400 uppercase border-b border-orange-50 bg-orange-50/50">
+                            <th className="p-3 pr-4">Descrição</th>
+                            <th className="p-3 pr-4">Valor</th>
+                            <th className="p-3 pr-4">Status</th>
+                            <th className="p-3 pr-4">Vencimento</th>
+                            <th className="p-3">Fornecedor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.conta_azul_pagar.map((p: any) => (
+                            <tr key={p.id} className="border-b border-orange-50 hover:bg-orange-50/30">
+                              <td className="p-3 pr-4 font-medium text-slate-700">{p.descricao || '—'}</td>
+                              <td className="p-3 pr-4 text-orange-700 font-bold">{p.valor ? formatCurrency(Number(p.valor)) : '—'}</td>
+                              <td className="p-3 pr-4">
+                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                  p.status === 'PAGO' ? "bg-green-100 text-green-700" :
+                                  p.status === 'PENDENTE' ? "bg-amber-100 text-amber-700" :
+                                  "bg-slate-100 text-slate-600"
+                                )}>{p.status}</span>
+                              </td>
+                              <td className="p-3 pr-4 text-slate-500">{formatDate(p.data_vencimento)}</td>
+                              <td className="p-3 text-slate-500">{p.fornecedor_nome || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Perfil Unificado */}
           {hasData(result.profile) && (

@@ -780,6 +780,19 @@ export interface AiChatMessage {
   created_at: string;
 }
 
+export type TutorNotificationType = 'birthday' | 'course_completed' | 'welcome' | 'milestone' | 'custom';
+
+export interface AiTutorNotification {
+  id: string;
+  aluno_id: string;
+  avatar_id: string;
+  notification_type: TutorNotificationType;
+  notification_key: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 // ── Conta Azul Integration Types ────────────────────────────
 
 export interface ContaAzulAccount {

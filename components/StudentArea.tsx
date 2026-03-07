@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
 import { 
@@ -10,7 +10,7 @@ import {
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
     Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode,
-    Mail, Phone, Hash, Edit2, Home, Bot, Sparkles, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap
+    Mail, Phone, Hash, Edit2, Home, Bot, Sparkles, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap, Gift
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -100,6 +100,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [isStreamingChat, setIsStreamingChat] = useState(false);
     const chatScrollRef = useRef<HTMLDivElement>(null);
     const [streamingText, setStreamingText] = useState('');
+
+    // Popup proativo do tutor
+    const [tutorPopup, setTutorPopup] = useState<{ avatar: AiAvatar; message: string; type: string } | null>(null);
+    const [tutorPopupMinimized, setTutorPopupMinimized] = useState(false);
+    const [pendingNotifications, setPendingNotifications] = useState<AiTutorNotification[]>([]);
+    const popupCheckedRef = useRef(false);
 
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
@@ -359,20 +365,35 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const buildSystemPrompt = async (): Promise<string> => {
         if (!selectedAvatar) return '';
         const alunoId = await getAlunoId();
+        const cleanCpf = student.cpf?.replace(/\D/g, '') || '';
+        const safeDealIds = studentDealIds.length ? studentDealIds : ['-'];
 
-        const [kbRes, productsRes, coursesRes, dealsRes, certsRes] = await Promise.all([
+        const [kbRes, alunoRes, productsRes, coursesRes, dealsRes, certsRes, accessRes, classesRes, eventsRes, eventRegsRes] = await Promise.all([
             alunoId ? appBackend.client.from('crm_aluno_knowledge_base').select('*').eq('aluno_id', alunoId).maybeSingle() : Promise.resolve({ data: null }),
+            appBackend.client.from('crm_alunos').select('city, state, birth_date').eq('cpf', cleanCpf).maybeSingle(),
             appBackend.client.from('crm_products').select('name, category, price, description, target_areas').eq('status', 'active'),
-            appBackend.client.from('crm_online_courses').select('title, description, price'),
-            appBackend.client.from('crm_deals').select('product, stage_id, value').in('id', studentDealIds.length ? studentDealIds : ['-']),
-            alunoId ? appBackend.client.from('crm_student_certificates').select('course_name').eq('student_deal_id', studentDealIds[0] || '-') : Promise.resolve({ data: [] }),
+            appBackend.client.from('crm_online_courses').select('id, title, description, price'),
+            appBackend.client.from('crm_deals').select('product, stage_id, value').in('id', safeDealIds),
+            appBackend.client.from('crm_student_certificates').select('*, crm_certificates(title)').in('student_deal_id', safeDealIds),
+            appBackend.client.from('crm_student_course_access').select('course_id').in('student_deal_id', safeDealIds),
+            appBackend.client.from('crm_classes').select('id, course, city, state, status, date_mod_1, mod_1_code, mod_2_code').eq('status', 'active'),
+            appBackend.client.from('crm_events').select('id, name, description, location, dates, registration_open'),
+            appBackend.client.from('crm_event_registrations').select('event_id, workshop_id').in('student_id', safeDealIds),
         ]);
 
         const kb = kbRes.data;
+        const aluno = alunoRes.data;
         const products = productsRes.data || [];
-        const courses = coursesRes.data || [];
+        const onlineCourses = coursesRes.data || [];
         const deals = dealsRes.data || [];
         const certs = certsRes.data || [];
+        const accessIds = new Set((accessRes.data || []).map((a: any) => a.course_id));
+        const allClasses = classesRes.data || [];
+        const events = eventsRes.data || [];
+        const studentEventIds = new Set((eventRegsRes.data || []).map((r: any) => r.event_id));
+
+        const studentCity = aluno?.city || '';
+        const studentState = aluno?.state || '';
 
         const TONE_DESC: Record<string, string> = { formal: 'formal e profissional', friendly: 'amigável e acolhedor', motivational: 'motivacional e encorajador', technical: 'técnico e didático' };
 
@@ -380,21 +401,96 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         prompt += `[TOM DE COMUNICAÇÃO]\nComunique-se de forma ${TONE_DESC[selectedAvatar.tone] || 'amigável'}.\n\n`;
         prompt += `[ESPECIALIDADES DO TUTOR]\n${(selectedAvatar.specialties || []).join(', ')}\n\n`;
 
-        if (kb) {
-            prompt += `[PERFIL DO ALUNO]\nNome: ${student.name}\nNível: ${kb.experience_level}\nObjetivos: ${kb.objectives}\nÁreas de interesse: ${(kb.interest_areas || []).join(', ')}\nFormação: ${kb.academic_background}\nEspecialidades: ${kb.specialties}\nEstilo de aprendizagem: ${kb.learning_style}\nHoras disponíveis/semana: ${kb.available_hours_per_week}\n\n`;
-        } else {
-            prompt += `[PERFIL DO ALUNO]\nNome: ${student.name}\n(Perfil de aprendizagem ainda não preenchido)\n\n`;
+        // Perfil do aluno
+        prompt += `[PERFIL DO ALUNO]\nNome: ${student.name}\n`;
+        if (studentCity) prompt += `Cidade: ${studentCity}${studentState ? '/' + studentState : ''}\n`;
+
+        // Aniversário
+        const birthDate = aluno?.birth_date;
+        if (birthDate) {
+            const bd = new Date(birthDate);
+            const today = new Date();
+            const isBirthday = bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+            const daysToBirthday = (() => {
+                const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+                if (next < today) next.setFullYear(next.getFullYear() + 1);
+                return Math.ceil((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            })();
+            prompt += `Data de nascimento: ${bd.toLocaleDateString('pt-BR')}\n`;
+            if (isBirthday) prompt += `🎂 HOJE É ANIVERSÁRIO DO ALUNO! Deseje parabéns de forma calorosa!\n`;
+            else if (daysToBirthday <= 7) prompt += `Aniversário em ${daysToBirthday} dia(s). Pode mencionar que está chegando!\n`;
         }
 
-        const purchasedCourses = deals.filter(d => d.stage_id && ['won', 'closed', 'ganho'].some(s => String(d.stage_id).toLowerCase().includes(s))).map(d => d.product).filter(Boolean);
-        const interestedCourses = deals.filter(d => !['won', 'closed', 'ganho', 'lost', 'perdido'].some(s => String(d.stage_id || '').toLowerCase().includes(s))).map(d => d.product).filter(Boolean);
+        if (kb) {
+            prompt += `Nível: ${kb.experience_level}\nObjetivos: ${kb.objectives}\nÁreas de interesse: ${(kb.interest_areas || []).join(', ')}\nFormação: ${kb.academic_background}\nEspecialidades: ${kb.specialties}\nEstilo de aprendizagem: ${kb.learning_style}\nHoras disponíveis/semana: ${kb.available_hours_per_week}\n`;
+        } else {
+            prompt += `(Perfil de aprendizagem ainda não preenchido)\n`;
+        }
+        prompt += '\n';
 
-        prompt += `[HISTÓRICO DO ALUNO]\nCursos comprados: ${purchasedCourses.length ? purchasedCourses.join(', ') : 'Nenhum'}\nCursos com interesse: ${interestedCourses.length ? interestedCourses.join(', ') : 'Nenhum'}\nCertificados: ${certs.length ? certs.map((c: any) => c.course_name).join(', ') : 'Nenhum'}\n\n`;
+        // O que o aluno já tem
+        const purchasedProducts = deals.filter(d => d.stage_id && ['won', 'closed', 'ganho'].some(s => String(d.stage_id).toLowerCase().includes(s))).map(d => d.product).filter(Boolean);
+        const interestedProducts = deals.filter(d => !['won', 'closed', 'ganho', 'lost', 'perdido'].some(s => String(d.stage_id || '').toLowerCase().includes(s))).map(d => d.product).filter(Boolean);
+        const unlockedOnline = onlineCourses.filter(c => accessIds.has(c.id)).map(c => c.title);
+        const certNames = certs.map((c: any) => c.crm_certificates?.title || 'Certificado').filter(Boolean);
+        const registeredEventNames = events.filter(e => studentEventIds.has(e.id)).map(e => e.name);
 
-        const catalog = [...products.map(p => `- ${p.name} (${p.category || 'Produto'}) – R$${(p.price || 0).toFixed(2)}: ${p.description || ''}`), ...courses.map(c => `- ${c.title} (Curso Online) – R$${(c.price || 0).toFixed(2)}: ${c.description || ''}`)];
-        prompt += `[CATÁLOGO DE CURSOS/PRODUTOS DISPONÍVEIS]\n${catalog.length ? catalog.join('\n') : 'Catálogo vazio'}\n\n`;
+        // Certificados recentes (últimos 14 dias)
+        const recentCerts = certs.filter((c: any) => {
+            if (!c.issued_at) return false;
+            const diff = Date.now() - new Date(c.issued_at).getTime();
+            return diff < 14 * 24 * 60 * 60 * 1000;
+        }).map((c: any) => c.crm_certificates?.title || 'curso');
 
-        prompt += `[REGRAS]\n1. Sempre personalize as respostas com base no perfil do aluno.\n2. Recomende cursos do catálogo quando relevante, citando nome e preço.\n3. NÃO invente cursos que não existem no catálogo.\n4. Use o tom definido para este avatar.\n5. Considere o nível do aluno e adapte a linguagem.\n6. Incentive o progresso do aluno mencionando conquistas.\n7. Responda sempre em Português do Brasil.\n8. Seja conciso mas completo.`;
+        prompt += `[O QUE O ALUNO JÁ POSSUI]\n`;
+        prompt += `Cursos/Produtos comprados: ${purchasedProducts.length ? purchasedProducts.join(', ') : 'Nenhum'}\n`;
+        prompt += `Cursos online com acesso liberado: ${unlockedOnline.length ? unlockedOnline.join(', ') : 'Nenhum'}\n`;
+        prompt += `Certificados emitidos: ${certNames.length ? certNames.join(', ') : 'Nenhum'}\n`;
+        if (recentCerts.length) prompt += `🎓 CERTIFICADOS RECENTES (parabenize!): ${recentCerts.join(', ')}\n`;
+        prompt += `Eventos inscrito: ${registeredEventNames.length ? registeredEventNames.join(', ') : 'Nenhum'}\n`;
+        prompt += `Cursos com interesse (em negociação): ${interestedProducts.length ? interestedProducts.join(', ') : 'Nenhum'}\n\n`;
+
+        // Catálogo completo de produtos
+        const productCatalog = products.map(p => `- ${p.name} (${p.category || 'Produto'}) – R$${(p.price || 0).toFixed(2)}${p.target_areas?.length ? ' [Áreas: ' + p.target_areas.join(', ') + ']' : ''}: ${p.description || ''}`);
+        prompt += `[CATÁLOGO DE PRODUTOS E SERVIÇOS]\n${productCatalog.length ? productCatalog.join('\n') : 'Vazio'}\n\n`;
+
+        // Cursos online (separando os que o aluno já tem)
+        const availableOnline = onlineCourses.filter(c => !accessIds.has(c.id));
+        const onlineCatalog = availableOnline.map(c => `- ${c.title} – R$${(c.price || 0).toFixed(2)}: ${c.description || ''}`);
+        prompt += `[CURSOS ONLINE DISPONÍVEIS (que o aluno AINDA NÃO tem)]\n${onlineCatalog.length ? onlineCatalog.join('\n') : 'O aluno já possui todos os cursos online.'}\n\n`;
+
+        // Turmas presenciais com cidade
+        const classCatalog = allClasses.map(c => {
+            const date = c.date_mod_1 ? new Date(c.date_mod_1).toLocaleDateString('pt-BR') : 'A definir';
+            const location = [c.city, c.state].filter(Boolean).join('/');
+            const isNearby = studentCity && c.city && c.city.toLowerCase().trim() === studentCity.toLowerCase().trim();
+            return `- ${c.course} – ${location || 'Local a definir'} – Início: ${date}${isNearby ? ' ⭐ PERTO DO ALUNO' : ''}`;
+        });
+        prompt += `[TURMAS PRESENCIAIS ATIVAS]\n${classCatalog.length ? classCatalog.join('\n') : 'Nenhuma turma presencial ativa.'}\n`;
+        if (studentCity) prompt += `(A cidade do aluno é ${studentCity}/${studentState}. Priorize turmas nessa cidade ou região.)\n`;
+        prompt += '\n';
+
+        // Eventos
+        const openEvents = events.filter(e => e.registration_open);
+        const eventCatalog = openEvents.map(e => {
+            const dates = (e.dates || []).map((d: string) => new Date(d).toLocaleDateString('pt-BR')).join(', ');
+            const alreadyRegistered = studentEventIds.has(e.id);
+            return `- ${e.name} – Local: ${e.location || 'A definir'} – Datas: ${dates || 'A definir'}${alreadyRegistered ? ' (ALUNO JÁ INSCRITO)' : ' (INSCRIÇÕES ABERTAS)'}: ${e.description || ''}`;
+        });
+        prompt += `[EVENTOS]\n${eventCatalog.length ? eventCatalog.join('\n') : 'Nenhum evento com inscrições abertas.'}\n\n`;
+
+        // Regras
+        prompt += `[REGRAS]\n`;
+        prompt += `1. Sempre personalize as respostas com base no perfil completo do aluno.\n`;
+        prompt += `2. Ao recomendar, priorize o que o aluno AINDA NÃO TEM. Nunca recomende algo que ele já comprou ou já tem acesso.\n`;
+        prompt += `3. Para cursos presenciais, priorize turmas na cidade do aluno (${studentCity || 'não informada'}). Se não houver, sugira a mais próxima.\n`;
+        prompt += `4. Cite nome e preço ao recomendar cursos/produtos.\n`;
+        prompt += `5. NÃO invente cursos, produtos, turmas ou eventos que não existem nos catálogos acima.\n`;
+        prompt += `6. Use o tom definido para este avatar.\n`;
+        prompt += `7. Considere o nível do aluno e adapte a linguagem.\n`;
+        prompt += `8. Incentive o progresso do aluno mencionando conquistas (certificados, cursos concluídos).\n`;
+        prompt += `9. Responda sempre em Português do Brasil.\n`;
+        prompt += `10. Seja conciso mas completo.`;
 
         return prompt;
     };
@@ -459,6 +555,126 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (alunoId) await appBackend.client.from('crm_ai_chat_messages').delete().eq('aluno_id', alunoId);
         setChatMessages([]);
     };
+
+    // ── Notificações proativas do Tutor IA ────────────────────
+    const checkProactiveNotifications = async () => {
+        if (popupCheckedRef.current) return;
+        popupCheckedRef.current = true;
+
+        const cleanCpf = student.cpf?.replace(/\D/g, '') || '';
+        if (!cleanCpf) return;
+
+        const { data: alunoData } = await appBackend.client.from('crm_alunos').select('id, birth_date, full_name, selected_avatar_id').eq('cpf', cleanCpf).maybeSingle();
+        if (!alunoData?.selected_avatar_id) return;
+
+        const { data: avatarData } = await appBackend.client.from('crm_ai_avatars').select('*').eq('id', alunoData.selected_avatar_id).eq('is_active', true).maybeSingle();
+        if (!avatarData) return;
+
+        const alunoId = alunoData.id;
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const notifications: { type: string; key: string; context: string }[] = [];
+
+        // Verificar aniversário
+        if (alunoData.birth_date) {
+            const bd = new Date(alunoData.birth_date);
+            if (bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate()) {
+                const age = today.getFullYear() - bd.getFullYear();
+                notifications.push({ type: 'birthday', key: `birthday_${todayStr}`, context: `Hoje é aniversário de ${alunoData.full_name}! Ele/ela está fazendo ${age} anos.` });
+            }
+        }
+
+        // Verificar certificados recentes (últimos 7 dias)
+        const safeDealIds = studentDealIds.length ? studentDealIds : ['-'];
+        const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: recentCerts } = await appBackend.client.from('crm_student_certificates').select('*, crm_certificates(title)').in('student_deal_id', safeDealIds).gte('issued_at', sevenDaysAgo);
+        for (const cert of (recentCerts || [])) {
+            const certTitle = (cert as any).crm_certificates?.title || 'curso';
+            notifications.push({ type: 'course_completed', key: `cert_${cert.id}`, context: `${alunoData.full_name} concluiu o curso "${certTitle}" e recebeu um certificado recentemente!` });
+        }
+
+        // Verificar cursos online liberados recentemente (últimos 7 dias)
+        const { data: recentAccess } = await appBackend.client.from('crm_student_course_access').select('course_id, unlocked_at').in('student_deal_id', safeDealIds).gte('unlocked_at', sevenDaysAgo);
+        if (recentAccess?.length) {
+            const courseIds = recentAccess.map(a => a.course_id);
+            const { data: courseNames } = await appBackend.client.from('crm_online_courses').select('id, title').in('id', courseIds);
+            for (const access of recentAccess) {
+                const courseName = courseNames?.find(c => c.id === access.course_id)?.title || 'novo curso';
+                notifications.push({ type: 'milestone', key: `access_${access.course_id}_${todayStr}`, context: `${alunoData.full_name} recebeu acesso ao curso online "${courseName}" recentemente. Parabenize e incentive a começar os estudos!` });
+            }
+        }
+
+        if (notifications.length === 0) return;
+
+        // Filtrar notificações já enviadas
+        const keys = notifications.map(n => n.key);
+        const { data: existingNotifs } = await appBackend.client.from('crm_ai_tutor_notifications').select('notification_key').eq('aluno_id', alunoId).in('notification_key', keys);
+        const existingKeys = new Set((existingNotifs || []).map(n => n.notification_key));
+        const newNotifs = notifications.filter(n => !existingKeys.has(n.key));
+
+        if (newNotifs.length === 0) {
+            // Carregar notificações não lidas existentes para mostrar
+            const { data: unread } = await appBackend.client.from('crm_ai_tutor_notifications').select('*').eq('aluno_id', alunoId).eq('is_read', false).order('created_at', { ascending: false }).limit(1);
+            if (unread?.length) {
+                setPendingNotifications(unread);
+                setTutorPopup({ avatar: avatarData, message: unread[0].message, type: unread[0].notification_type });
+            }
+            return;
+        }
+
+        // Gerar mensagem personalizada com IA para a notificação mais importante
+        const priority = newNotifs.find(n => n.type === 'birthday') || newNotifs[0];
+
+        try {
+            if (!process.env.API_KEY) throw new Error('No API key');
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const TONE_DESC: Record<string, string> = { formal: 'formal e profissional', friendly: 'amigável e acolhedor', motivational: 'motivacional e encorajador', technical: 'técnico e didático' };
+
+            const msgPrompt = `${avatarData.personality_prompt}\n\nVocê é o tutor IA "${avatarData.name}". Seu tom é ${TONE_DESC[avatarData.tone] || 'amigável'}.\n\nContexto: ${priority.context}\n\nEscreva uma mensagem curta (máximo 2-3 frases) e calorosa para ${alunoData.full_name.split(' ')[0]}. ${priority.type === 'birthday' ? 'Deseje feliz aniversário de forma especial e personalizada.' : priority.type === 'course_completed' ? 'Parabenize pela conquista e incentive a continuar evoluindo.' : 'Parabenize e incentive.'} Use emojis com moderação. Responda APENAS a mensagem, sem prefixos.`;
+
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: msgPrompt, config: { temperature: 0.8 } });
+            const message = response.text?.trim() || (priority.type === 'birthday' ? `🎂 Parabéns pelo seu aniversário, ${alunoData.full_name.split(' ')[0]}! Que este novo ano seja cheio de conquistas!` : `🎉 Parabéns pela sua nova conquista! Continue assim!`);
+
+            // Salvar todas as novas notificações
+            for (const notif of newNotifs) {
+                const msg = notif.key === priority.key ? message : notif.context;
+                await appBackend.client.from('crm_ai_tutor_notifications').insert([{
+                    aluno_id: alunoId, avatar_id: avatarData.id, notification_type: notif.type, notification_key: notif.key, message: msg
+                }]).then(() => {});
+            }
+
+            setTutorPopup({ avatar: avatarData, message, type: priority.type });
+        } catch (e) {
+            console.error('Proactive notification error:', e);
+            const fallbackMsg = priority.type === 'birthday'
+                ? `🎂 Feliz aniversário, ${alunoData.full_name.split(' ')[0]}! Que este novo ano seja incrível!`
+                : `🎉 Parabéns pela sua conquista, ${alunoData.full_name.split(' ')[0]}! Continue evoluindo!`;
+            setTutorPopup({ avatar: avatarData, message: fallbackMsg, type: priority.type });
+            await appBackend.client.from('crm_ai_tutor_notifications').insert([{
+                aluno_id: alunoId, avatar_id: avatarData.id, notification_type: priority.type, notification_key: priority.key, message: fallbackMsg
+            }]).then(() => {});
+        }
+    };
+
+    const handleDismissPopup = async () => {
+        const alunoId = await getAlunoId();
+        if (alunoId) {
+            await appBackend.client.from('crm_ai_tutor_notifications').update({ is_read: true }).eq('aluno_id', alunoId).eq('is_read', false);
+        }
+        setTutorPopup(null);
+        setTutorPopupMinimized(false);
+    };
+
+    const handlePopupGoToChat = () => {
+        handleDismissPopup();
+        setActiveTab('ai_tutor');
+    };
+
+    // Disparar checagem proativa ao carregar o portal
+    useEffect(() => {
+        const timer = setTimeout(() => checkProactiveNotifications(), 2000);
+        return () => clearTimeout(timer);
+    }, []);
 
     const TONE_LABELS: Record<string, string> = { formal: 'Formal', friendly: 'Amigável', motivational: 'Motivacional', technical: 'Técnico' };
     const TONE_COLORS_BADGE: Record<string, string> = { formal: 'bg-slate-100 text-slate-600', friendly: 'bg-emerald-50 text-emerald-600', motivational: 'bg-amber-50 text-amber-600', technical: 'bg-indigo-50 text-indigo-600' };
@@ -1924,6 +2140,65 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                 senderEmail={student.email}
                 senderRole="student"
             />
+
+            {/* ── Popup Proativo do Tutor IA ──────────────────── */}
+            {tutorPopup && !tutorPopupMinimized && (
+                <div className="fixed bottom-6 right-6 z-[300] animate-in slide-in-from-bottom-4 fade-in duration-500 max-w-sm w-full">
+                    <div className={clsx("bg-white rounded-[2rem] shadow-2xl border-2 overflow-hidden", tutorPopup.type === 'birthday' ? 'border-pink-300' : 'border-purple-200')}>
+                        {tutorPopup.type === 'birthday' && (
+                            <div className="h-2 bg-gradient-to-r from-pink-500 via-yellow-400 to-pink-500 animate-pulse"/>
+                        )}
+                        {tutorPopup.type !== 'birthday' && (
+                            <div className="h-2 bg-gradient-to-r from-purple-500 to-indigo-500"/>
+                        )}
+                        <div className="p-5">
+                            <div className="flex items-start gap-4">
+                                <div className="relative shrink-0">
+                                    {tutorPopup.avatar.avatar_image_url ? (
+                                        <img src={tutorPopup.avatar.avatar_image_url} alt={tutorPopup.avatar.name} className="w-14 h-14 rounded-2xl object-cover border-2 border-purple-100 shadow-lg"/>
+                                    ) : (
+                                        <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-lg font-black shadow-lg">{tutorPopup.avatar.name.charAt(0)}</div>
+                                    )}
+                                    <div className={clsx("absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-white shadow-md", tutorPopup.type === 'birthday' ? 'bg-pink-500' : tutorPopup.type === 'course_completed' ? 'bg-emerald-500' : 'bg-purple-500')}>
+                                        {tutorPopup.type === 'birthday' ? <Gift size={12}/> : tutorPopup.type === 'course_completed' ? <Award size={12}/> : <Sparkles size={12}/>}
+                                    </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <h4 className="font-black text-slate-800 text-sm">{tutorPopup.avatar.name}</h4>
+                                        <button onClick={handleDismissPopup} className="p-1 hover:bg-slate-100 rounded-full text-slate-300 hover:text-slate-500 transition-colors"><X size={16}/></button>
+                                    </div>
+                                    <p className="text-sm text-slate-600 leading-relaxed">{tutorPopup.message}</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={handlePopupGoToChat} className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20">
+                                    <MessageSquare size={14}/> Conversar
+                                </button>
+                                <button onClick={() => setTutorPopupMinimized(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition-all">
+                                    Depois
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Botão minimizado do tutor ──────────────────── */}
+            {tutorPopup && tutorPopupMinimized && (
+                <button onClick={() => setTutorPopupMinimized(false)} className="fixed bottom-6 right-6 z-[300] group animate-in zoom-in-50 duration-300">
+                    <div className="relative">
+                        {tutorPopup.avatar.avatar_image_url ? (
+                            <img src={tutorPopup.avatar.avatar_image_url} alt={tutorPopup.avatar.name} className="w-16 h-16 rounded-2xl object-cover border-4 border-white shadow-2xl group-hover:scale-110 transition-transform"/>
+                        ) : (
+                            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-xl font-black border-4 border-white shadow-2xl group-hover:scale-110 transition-transform">{tutorPopup.avatar.name.charAt(0)}</div>
+                        )}
+                        <div className={clsx("absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-white shadow-md animate-bounce", tutorPopup.type === 'birthday' ? 'bg-pink-500' : 'bg-purple-500')}>
+                            {tutorPopup.type === 'birthday' ? <Gift size={12}/> : <MessageSquare size={10}/>}
+                        </div>
+                    </div>
+                </button>
+            )}
 
             <footer className="py-12 text-center text-slate-300">
                 <p className="text-[10px] font-black uppercase tracking-[0.4em]">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>

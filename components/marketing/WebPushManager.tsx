@@ -73,7 +73,15 @@ export const WebPushManager: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = campaigns.filter(c => {
+  const enriched = campaigns.map(c => {
+    if (c.segment_id && !c.segment_name) {
+      const seg = segments.find((s: any) => s.id === c.segment_id);
+      return { ...c, segment_name: seg?.name || '' };
+    }
+    return c;
+  });
+
+  const filtered = enriched.filter(c => {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -102,12 +110,22 @@ export const WebPushManager: React.FC = () => {
     if (!editing) return;
     setIsLoading(true);
     try {
-      const seg = segments.find(s => s.id === editing.segment_id);
-      await appBackend.savePushCampaign({
-        ...editing,
-        segment_name: seg?.name || editing.segment_name,
-        status,
-      });
+      const campaignToSave = { ...editing, status };
+      if (!campaignToSave.id) {
+        campaignToSave.id = crypto.randomUUID();
+      }
+      await appBackend.savePushCampaign(campaignToSave);
+
+      if (status === 'sending') {
+        const result = await appBackend.sendPushCampaign(campaignToSave);
+        if (!result.success) {
+          alert(`Erro ao enviar push: ${result.error}`);
+        } else {
+          const nSent = (result.native?.sent || 0) + (result.web?.sent || 0);
+          alert(`Notificação enviada com sucesso! ${nSent} dispositivo(s) alcançado(s).`);
+        }
+      }
+
       await load();
       backToList();
     } catch (e) {

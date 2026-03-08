@@ -4,7 +4,7 @@ import { appBackend } from './appBackend';
 
 // VAPID public key for Web Push (replace with your generated key)
 // Generate a VAPID key pair: npx web-push generate-vapid-keys
-const VAPID_PUBLIC_KEY = 'REPLACE_WITH_YOUR_VAPID_PUBLIC_KEY';
+const VAPID_PUBLIC_KEY = 'BAaahITaEY3W70DGIcCH284xhcCnz9CNopEo4vo0yG0wKzGUFZaLoQZlNAwHrbcyqbGTxdWuLST8EHLQ0ds5gtY';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);

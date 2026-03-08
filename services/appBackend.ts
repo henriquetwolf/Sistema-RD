@@ -1715,12 +1715,74 @@ export const appBackend = {
   getPushCampaigns: async (): Promise<any[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('marketing_push_campaigns').select('*').order('created_at', { ascending: false });
-    return data || [];
+    return (data || []).map((r: any) => ({
+      ...r,
+      stats: { sent: r.stats_sent || 0, displayed: r.stats_displayed || 0, clicked: r.stats_clicked || 0 },
+    }));
   },
 
   savePushCampaign: async (c: any): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('marketing_push_campaigns').upsert({ ...c, id: c.id || crypto.randomUUID() });
+    const row: any = {
+      id: c.id || crypto.randomUUID(),
+      name: c.name,
+      title: c.title,
+      body: c.body,
+      icon_url: c.icon_url || '',
+      click_url: c.click_url || '',
+      segment_id: c.segment_id || null,
+      status: c.status || 'draft',
+      scheduled_at: c.scheduled_at || null,
+    };
+    if (c.stats) {
+      row.stats_sent = c.stats.sent || 0;
+      row.stats_displayed = c.stats.displayed || 0;
+      row.stats_clicked = c.stats.clicked || 0;
+    }
+    await supabase.from('marketing_push_campaigns').upsert(row);
+  },
+
+  sendPushCampaign: async (campaign: any): Promise<{ success: boolean; native?: any; web?: any; error?: string }> => {
+    if (!isConfigured) return { success: false, error: 'Not configured' };
+    try {
+      const pushBody = {
+        title: campaign.title,
+        body: campaign.body,
+        image_url: campaign.icon_url || undefined,
+        data: { url: campaign.click_url || '/' },
+      };
+
+      // Send to both students and instructors
+      const [studentRes, instructorRes] = await Promise.all([
+        supabase.functions.invoke('push-notify', {
+          body: { ...pushBody, action: 'send-to-topic', user_type: 'student' },
+        }),
+        supabase.functions.invoke('push-notify', {
+          body: { ...pushBody, action: 'send-to-topic', user_type: 'instructor' },
+        }),
+      ]);
+
+      const sData = studentRes.data || {};
+      const iData = instructorRes.data || {};
+
+      const totalNative = (sData.native?.sent || 0) + (iData.native?.sent || 0);
+      const totalWeb = (sData.web?.sent || 0) + (iData.web?.sent || 0);
+      const totalSent = totalNative + totalWeb;
+
+      await supabase.from('marketing_push_campaigns').update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        stats_sent: totalSent,
+      }).eq('id', campaign.id);
+
+      return {
+        success: true,
+        native: { sent: totalNative },
+        web: { sent: totalWeb },
+      };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Erro ao enviar' };
+    }
   },
 
   deletePushCampaign: async (id: string): Promise<void> => {

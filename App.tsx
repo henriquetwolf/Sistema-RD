@@ -47,6 +47,7 @@ import { PagBankManager } from './components/PagBankManager';
 import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { StudioDigitalManager } from './components/StudioDigitalManager';
+import { VollMarketingManager } from './components/VollMarketingManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
@@ -60,11 +61,11 @@ import {
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
   LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser, Smartphone,
-  Fingerprint, ArrowLeftRight
+  Fingerprint, ArrowLeftRight, Megaphone
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing';
 
 function App() {
   if (platformService.isNative()) {
@@ -722,13 +723,14 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank' || dashboardTab === 'voll_marketing') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
                             <nav className="space-y-1">
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
                                 {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
+                                {canAccess('voll_marketing') && <button onClick={() => setDashboardTab('voll_marketing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'voll_marketing' ? "bg-fuchsia-600 text-white shadow-md shadow-fuchsia-200" : "text-fuchsia-600 hover:bg-fuchsia-50 font-bold")}><Megaphone size={18} /> VOLL Marketing</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('landing_pages') && <button onClick={() => setDashboardTab('landing_pages')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'landing_pages' ? "bg-orange-50 text-orange-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MonitorPlay size={18} /> Páginas de Venda</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
@@ -875,6 +877,7 @@ function App() {
                         {dashboardTab === 'app_manual' && <AppManual />}
                         {dashboardTab === 'cpf_lookup' && <CpfLookup />}
                         {dashboardTab === 'studio_digital' && <StudioDigitalManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'voll_marketing' && <VollMarketingManager onBack={() => setDashboardTab('overview')} />}
                     </div>
                 </div>
             </main>

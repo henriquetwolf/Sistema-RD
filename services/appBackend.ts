@@ -1408,4 +1408,411 @@ export const appBackend = {
       await supabase.from('studio_digital_exercises').update({ sort_order: ex.sort_order }).eq('id', ex.id);
     }
   },
+
+  // =========================================================================
+  // VOLL Marketing
+  // =========================================================================
+
+  // --- Leads ---
+  getMarketingLeads: async (filters?: { search?: string; lifecycle?: string; tags?: string[]; minScore?: number }): Promise<any[]> => {
+    if (!isConfigured) return [];
+    let q = supabase.from('marketing_leads').select('*').order('created_at', { ascending: false });
+    if (filters?.search) q = q.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+    if (filters?.lifecycle) q = q.eq('lifecycle_stage', filters.lifecycle);
+    if (filters?.minScore) q = q.gte('score', filters.minScore);
+    const { data, error } = await q;
+    if (error) console.error('[Marketing] Erro ao buscar leads:', error);
+    return data || [];
+  },
+
+  getMarketingLeadById: async (id: string): Promise<any | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('marketing_leads').select('*').eq('id', id).single();
+    return data;
+  },
+
+  saveMarketingLead: async (lead: any): Promise<any | null> => {
+    if (!isConfigured) return null;
+    const payload = { ...lead, id: lead.id || crypto.randomUUID() };
+    const { data, error } = await supabase.from('marketing_leads').upsert(payload).select().single();
+    if (error) console.error('[Marketing] Erro ao salvar lead:', error);
+    return data;
+  },
+
+  deleteMarketingLead: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_leads').delete().eq('id', id);
+  },
+
+  // --- Lead Events ---
+  getLeadEvents: async (leadId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_lead_events').select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  logLeadEvent: async (leadId: string, eventType: string, eventData: any = {}, source: string = ''): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_lead_events').insert({ lead_id: leadId, event_type: eventType, event_data: eventData, source });
+    await supabase.from('marketing_leads').update({ last_activity_at: new Date().toISOString() }).eq('id', leadId);
+  },
+
+  // --- Lead Scoring Rules ---
+  getScoringRules: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_lead_scoring_rules').select('*').order('created_at');
+    return data || [];
+  },
+
+  saveScoringRule: async (rule: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_lead_scoring_rules').upsert({ ...rule, id: rule.id || crypto.randomUUID() });
+  },
+
+  deleteScoringRule: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_lead_scoring_rules').delete().eq('id', id);
+  },
+
+  calculateLeadScore: async (leadId: string): Promise<number> => {
+    if (!isConfigured) return 0;
+    const [leadRes, rulesRes, eventsRes] = await Promise.all([
+      supabase.from('marketing_leads').select('*').eq('id', leadId).single(),
+      supabase.from('marketing_lead_scoring_rules').select('*').eq('is_active', true),
+      supabase.from('marketing_lead_events').select('*').eq('lead_id', leadId),
+    ]);
+    const lead = leadRes.data;
+    const rules = rulesRes.data || [];
+    const events = eventsRes.data || [];
+    if (!lead) return 0;
+    let score = 0;
+    for (const rule of rules) {
+      if (rule.rule_type === 'profile') {
+        const val = (lead as any)[rule.field_or_event] || '';
+        if (rule.operator === 'equals' && val === rule.value) score += rule.points;
+        if (rule.operator === 'contains' && val.includes(rule.value)) score += rule.points;
+        if (rule.operator === 'not_empty' && val) score += rule.points;
+      } else if (rule.rule_type === 'behavior') {
+        const count = events.filter((e: any) => e.event_type === rule.field_or_event).length;
+        if (count > 0) score += rule.points * count;
+      }
+    }
+    await supabase.from('marketing_leads').update({ score }).eq('id', leadId);
+    return score;
+  },
+
+  // --- Segments ---
+  getMarketingSegments: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_segments').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveMarketingSegment: async (segment: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_segments').upsert({ ...segment, id: segment.id || crypto.randomUUID() });
+  },
+
+  deleteMarketingSegment: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_segments').delete().eq('id', id);
+  },
+
+  evaluateSegment: async (segmentId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data: seg } = await supabase.from('marketing_segments').select('*').eq('id', segmentId).single();
+    if (!seg) return [];
+    if (seg.segment_type === 'static') {
+      if (!seg.static_lead_ids?.length) return [];
+      const { data } = await supabase.from('marketing_leads').select('*').in('id', seg.static_lead_ids);
+      return data || [];
+    }
+    const { data: allLeads } = await supabase.from('marketing_leads').select('*');
+    return allLeads || [];
+  },
+
+  // --- Email Templates ---
+  getEmailTemplates: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_email_templates').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveEmailTemplate: async (tpl: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_email_templates').upsert({ ...tpl, id: tpl.id || crypto.randomUUID() });
+  },
+
+  deleteEmailTemplate: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_email_templates').delete().eq('id', id);
+  },
+
+  // --- Email Campaigns ---
+  getEmailCampaigns: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_email_campaigns').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveEmailCampaign: async (campaign: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_email_campaigns').upsert({ ...campaign, id: campaign.id || crypto.randomUUID() });
+  },
+
+  deleteEmailCampaign: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_email_campaigns').delete().eq('id', id);
+  },
+
+  // --- Marketing Automations ---
+  getMarketingAutomations: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_automations').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveMarketingAutomation: async (auto: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_automations').upsert({ ...auto, id: auto.id || crypto.randomUUID() });
+  },
+
+  deleteMarketingAutomation: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_automations').delete().eq('id', id);
+  },
+
+  getAutomationSteps: async (automationId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_automation_steps').select('*').eq('automation_id', automationId).order('sort_order');
+    return data || [];
+  },
+
+  saveAutomationStep: async (step: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_automation_steps').upsert({ ...step, id: step.id || crypto.randomUUID() });
+  },
+
+  deleteAutomationStep: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_automation_steps').delete().eq('id', id);
+  },
+
+  getAutomationExecutions: async (automationId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_automation_executions').select('*').eq('automation_id', automationId).order('started_at', { ascending: false });
+    return data || [];
+  },
+
+  getAutomationLogs: async (executionId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_automation_logs').select('*').eq('execution_id', executionId).order('created_at');
+    return data || [];
+  },
+
+  // --- Pop-ups ---
+  getMarketingPopups: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_popups').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveMarketingPopup: async (popup: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_popups').upsert({ ...popup, id: popup.id || crypto.randomUUID() });
+  },
+
+  deleteMarketingPopup: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_popups').delete().eq('id', id);
+  },
+
+  // --- WhatsApp Buttons ---
+  getMarketingWAButtons: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_wa_buttons').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveMarketingWAButton: async (btn: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_wa_buttons').upsert({ ...btn, id: btn.id || crypto.randomUUID() });
+  },
+
+  deleteMarketingWAButton: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_wa_buttons').delete().eq('id', id);
+  },
+
+  // --- Link Bio ---
+  getMarketingLinkBios: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_link_bio').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveMarketingLinkBio: async (bio: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_link_bio').upsert({ ...bio, id: bio.id || crypto.randomUUID() });
+  },
+
+  deleteMarketingLinkBio: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_link_bio').delete().eq('id', id);
+  },
+
+  getLinkBioItems: async (bioId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_link_bio_items').select('*').eq('bio_id', bioId).order('sort_order');
+    return data || [];
+  },
+
+  saveLinkBioItem: async (item: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_link_bio_items').upsert({ ...item, id: item.id || crypto.randomUUID() });
+  },
+
+  deleteLinkBioItem: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_link_bio_items').delete().eq('id', id);
+  },
+
+  // --- Social Posts ---
+  getSocialPosts: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_social_posts').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveSocialPost: async (post: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_social_posts').upsert({ ...post, id: post.id || crypto.randomUUID() });
+  },
+
+  deleteSocialPost: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_social_posts').delete().eq('id', id);
+  },
+
+  // --- SMS Campaigns ---
+  getSmsCampaigns: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_sms_campaigns').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveSmsCampaign: async (c: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_sms_campaigns').upsert({ ...c, id: c.id || crypto.randomUUID() });
+  },
+
+  deleteSmsCampaign: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_sms_campaigns').delete().eq('id', id);
+  },
+
+  // --- Push Campaigns ---
+  getPushCampaigns: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_push_campaigns').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  savePushCampaign: async (c: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_push_campaigns').upsert({ ...c, id: c.id || crypto.randomUUID() });
+  },
+
+  deletePushCampaign: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_push_campaigns').delete().eq('id', id);
+  },
+
+  // --- A/B Tests ---
+  getAbTests: async (): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_ab_tests').select('*').order('created_at', { ascending: false });
+    return data || [];
+  },
+
+  saveAbTest: async (test: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_ab_tests').upsert({ ...test, id: test.id || crypto.randomUUID() });
+  },
+
+  // --- CRM Integration Config ---
+  getCrmIntegrationConfig: async (): Promise<any | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('marketing_crm_integration_config').select('*').limit(1).single();
+    return data;
+  },
+
+  saveCrmIntegrationConfig: async (config: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('marketing_crm_integration_config').upsert(config);
+  },
+
+  // --- CRM Sync ---
+  getCrmSyncLogs: async (limit: number = 50): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_crm_sync_log').select('*').order('created_at', { ascending: false }).limit(limit);
+    return data || [];
+  },
+
+  passLeadToCrm: async (leadId: string): Promise<boolean> => {
+    if (!isConfigured) return false;
+    const [leadRes, configRes] = await Promise.all([
+      supabase.from('marketing_leads').select('*').eq('id', leadId).single(),
+      supabase.from('marketing_crm_integration_config').select('*').limit(1).single(),
+    ]);
+    const lead = leadRes.data;
+    const config = configRes.data;
+    if (!lead || !config) return false;
+    const mapping = config.field_mapping || {};
+    const dealPayload: any = {
+      id: crypto.randomUUID(),
+      title: `Lead Marketing: ${lead.name}`,
+      contact_name: lead[mapping.name ? 'name' : 'name'] || lead.name,
+      company_name: lead.company || '',
+      email: lead.email || '',
+      phone: lead.phone || '',
+      cpf: lead.cpf || '',
+      value: 0,
+      pipeline: config.target_pipeline || 'Padrão',
+      stage: config.target_stage || 'novo_lead',
+      source: 'VOLL Marketing',
+      campaign: lead.campaign || '',
+      status: 'warm',
+      product_type: '',
+      product_name: '',
+      course_city: lead.city || '',
+      course_state: lead.state || '',
+      owner: config.fixed_owner_id || '',
+      tasks: [],
+    };
+    const { error } = await supabase.from('crm_deals').insert(dealPayload);
+    if (error) { console.error('[Marketing] Erro ao criar deal:', error); return false; }
+    await supabase.from('marketing_leads').update({ crm_deal_id: dealPayload.id, lifecycle_stage: 'opportunity' }).eq('id', leadId);
+    await supabase.from('marketing_crm_sync_log').insert({ direction: 'marketing_to_crm', lead_id: leadId, deal_id: dealPayload.id, action: 'create_deal', details: dealPayload });
+    return true;
+  },
+
+  syncCrmEventToLead: async (dealId: string, eventType: string, eventData: any = {}): Promise<void> => {
+    if (!isConfigured) return;
+    const { data: leads } = await supabase.from('marketing_leads').select('id').eq('crm_deal_id', dealId);
+    if (!leads?.length) return;
+    for (const lead of leads) {
+      await supabase.from('marketing_lead_events').insert({ lead_id: lead.id, event_type: `crm_${eventType}`, event_data: eventData, source: 'crm' });
+      if (eventType === 'deal_won') {
+        await supabase.from('marketing_leads').update({ lifecycle_stage: 'customer', tags: supabase.rpc ? undefined : undefined }).eq('id', lead.id);
+      }
+    }
+    await supabase.from('marketing_crm_sync_log').insert({ direction: 'crm_to_marketing', lead_id: leads[0].id, deal_id: dealId, action: eventType, details: eventData });
+  },
+
+  getLeadTimeline: async (leadId: string): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('marketing_lead_events').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(100);
+    return data || [];
+  },
 };

@@ -129,7 +129,7 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
   };
 
   return (
-    <div className="min-h-screen -mx-4 -my-8">
+    <div className="min-h-screen">
       {/* Header */}
       <div className="bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-700 px-6 py-5 flex items-center justify-between">
         <div className="flex items-center gap-4">

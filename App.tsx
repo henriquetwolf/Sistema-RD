@@ -723,7 +723,11 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank' || dashboardTab === 'voll_marketing') && "max-w-full")}>
+            {dashboardTab === 'voll_marketing' && (
+                <VollMarketingManager onBack={() => setDashboardTab('overview')} />
+            )}
+
+            {dashboardTab !== 'voll_marketing' && <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -877,10 +881,9 @@ function App() {
                         {dashboardTab === 'app_manual' && <AppManual />}
                         {dashboardTab === 'cpf_lookup' && <CpfLookup />}
                         {dashboardTab === 'studio_digital' && <StudioDigitalManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'voll_marketing' && <VollMarketingManager onBack={() => setDashboardTab('overview')} />}
                     </div>
                 </div>
-            </main>
+            </main>}
             {(session || currentCollaborator) && <AiAssistant isOpen={isAiOpen} setIsOpen={setIsAiOpen} onNavigate={(tab) => { setDashboardTab(tab as DashboardTab); setIsAiOpen(false); }} />}
         </>
       )}

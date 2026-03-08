@@ -2,11 +2,20 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, Loader2, Plus, Trash2, ChevronUp, ChevronDown,
   Search, X, MonitorPlay, ShoppingBag, GraduationCap, Settings,
-  Eye, EyeOff, Image as ImageIcon, Save, CheckCircle2, AlertCircle
+  Eye, EyeOff, Image as ImageIcon, Save, CheckCircle2, AlertCircle,
+  Sparkles, Database
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { StudioDigitalEquipment, StudioDigitalItem, OnlineCourse, Product } from '../types';
+
+const SEED_EQUIPMENTS = [
+  { name: 'Reformer', slug: 'reformer', description: 'O equipamento mais versátil do Pilates, ideal para trabalho de corpo inteiro com resistência por molas.', partner_name: 'Equipilates', sort_order: 1 },
+  { name: 'Cadillac', slug: 'cadillac', description: 'Também conhecido como Trapézio, oferece ampla variedade de exercícios de mobilidade e fortalecimento.', partner_name: 'Equipilates', sort_order: 2 },
+  { name: 'Chair', slug: 'chair', description: 'Equipamento compacto e desafiador, excelente para fortalecimento e equilíbrio.', partner_name: 'Equipilates', sort_order: 3 },
+  { name: 'Mat', slug: 'mat', description: 'A base do Pilates: exercícios no solo que desenvolvem controle, força e flexibilidade.', partner_name: 'Equipilates', sort_order: 4 },
+  { name: 'Barrel', slug: 'barrel', description: 'Perfeito para alongamento, extensão da coluna e trabalho de mobilidade articular.', partner_name: 'Equipilates', sort_order: 5 },
+];
 
 interface StudioDigitalManagerProps {
   onBack: () => void;
@@ -20,6 +29,8 @@ export const StudioDigitalManager: React.FC<StudioDigitalManagerProps> = ({ onBa
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [seedError, setSeedError] = useState('');
+  const [isSeeding, setIsSeeding] = useState(false);
 
   const [allCourses, setAllCourses] = useState<OnlineCourse[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -38,6 +49,30 @@ export const StudioDigitalManager: React.FC<StudioDigitalManagerProps> = ({ onBa
       const data = await appBackend.getStudioDigitalEquipments();
       setEquipments(data);
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
+  };
+
+  const handleSeedEquipments = async () => {
+    setIsSeeding(true);
+    setSeedError('');
+    try {
+      for (const eq of SEED_EQUIPMENTS) {
+        await appBackend.upsertStudioDigitalEquipment({
+          name: eq.name,
+          slug: eq.slug,
+          description: eq.description,
+          partner_name: eq.partner_name,
+          is_active: true,
+          sort_order: eq.sort_order,
+        });
+      }
+      await loadEquipments();
+    } catch (e: any) {
+      console.error(e);
+      setSeedError(
+        'Erro ao cadastrar equipamentos. Verifique se a tabela "studio_digital_equipments" existe no banco de dados. ' +
+        'Execute a migration 022_studio_digital.sql no SQL Editor do Supabase.'
+      );
+    } finally { setIsSeeding(false); }
   };
 
   const openDetail = async (eq: StudioDigitalEquipment) => {
@@ -162,9 +197,36 @@ export const StudioDigitalManager: React.FC<StudioDigitalManagerProps> = ({ onBa
         {isLoading ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-400" size={32} /></div>
         ) : equipments.length === 0 ? (
-          <div className="py-20 text-center text-slate-400 bg-white rounded-2xl border-2 border-dashed">
-            <MonitorPlay size={48} className="mx-auto mb-3 opacity-20" />
-            <p className="font-bold">Nenhum equipamento cadastrado.</p>
+          <div className="py-16 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200">
+            <div className="bg-amber-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Sparkles size={28} className="text-amber-500" />
+            </div>
+            <h3 className="font-black text-slate-700 text-lg mb-2">Nenhum equipamento cadastrado</h3>
+            <p className="text-sm text-slate-400 max-w-md mx-auto mb-6">
+              Configure os equipamentos Equipilates para que os alunos visualizem cursos e produtos vinculados no Studio Digital.
+            </p>
+            <button
+              onClick={handleSeedEquipments}
+              disabled={isSeeding}
+              className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {isSeeding ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+              {isSeeding ? 'Cadastrando...' : 'Cadastrar equipamentos iniciais (Equipilates)'}
+            </button>
+            <p className="text-xs text-slate-400 mt-3">
+              Serão criados 5 equipamentos: Reformer, Cadillac, Chair, Mat e Barrel.
+            </p>
+            {seedError && (
+              <div className="mt-4 mx-auto max-w-lg bg-red-50 border border-red-200 rounded-xl p-4 text-left">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-red-700">Erro ao cadastrar</p>
+                    <p className="text-xs text-red-600 mt-1">{seedError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

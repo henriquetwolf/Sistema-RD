@@ -46,6 +46,7 @@ import { ContaAzulManager } from './components/ContaAzulManager';
 import { PagBankManager } from './components/PagBankManager';
 import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
+import { StudioDigitalManager } from './components/StudioDigitalManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
@@ -63,7 +64,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital';
 
 function App() {
   if (platformService.isNative()) {
@@ -743,6 +744,7 @@ function App() {
                                 {canAccess('events') && <button onClick={() => setDashboardTab('events')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'events' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Mic size={18} /> Eventos</button>}
                                 {canAccess('students') && <button onClick={() => setDashboardTab('students')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'students' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Users size={18} /> Alunos</button>}
                                 {canAccess('certificates') && <button onClick={() => setDashboardTab('certificates')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'certificates' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Award size={18} /> Certificados</button>}
+                                {canAccess('studio_digital') && <button onClick={() => setDashboardTab('studio_digital')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'studio_digital' ? "bg-amber-50 text-amber-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MonitorPlay size={18} /> Studio Digital</button>}
                                 {canAccess('products') && <button onClick={() => setDashboardTab('products')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'products' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><ShoppingBag size={18} /> Produtos e Serviços</button>}
                                 {canAccess('franchises') && <button onClick={() => setDashboardTab('franchises')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'franchises' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Store size={18} /> Franquias</button>}
                                 {canAccess('partner_studios') && <button onClick={() => setDashboardTab('partner_studios')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'partner_studios' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Building2 size={18} /> Studios Parceiros</button>}
@@ -872,6 +874,7 @@ function App() {
                         {dashboardTab === 'pagbank' && <PagBankManager />}
                         {dashboardTab === 'app_manual' && <AppManual />}
                         {dashboardTab === 'cpf_lookup' && <CpfLookup />}
+                        {dashboardTab === 'studio_digital' && <StudioDigitalManager onBack={() => setDashboardTab('overview')} />}
                     </div>
                 </div>
             </main>

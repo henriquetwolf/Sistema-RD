@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection, StudioDigitalEquipment, StudioDigitalItem, Product } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
 import { 
@@ -10,7 +10,7 @@ import {
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
     Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload, ShoppingCart, CreditCard, QrCode,
-    Mail, Phone, Hash, Edit2, Home, Bot, Sparkles, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap, Gift, Store
+    Mail, Phone, Hash, Edit2, Home, Bot, MessageSquare, Brain, Target, Headphones, Eye, BookMarked, Zap, Gift, Store
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -27,7 +27,7 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation' | 'studio_digital'>('classes');
     const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
     const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -115,6 +115,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [franchiseLeadSuccess, setFranchiseLeadSuccess] = useState(false);
     const [franchiseInterestObservation, setFranchiseInterestObservation] = useState('');
 
+    // Studio Digital
+    const [studioEquipments, setStudioEquipments] = useState<StudioDigitalEquipment[]>([]);
+    const [selectedStudioEquipment, setSelectedStudioEquipment] = useState<StudioDigitalEquipment | null>(null);
+    const [studioItems, setStudioItems] = useState<(StudioDigitalItem & { _course?: OnlineCourse; _product?: Product })[]>([]);
+    const [isStudioLoading, setIsStudioLoading] = useState(false);
+
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
 
@@ -137,7 +143,37 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'learning_profile') loadKnowledgeBase();
         if (activeTab === 'ai_tutor') { loadAvatarsAndSelection(); loadChatHistory(); }
         if (activeTab === 'franchise_presentation') loadFranchisePresentation();
+        if (activeTab === 'studio_digital') { loadStudioDigital(); setSelectedStudioEquipment(null); }
     }, [activeTab]);
+
+    const loadStudioDigital = async () => {
+        setIsStudioLoading(true);
+        try {
+            const eqs = await appBackend.getStudioDigitalEquipments(true);
+            setStudioEquipments(eqs);
+        } catch (e) { console.error(e); } finally { setIsStudioLoading(false); }
+    };
+
+    const loadStudioEquipmentDetail = async (eq: StudioDigitalEquipment) => {
+        setSelectedStudioEquipment(eq);
+        setIsStudioLoading(true);
+        try {
+            const rawItems = await appBackend.getStudioDigitalItems(eq.id, true);
+            const courseIds = rawItems.filter(i => i.item_type === 'course').map(i => i.item_id);
+            const productIds = rawItems.filter(i => i.item_type === 'product').map(i => i.item_id);
+            const [coursesRes, productsRes] = await Promise.all([
+                courseIds.length ? appBackend.client.from('crm_online_courses').select('*').in('id', courseIds) : Promise.resolve({ data: [] }),
+                productIds.length ? appBackend.client.from('crm_products').select('*').in('id', productIds) : Promise.resolve({ data: [] }),
+            ]);
+            const coursesMap = new Map((coursesRes.data || []).map((c: any) => [c.id, c]));
+            const productsMap = new Map((productsRes.data || []).map((p: any) => [p.id, p]));
+            setStudioItems(rawItems.map(item => ({
+                ...item,
+                _course: item.item_type === 'course' ? coursesMap.get(item.item_id) : undefined,
+                _product: item.item_type === 'product' ? productsMap.get(item.item_id) : undefined,
+            })));
+        } catch (e) { console.error(e); } finally { setIsStudioLoading(false); }
+    };
 
     const loadFranchisePresentation = async () => {
         setFranchisePresentationLoading(true);
@@ -1428,6 +1464,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' },
                         { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' },
                         { id: 'learning_profile', label: 'Meu Perfil', icon: Brain, color: 'text-pink-600' },
+                        { id: 'studio_digital', label: 'Studio Digital', icon: Sparkles, color: 'text-amber-600' },
                         { id: 'ai_tutor', label: 'Tutor IA', icon: Bot, color: 'text-purple-600' },
                         { id: 'franchise_presentation', label: 'Apresentação Franquia', icon: Store, color: 'text-teal-600' }
                     ].map(tab => (
@@ -1991,6 +2028,201 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                     </form>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ── Studio Digital ─────────────────────────────────────── */}
+                    {activeTab === 'studio_digital' && !selectedStudioEquipment && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* Hero */}
+                            <section className="bg-gradient-to-br from-stone-800 via-stone-700 to-neutral-600 rounded-3xl py-12 md:py-16 px-8 md:px-12 text-white relative overflow-hidden">
+                                <div className="absolute top-0 right-0 -mt-16 -mr-16 w-72 h-72 bg-white/5 rounded-full blur-3xl"></div>
+                                <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl"></div>
+                                <div className="relative z-10">
+                                    <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-5 border border-white/10 backdrop-blur-md">
+                                        <Sparkles size={12} className="text-amber-400" /> Equipilates
+                                    </div>
+                                    <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3 leading-tight">Studio Digital</h1>
+                                    <p className="text-stone-300 text-base md:text-lg font-medium leading-relaxed max-w-xl">Treine no estúdio virtual com equipamentos Equipilates</p>
+                                    <p className="text-stone-400 text-sm mt-3 max-w-lg">Selecione um equipamento para visualizar os cursos e produtos disponíveis.</p>
+                                </div>
+                            </section>
+
+                            {/* Grid */}
+                            {isStudioLoading ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                                    {[1,2,3,4,5].map(i => (
+                                        <div key={i} className="rounded-2xl md:rounded-3xl overflow-hidden bg-stone-200 animate-pulse" style={{ height: '280px' }} />
+                                    ))}
+                                </div>
+                            ) : studioEquipments.length === 0 ? (
+                                <div className="py-24 text-center bg-white rounded-3xl border border-stone-200">
+                                    <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                        <Sparkles size={28} className="text-stone-300" />
+                                    </div>
+                                    <p className="text-stone-500 font-bold text-sm">Nenhum equipamento disponível no momento.</p>
+                                    <p className="text-stone-400 text-xs mt-1">Volte em breve para novidades.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                                    {studioEquipments.map(eq => (
+                                        <button
+                                            key={eq.id}
+                                            onClick={() => loadStudioEquipmentDetail(eq)}
+                                            className="group relative rounded-2xl md:rounded-3xl overflow-hidden shadow-sm border border-stone-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 ease-out text-left bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+                                            style={{ minHeight: '280px' }}
+                                        >
+                                            <div className="absolute inset-0 bg-stone-100">
+                                                {eq.image_url ? (
+                                                    <img src={eq.image_url} alt={eq.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700 ease-out" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center">
+                                                        <Sparkles size={56} className="text-stone-300/50" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                                            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-7">
+                                                <span className="inline-flex items-center gap-1 bg-amber-500/20 backdrop-blur-md border border-amber-400/30 text-amber-200 text-[9px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-full mb-3">
+                                                    <Sparkles size={8} /> {eq.partner_name}
+                                                </span>
+                                                <h3 className="text-xl md:text-2xl font-black text-white tracking-tight leading-tight">{eq.name}</h3>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'studio_digital' && selectedStudioEquipment && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* Back */}
+                            <button onClick={() => setSelectedStudioEquipment(null)} className="text-stone-500 hover:text-stone-800 flex items-center gap-2 text-sm font-bold transition-colors">
+                                <ChevronLeft size={18} /> Voltar aos equipamentos
+                            </button>
+
+                            {/* Equipment Header */}
+                            <div className="relative rounded-3xl overflow-hidden" style={{ minHeight: '220px' }}>
+                                <div className="absolute inset-0 bg-stone-200">
+                                    {selectedStudioEquipment.image_url ? (
+                                        <img src={selectedStudioEquipment.image_url} alt={selectedStudioEquipment.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center"><Sparkles size={64} className="text-stone-300/50" /></div>
+                                    )}
+                                </div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
+                                <div className="relative z-10 flex flex-col justify-end p-8 md:p-10" style={{ minHeight: '220px' }}>
+                                    <span className="inline-flex items-center gap-1 bg-amber-500/20 backdrop-blur-md border border-amber-400/30 text-amber-200 text-[9px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-full mb-3 w-fit">
+                                        <Sparkles size={8} /> {selectedStudioEquipment.partner_name}
+                                    </span>
+                                    <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">{selectedStudioEquipment.name}</h2>
+                                    {selectedStudioEquipment.description && (
+                                        <p className="text-stone-300 text-sm mt-2 leading-relaxed max-w-2xl">{selectedStudioEquipment.description}</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Items Section */}
+                            <div>
+                                <h3 className="text-sm font-black uppercase tracking-widest text-stone-400 mb-5">Cursos e produtos disponíveis</h3>
+
+                                {isStudioLoading ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {[1,2,3].map(i => <div key={i} className="h-32 bg-stone-100 animate-pulse rounded-2xl" />)}
+                                    </div>
+                                ) : studioItems.length === 0 ? (
+                                    <div className="py-16 text-center bg-white rounded-2xl border border-stone-200">
+                                        <Package size={36} className="mx-auto mb-3 text-stone-300" />
+                                        <p className="text-stone-500 font-bold text-sm">Nenhum conteúdo vinculado a este equipamento.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {studioItems.map((item, idx) => {
+                                            const isCourse = item.item_type === 'course';
+                                            const title = isCourse ? (item._course?.title || 'Curso') : (item._product?.name || 'Produto');
+                                            const image = isCourse ? item._course?.imageUrl : item._product?.imageUrl;
+                                            const price = isCourse ? (item._course?.price || 0) : (item._product?.price || 0);
+                                            const hasAccess = isCourse && unlockedCourseIds.includes(item.item_id);
+                                            const canPurchase = !hasAccess && price > 0;
+                                            const isBlocked = !hasAccess && !canPurchase;
+
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    className={clsx(
+                                                        "bg-white rounded-2xl border shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden flex",
+                                                        hasAccess ? "border-emerald-200 border-l-4 border-l-emerald-500" :
+                                                        canPurchase ? "border-stone-200" :
+                                                        "border-stone-200 opacity-75"
+                                                    )}
+                                                    style={{ animationDelay: `${idx * 80}ms` }}
+                                                >
+                                                    <div className="w-28 md:w-36 flex-shrink-0 bg-stone-100 relative overflow-hidden">
+                                                        {image ? (
+                                                            <img src={image} alt={title} loading="lazy" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-stone-300">
+                                                                {isCourse ? <GraduationCap size={28} /> : <Package size={28} />}
+                                                            </div>
+                                                        )}
+                                                        {isBlocked && (
+                                                            <div className="absolute inset-0 bg-stone-900/30 backdrop-blur-[2px] flex items-center justify-center">
+                                                                <Lock size={22} className="text-white/80" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-1.5">
+                                                                <span className={clsx("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", isCourse ? "bg-indigo-50 text-indigo-600" : "bg-teal-50 text-teal-600")}>
+                                                                    {isCourse ? 'Curso' : 'Produto'}
+                                                                </span>
+                                                                {hasAccess && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">Liberado</span>}
+                                                            </div>
+                                                            <h4 className="font-black text-stone-800 text-sm leading-tight truncate">{title}</h4>
+                                                        </div>
+                                                        <div className="mt-3">
+                                                            {hasAccess && isCourse && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const course = allCourses.find(c => c.id === item.item_id);
+                                                                        if (course) handleOpenCoursePlayer(course);
+                                                                    }}
+                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+                                                                >
+                                                                    <Play size={12} /> Acessar Curso
+                                                                </button>
+                                                            )}
+                                                            {hasAccess && !isCourse && item._product?.url && (
+                                                                <a href={item._product.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors">
+                                                                    <Eye size={12} /> Ver Produto
+                                                                </a>
+                                                            )}
+                                                            {canPurchase && (
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-sm font-black text-stone-800">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price)}</span>
+                                                                    <button
+                                                                        onClick={() => { if (isCourse) setCheckoutCourseId(item.item_id); }}
+                                                                        className="bg-stone-800 hover:bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+                                                                    >
+                                                                        <CreditCard size={12} /> {isCourse ? 'Comprar' : 'Saber Mais'}
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                            {isBlocked && (
+                                                                <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 flex items-center gap-1.5">
+                                                                    <Lock size={10} /> Aguardando Liberação
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 

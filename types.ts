@@ -1289,3 +1289,29 @@ export interface StripeCreateSessionResponse {
   session_url: string;
   reference_id: string;
 }
+
+// ── Studio Digital ──────────────────────────────────────────
+
+export interface StudioDigitalEquipment {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  partner_name: string;
+  image_url: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudioDigitalItem {
+  id: string;
+  equipment_id: string;
+  item_type: 'course' | 'product';
+  item_id: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}

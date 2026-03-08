@@ -8,7 +8,8 @@ import {
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
   WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig,
-  ContaAzulProductMapping, FranchisePresentationSection
+  ContaAzulProductMapping, FranchisePresentationSection,
+  StudioDigitalEquipment, StudioDigitalItem
 } from '../types';
 import { whatsappService } from './whatsappService';
 
@@ -1326,5 +1327,78 @@ export const appBackend = {
       receber: receber.data || [],
       pagar: pagar.data || [],
     };
+  },
+
+  // ── Studio Digital ────────────────────────────────────────
+
+  getStudioDigitalEquipments: async (onlyActive?: boolean): Promise<StudioDigitalEquipment[]> => {
+    if (!isConfigured) return [];
+    let q = supabase.from('studio_digital_equipments').select('*').order('sort_order');
+    if (onlyActive) q = q.eq('is_active', true);
+    const { data } = await q;
+    return (data || []) as StudioDigitalEquipment[];
+  },
+
+  getStudioDigitalEquipmentBySlug: async (slug: string): Promise<StudioDigitalEquipment | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('studio_digital_equipments').select('*').eq('slug', slug).maybeSingle();
+    return data as StudioDigitalEquipment | null;
+  },
+
+  upsertStudioDigitalEquipment: async (eq: Partial<StudioDigitalEquipment>): Promise<void> => {
+    if (!isConfigured) return;
+    const slug = eq.slug || slugify(eq.name || '');
+    await supabase.from('studio_digital_equipments').upsert({
+      id: eq.id || crypto.randomUUID(),
+      name: eq.name,
+      slug,
+      description: eq.description || '',
+      partner_name: eq.partner_name || 'Equipilates',
+      image_url: eq.image_url || '',
+      is_active: eq.is_active ?? true,
+      sort_order: eq.sort_order ?? 0,
+    });
+  },
+
+  toggleStudioDigitalEquipmentActive: async (id: string, isActive: boolean): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('studio_digital_equipments').update({ is_active: isActive }).eq('id', id);
+  },
+
+  getStudioDigitalItems: async (equipmentId: string, onlyActive?: boolean): Promise<StudioDigitalItem[]> => {
+    if (!isConfigured) return [];
+    let q = supabase.from('studio_digital_items').select('*').eq('equipment_id', equipmentId).order('sort_order');
+    if (onlyActive) q = q.eq('is_active', true);
+    const { data } = await q;
+    return (data || []) as StudioDigitalItem[];
+  },
+
+  addStudioDigitalItem: async (item: { equipment_id: string; item_type: 'course' | 'product'; item_id: string }): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('studio_digital_items').upsert({
+      id: crypto.randomUUID(),
+      equipment_id: item.equipment_id,
+      item_type: item.item_type,
+      item_id: item.item_id,
+      is_active: true,
+      sort_order: 999,
+    }, { onConflict: 'equipment_id,item_type,item_id' });
+  },
+
+  removeStudioDigitalItem: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('studio_digital_items').delete().eq('id', id);
+  },
+
+  toggleStudioDigitalItemActive: async (id: string, isActive: boolean): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('studio_digital_items').update({ is_active: isActive }).eq('id', id);
+  },
+
+  updateStudioDigitalItemOrder: async (items: { id: string; sort_order: number }[]): Promise<void> => {
+    if (!isConfigured) return;
+    for (const item of items) {
+      await supabase.from('studio_digital_items').update({ sort_order: item.sort_order }).eq('id', item.id);
+    }
   },
 };

@@ -59,10 +59,10 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
 
   const groupedItems = React.useMemo(() => {
     const groups: { pillar: string | null; items: SidebarItem[] }[] = [];
-    let currentPillar: string | null | undefined = undefined;
+    let currentPillar: string | null | undefined = '__INIT__';
     for (const item of SIDEBAR_ITEMS) {
-      if (item.pillar !== currentPillar) {
-        currentPillar = item.pillar;
+      if ((item.pillar ?? null) !== currentPillar) {
+        currentPillar = item.pillar ?? null;
         groups.push({ pillar: item.pillar || null, items: [item] });
       } else {
         groups[groups.length - 1].items.push(item);

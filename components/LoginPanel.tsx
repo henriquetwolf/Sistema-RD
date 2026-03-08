@@ -3,6 +3,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
 import { StudentSession, CollaboratorSession, PartnerStudioSession, UserRole } from '../types';
+import { InstallPrompt } from './InstallPrompt';
 
 interface DetectedMultiRole {
     cpf: string;
@@ -313,6 +314,8 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
             </button>
           </form>
           
+          <InstallPrompt />
+
           <div className="mt-12 text-center pt-8 border-t border-slate-50">
             <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
                 VOLL Pilates Group &copy; {new Date().getFullYear()}

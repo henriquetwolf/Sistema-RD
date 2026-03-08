@@ -48,6 +48,7 @@ import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { StudioDigitalManager } from './components/StudioDigitalManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
+import { pushService } from './services/pushService';
 import { VollMarketingManager } from './components/VollMarketingManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
@@ -637,8 +638,8 @@ function App() {
 
   if (!session && !currentInstructor && !currentStudent && !currentCollaborator && !currentStudio && !authenticatedUser) {
       return <LoginPanel 
-        onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s));}} 
-        onStudentLogin={s => {setCurrentStudent(s); sessionStorage.setItem('student_session', JSON.stringify(s));}} 
+        onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s)); pushService.registerWeb(s.id, 'instructor');}} 
+        onStudentLogin={s => {setCurrentStudent(s); sessionStorage.setItem('student_session', JSON.stringify(s)); if (s.deals[0]?.id) pushService.registerWeb(String(s.deals[0].id), 'student');}} 
         onCollaboratorLogin={s => {setCurrentCollaborator(s); sessionStorage.setItem('collaborator_session', JSON.stringify(s));}}
         onStudioLogin={s => {setCurrentStudio(s); sessionStorage.setItem('studio_session', JSON.stringify(s));}}
         onMultiRoleLogin={(data) => {

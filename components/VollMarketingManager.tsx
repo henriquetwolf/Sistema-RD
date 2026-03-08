@@ -1,27 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
-  Megaphone, LayoutDashboard, Mail, FileText, MousePointerClick, Globe, Link2, Share2,
+  Megaphone, LayoutDashboard, Mail, FileText, Globe, Link2, Share2,
   Zap, MessageCircle, Smartphone, Bell, Users, Filter, BarChart3, Settings,
-  ArrowLeft, ChevronRight, Target, TrendingUp, Send, Sparkles, Eye
+  ArrowLeft, ChevronRight, Target, Send, Eye
 } from 'lucide-react';
 import clsx from 'clsx';
-import { appBackend } from '../services/appBackend';
-import { MarketingDashboard } from './marketing/MarketingDashboard';
-import { EmailMarketingManager } from './marketing/EmailMarketingManager';
-import { MarketingAutomationBuilder } from './marketing/MarketingAutomationBuilder';
-import { LeadManager } from './marketing/LeadManager';
-import { SegmentBuilder } from './marketing/SegmentBuilder';
-import { MarketingAnalytics } from './marketing/MarketingAnalytics';
-import { SocialMediaManager } from './marketing/SocialMediaManager';
-import { LinkBioManager } from './marketing/LinkBioManager';
-import { PopupManager } from './marketing/PopupManager';
-import { WhatsAppButtonManager } from './marketing/WhatsAppButtonManager';
-import { WhatsAppMarketingManager } from './marketing/WhatsAppMarketingManager';
-import { SmsMarketingManager } from './marketing/SmsMarketingManager';
-import { WebPushManager } from './marketing/WebPushManager';
-import { CrmIntegrationConfig } from './marketing/CrmIntegrationConfig';
-import { LandingPageManager } from './LandingPageManager';
-import { FormsManager } from './FormsManager';
 
 type MarketingModule =
   | 'dashboard'
@@ -45,7 +28,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'link_bio', label: 'Link da Bio', icon: <Link2 size={18} />, pillar: 'ATRAIR' },
   { id: 'landing_pages', label: 'Landing Pages', icon: <Globe size={18} />, pillar: 'CONVERTER' },
   { id: 'forms', label: 'Formulários', icon: <FileText size={18} />, pillar: 'CONVERTER' },
-  { id: 'popups', label: 'Pop-ups', icon: <MousePointerClick size={18} />, pillar: 'CONVERTER' },
+  { id: 'popups', label: 'Pop-ups', icon: <Eye size={18} />, pillar: 'CONVERTER' },
   { id: 'wa_button', label: 'Botão WhatsApp', icon: <MessageCircle size={18} />, pillar: 'CONVERTER' },
   { id: 'email', label: 'Email Marketing', icon: <Mail size={18} />, pillar: 'RELACIONAR' },
   { id: 'automation', label: 'Automação', icon: <Zap size={18} />, pillar: 'RELACIONAR' },
@@ -72,27 +55,9 @@ interface Props {
 
 export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
   const [activeModule, setActiveModule] = useState<MarketingModule>('dashboard');
-  const [quickStats, setQuickStats] = useState({ leads: 0, emails: 0, automations: 0 });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  useEffect(() => {
-    loadQuickStats();
-  }, []);
-
-  const loadQuickStats = async () => {
-    const [leads, campaigns, autos] = await Promise.all([
-      appBackend.getMarketingLeads(),
-      appBackend.getEmailCampaigns(),
-      appBackend.getMarketingAutomations(),
-    ]);
-    setQuickStats({
-      leads: leads.length,
-      emails: campaigns.filter((c: any) => c.status === 'sent').length,
-      automations: autos.filter((a: any) => a.status === 'active').length,
-    });
-  };
-
-  const groupedItems = useMemo(() => {
+  const groupedItems = React.useMemo(() => {
     const groups: { pillar: string | null; items: SidebarItem[] }[] = [];
     let currentPillar: string | null | undefined = undefined;
     for (const item of SIDEBAR_ITEMS) {
@@ -106,31 +71,8 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
     return groups;
   }, []);
 
-  const renderContent = () => {
-    switch (activeModule) {
-      case 'dashboard': return <MarketingDashboard onNavigate={setActiveModule} />;
-      case 'social_media': return <SocialMediaManager />;
-      case 'link_bio': return <LinkBioManager />;
-      case 'landing_pages': return <LandingPageManager onBack={() => setActiveModule('dashboard')} />;
-      case 'forms': return <FormsManager onBack={() => setActiveModule('dashboard')} />;
-      case 'popups': return <PopupManager />;
-      case 'wa_button': return <WhatsAppButtonManager />;
-      case 'email': return <EmailMarketingManager />;
-      case 'automation': return <MarketingAutomationBuilder />;
-      case 'wa_marketing': return <WhatsAppMarketingManager />;
-      case 'sms': return <SmsMarketingManager />;
-      case 'web_push': return <WebPushManager />;
-      case 'leads': return <LeadManager />;
-      case 'segments': return <SegmentBuilder />;
-      case 'analytics': return <MarketingAnalytics />;
-      case 'crm_integration': return <CrmIntegrationConfig />;
-      default: return <MarketingDashboard onNavigate={setActiveModule} />;
-    }
-  };
-
   return (
     <div className="min-h-screen">
-      {/* Header */}
       <div className="bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-700 px-6 py-5 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-white/70 hover:text-white transition-colors">
@@ -149,21 +91,20 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
             <Users size={14} />
-            <span>{quickStats.leads} leads</span>
+            <span>0 leads</span>
           </div>
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
             <Mail size={14} />
-            <span>{quickStats.emails} enviados</span>
+            <span>0 enviados</span>
           </div>
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
             <Zap size={14} />
-            <span>{quickStats.automations} ativas</span>
+            <span>0 ativas</span>
           </div>
         </div>
       </div>
 
       <div className="flex">
-        {/* Sidebar */}
         <aside className={clsx(
           "bg-white border-r border-slate-200 flex-shrink-0 overflow-y-auto transition-all duration-300",
           sidebarCollapsed ? "w-16" : "w-60"
@@ -209,9 +150,13 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
           </nav>
         </aside>
 
-        {/* Content */}
         <main className="flex-1 min-w-0 overflow-y-auto p-6 bg-slate-50" style={{ height: 'calc(100vh - 76px)' }}>
-          {renderContent()}
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+            <Megaphone size={48} className="text-purple-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-slate-800 mb-2">VOLL Marketing</h2>
+            <p className="text-slate-500 mb-4">Módulo ativo: <strong className="text-purple-600">{activeModule}</strong></p>
+            <p className="text-sm text-slate-400">Selecione um módulo na sidebar para começar.</p>
+          </div>
         </main>
       </div>
     </div>

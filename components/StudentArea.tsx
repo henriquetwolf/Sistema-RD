@@ -1180,7 +1180,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     };
 
     const handleOpenCoursePlayer = async (course: OnlineCourse) => {
-        if (!unlockedCourseIds.includes(course.id)) return;
+        const isFreeOrUnlocked = (course.price || 0) === 0 || unlockedCourseIds.includes(course.id);
+        if (!isFreeOrUnlocked) return;
         setIsLoading(true);
         try {
             const mods = await appBackend.getCourseModules(course.id);
@@ -2143,9 +2144,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                             const title = isCourse ? (item._course?.title || 'Curso') : (item._product?.name || 'Produto');
                                             const image = isCourse ? item._course?.imageUrl : item._product?.imageUrl;
                                             const price = isCourse ? (item._course?.price || 0) : (item._product?.price || 0);
-                                            const hasAccess = isCourse && unlockedCourseIds.includes(item.item_id);
+                                            const isFree = price === 0;
+                                            const hasCourseAccess = isCourse && unlockedCourseIds.includes(item.item_id);
+                                            const hasAccess = isFree || hasCourseAccess;
                                             const canPurchase = !hasAccess && price > 0;
-                                            const isBlocked = !hasAccess && !canPurchase;
 
                                             return (
                                                 <div
@@ -2153,7 +2155,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                     className={clsx(
                                                         "bg-white rounded-2xl border shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden flex",
                                                         hasAccess ? "border-emerald-200 border-l-4 border-l-emerald-500" :
-                                                        canPurchase ? "border-stone-200" :
+                                                        canPurchase ? "border-amber-200 border-l-4 border-l-amber-500" :
                                                         "border-stone-200 opacity-75"
                                                     )}
                                                     style={{ animationDelay: `${idx * 80}ms` }}
@@ -2166,9 +2168,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                 {isCourse ? <GraduationCap size={28} /> : <Package size={28} />}
                                                             </div>
                                                         )}
-                                                        {isBlocked && (
-                                                            <div className="absolute inset-0 bg-stone-900/30 backdrop-blur-[2px] flex items-center justify-center">
-                                                                <Lock size={22} className="text-white/80" />
+                                                        {canPurchase && (
+                                                            <div className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-md">
+                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price)}
                                                             </div>
                                                         )}
                                                     </div>
@@ -2178,7 +2180,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                 <span className={clsx("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", isCourse ? "bg-indigo-50 text-indigo-600" : "bg-teal-50 text-teal-600")}>
                                                                     {isCourse ? 'Curso' : 'Produto'}
                                                                 </span>
-                                                                {hasAccess && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">Liberado</span>}
+                                                                {hasAccess && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">{isFree ? 'Gratuito' : 'Liberado'}</span>}
+                                                                {canPurchase && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">Disponível para compra</span>}
                                                             </div>
                                                             <h4 className="font-black text-stone-800 text-sm leading-tight truncate">{title}</h4>
                                                         </div>
@@ -2186,7 +2189,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                             {hasAccess && isCourse && (
                                                                 <button
                                                                     onClick={() => {
-                                                                        const course = allCourses.find(c => c.id === item.item_id);
+                                                                        const course = item._course || allCourses.find(c => c.id === item.item_id);
                                                                         if (course) handleOpenCoursePlayer(course);
                                                                     }}
                                                                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
@@ -2194,8 +2197,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                     <Play size={12} /> Acessar Curso
                                                                 </button>
                                                             )}
-                                                            {hasAccess && !isCourse && item._product?.url && (
-                                                                <a href={item._product.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors">
+                                                            {hasAccess && !isCourse && (
+                                                                <a href={item._product?.url || '#'} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors">
                                                                     <Eye size={12} /> Ver Produto
                                                                 </a>
                                                             )}
@@ -2204,16 +2207,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                     <span className="text-sm font-black text-stone-800">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price)}</span>
                                                                     <button
                                                                         onClick={() => { if (isCourse) setCheckoutCourseId(item.item_id); }}
-                                                                        className="bg-stone-800 hover:bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+                                                                        className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
                                                                     >
-                                                                        <CreditCard size={12} /> {isCourse ? 'Comprar' : 'Saber Mais'}
+                                                                        <CreditCard size={12} /> {isCourse ? 'Comprar Curso' : 'Comprar / Saber Mais'}
                                                                     </button>
                                                                 </div>
-                                                            )}
-                                                            {isBlocked && (
-                                                                <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 flex items-center gap-1.5">
-                                                                    <Lock size={10} /> Aguardando Liberação
-                                                                </span>
                                                             )}
                                                         </div>
                                                     </div>

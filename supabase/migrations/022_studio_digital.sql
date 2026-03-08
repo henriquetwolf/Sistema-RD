@@ -56,7 +56,19 @@ CREATE TRIGGER trg_sdi_updated
     BEFORE UPDATE ON studio_digital_items
     FOR EACH ROW EXECUTE FUNCTION trg_set_updated_at();
 
--- 4. Seed inicial — 5 equipamentos Equipilates
+-- 4. RLS (Row Level Security)
+ALTER TABLE studio_digital_equipments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE studio_digital_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "studio_digital_equipments_all" ON studio_digital_equipments;
+CREATE POLICY "studio_digital_equipments_all" ON studio_digital_equipments
+    FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "studio_digital_items_all" ON studio_digital_items;
+CREATE POLICY "studio_digital_items_all" ON studio_digital_items
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. Seed inicial — 5 equipamentos Equipilates
 INSERT INTO studio_digital_equipments (name, slug, description, partner_name, is_active, sort_order)
 VALUES
     ('Reformer',  'reformer',  'O equipamento mais versátil do Pilates, ideal para trabalho de corpo inteiro com resistência por molas.', 'Equipilates', true, 1),

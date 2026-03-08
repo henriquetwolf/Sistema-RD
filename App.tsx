@@ -48,8 +48,7 @@ import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { StudioDigitalManager } from './components/StudioDigitalManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
-
-const VollMarketingManager = React.lazy(() => import('./components/VollMarketingManager').then(m => ({ default: m.VollMarketingManager })));
+import { VollMarketingManager } from './components/VollMarketingManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -67,6 +66,36 @@ import {
 import clsx from 'clsx';
 
 type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing';
+
+class MarketingErrorBoundary extends React.Component<
+  { children: React.ReactNode; onBack: () => void },
+  { hasError: boolean; error: string }
+> {
+  state = { hasError: false, error: '' };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="bg-white p-8 rounded-2xl border border-red-200 shadow-lg max-w-md text-center">
+            <AlertTriangle className="text-red-500 mx-auto mb-4" size={40} />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Erro ao carregar VOLL Marketing</h2>
+            <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-4 font-mono break-all">{this.state.error}</p>
+            <button
+              onClick={this.props.onBack}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-xl transition-colors"
+            >
+              Voltar ao Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   if (platformService.isNative()) {
@@ -725,9 +754,9 @@ function App() {
             </header>
 
             {dashboardTab === 'voll_marketing' && (
-                <React.Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-fuchsia-600" size={40} /></div>}>
+                <MarketingErrorBoundary onBack={() => setDashboardTab('overview')}>
                     <VollMarketingManager onBack={() => setDashboardTab('overview')} />
-                </React.Suspense>
+                </MarketingErrorBoundary>
             )}
 
             {dashboardTab !== 'voll_marketing' && <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank') && "max-w-full")}>

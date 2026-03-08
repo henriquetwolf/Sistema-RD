@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Users, Plus, Search, Trash2, Edit3, Eye, Tag, Target, TrendingUp, Clock,
+  Users, Plus, Search, Trash2, Edit2, Eye, Tag, Target, TrendingUp, Clock,
   Mail, Globe, FileText, MessageCircle, ArrowRight, Loader2, X, Check,
   Download, Upload, Filter, Star, ChevronDown, ChevronRight, Settings,
-  BarChart3, Zap, AlertTriangle, UserPlus, ArrowLeft
+  BarChart3, Zap, AlertTriangle, ArrowLeft
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -452,7 +452,7 @@ export const LeadManager: React.FC = () => {
                 onClick={() => { setEditLead(detailLead); setShowModal(true); }}
                 className="text-xs bg-slate-100 text-slate-700 px-3 py-2 rounded-xl font-medium hover:bg-slate-200 transition-colors flex items-center gap-1.5"
               >
-                <Edit3 size={13} /> Editar
+                <Edit2 size={13} /> Editar
               </button>
             </div>
           </div>
@@ -623,7 +623,7 @@ export const LeadManager: React.FC = () => {
                       </span>
                       <span className="text-sm text-slate-700 font-medium flex-1">{rule.field_or_event} <span className="text-slate-400">{rule.operator}</span> {rule.value}</span>
                       <span className={clsx('text-sm font-bold', rule.points >= 0 ? 'text-green-600' : 'text-red-600')}>{rule.points > 0 ? '+' : ''}{rule.points}pts</span>
-                      <button onClick={() => setRuleEditing(rule)} className="text-slate-400 hover:text-purple-600"><Edit3 size={13} /></button>
+                      <button onClick={() => setRuleEditing(rule)} className="text-slate-400 hover:text-purple-600"><Edit2 size={13} /></button>
                       <button onClick={() => handleDeleteRule(rule.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
                     </div>
                   ))}
@@ -645,7 +645,7 @@ export const LeadManager: React.FC = () => {
       <div className="grid grid-cols-6 gap-3">
         {[
           { label: 'Total Leads', value: stats.total, icon: <Users size={16} />, color: 'text-purple-600 bg-purple-50 border-purple-200' },
-          { label: 'Leads', value: stats.leads, icon: <UserPlus size={16} />, color: 'text-blue-600 bg-blue-50 border-blue-200' },
+          { label: 'Leads', value: stats.leads, icon: <Users size={16} />, color: 'text-blue-600 bg-blue-50 border-blue-200' },
           { label: 'MQLs', value: stats.mql, icon: <Target size={16} />, color: 'text-fuchsia-600 bg-fuchsia-50 border-fuchsia-200' },
           { label: 'SQLs', value: stats.sql, icon: <Star size={16} />, color: 'text-amber-600 bg-amber-50 border-amber-200' },
           { label: 'Oportunidades', value: stats.opportunity, icon: <TrendingUp size={16} />, color: 'text-orange-600 bg-orange-50 border-orange-200' },

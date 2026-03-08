@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  MessageCircle, Plus, Trash2, Edit3, Loader2, X, Check,
-  Smartphone, ToggleLeft, ToggleRight, Eye, BarChart3, Settings
+  MessageCircle, Plus, Trash2, Edit2, Loader2, X, Check,
+  Smartphone, Circle, CheckCircle, Eye, BarChart3, Settings
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -197,15 +197,15 @@ export const WhatsAppButtonManager: React.FC = () => {
                     {/* Toggle */}
                     <button onClick={() => handleToggleActive(btn)} className="flex items-center gap-1.5">
                       {btn.is_active ? (
-                        <ToggleRight size={24} className="text-purple-600" />
+                        <CheckCircle size={24} className="text-purple-600" />
                       ) : (
-                        <ToggleLeft size={24} className="text-slate-300" />
+                        <Circle size={24} className="text-slate-300" />
                       )}
                     </button>
 
                     {/* Actions */}
                     <button onClick={() => openEditor(btn)} className="text-slate-400 hover:text-purple-600 transition-colors p-1">
-                      <Edit3 size={16} />
+                      <Edit2 size={16} />
                     </button>
                     <button onClick={() => handleDelete(btn.id)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
                       <Trash2 size={16} />
@@ -359,7 +359,7 @@ export const WhatsAppButtonManager: React.FC = () => {
                         : 'border-slate-200 bg-slate-50 text-slate-400'
                     )}
                   >
-                    {editing.capture_as_lead ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    {editing.capture_as_lead ? <CheckCircle size={20} /> : <Circle size={20} />}
                     {editing.capture_as_lead ? 'Sim' : 'Não'}
                   </button>
                 </div>
@@ -375,7 +375,7 @@ export const WhatsAppButtonManager: React.FC = () => {
                         : 'border-slate-200 bg-slate-50 text-slate-400'
                     )}
                   >
-                    {editing.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    {editing.is_active ? <CheckCircle size={20} /> : <Circle size={20} />}
                     {editing.is_active ? 'Ativo' : 'Inativo'}
                   </button>
                 </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Mail, Plus, Search, Trash2, Edit3, Send, Clock, Eye, BarChart3,
+  Mail, Plus, Search, Trash2, Edit2, Send, Clock, Eye, BarChart3,
   Copy, Loader2, X, Check, AlertTriangle, Calendar, Users, Zap,
   ArrowLeft, FileText, MousePointerClick
 } from 'lucide-react';
@@ -267,7 +267,7 @@ export const EmailMarketingManager: React.FC = () => {
                   {/* Actions */}
                   <div className="mt-auto flex items-center gap-1.5 pt-3 border-t border-slate-100">
                     <button onClick={() => openEditor(c)} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl text-slate-600 bg-slate-50 hover:bg-purple-50 hover:text-purple-700 transition-colors">
-                      <Edit3 size={13} /> Editar
+                      <Edit2 size={13} /> Editar
                     </button>
                     <button onClick={() => duplicateCampaign(c)} className="p-2 rounded-xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Duplicar">
                       <Copy size={14} />

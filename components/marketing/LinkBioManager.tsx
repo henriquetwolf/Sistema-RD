@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Link2, Plus, Trash2, Edit3, Eye, GripVertical, Globe, Image, Type,
+  Link2, Plus, Trash2, Edit2, Eye, GripVertical, Globe, Image, Type,
   Minus, MessageCircle, ExternalLink, Loader2, X, Check, Smartphone,
   Copy, BarChart3,
 } from 'lucide-react';
@@ -252,7 +252,7 @@ export const LinkBioManager: React.FC = () => {
 
                 <div className="border-t px-4 py-2.5 flex items-center gap-1">
                   <button onClick={() => openEditor(page)} className="p-2 rounded-lg hover:bg-purple-50 text-gray-500 hover:text-purple-600 transition-colors" title="Editar">
-                    <Edit3 className="w-4 h-4" />
+                    <Edit2 className="w-4 h-4" />
                   </button>
                   <button onClick={() => deletePage(page.id)} className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-500 transition-colors" title="Excluir">
                     <Trash2 className="w-4 h-4" />
@@ -464,7 +464,7 @@ export const LinkBioManager: React.FC = () => {
                           onClick={() => setEditingItemId(isEditing ? null : item.id)}
                           className={clsx('p-1 rounded transition-colors', isEditing ? 'bg-purple-200 text-purple-700' : 'hover:bg-white text-gray-400 hover:text-purple-600')}
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => updateItem(item.id, { is_active: !item.is_active })}

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
-  Type, Image, MousePointerClick, Minus, Columns2, Trash2, ChevronUp,
-  ChevronDown, Variable, Eye, Code, GripVertical
+  Type, Image, MousePointerClick, Minus, LayoutGrid, Trash2, ChevronUp,
+  ChevronDown, Eye, Code, GripVertical
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -113,7 +113,7 @@ export const EmailEditor: React.FC<Props> = ({ htmlContent, onContentChange }) =
     { type: 'image', icon: <Image size={16} />, label: 'Imagem' },
     { type: 'button', icon: <MousePointerClick size={16} />, label: 'Botão' },
     { type: 'divider', icon: <Minus size={16} />, label: 'Divisor' },
-    { type: 'columns', icon: <Columns2 size={16} />, label: '2 Colunas' },
+    { type: 'columns', icon: <LayoutGrid size={16} />, label: '2 Colunas' },
   ];
 
   const renderBlockEditor = (block: EditorBlock) => {
@@ -129,7 +129,7 @@ export const EmailEditor: React.FC<Props> = ({ htmlContent, onContentChange }) =
                   onClick={() => setShowVarDropdown(showVarDropdown === varKey ? null : varKey)}
                   className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-purple-50 text-purple-600 hover:bg-purple-100"
                 >
-                  <Variable size={12} /> Variável
+                  <Code size={12} /> Variável
                 </button>
                 {showVarDropdown === varKey && (
                   <div className="absolute top-8 left-0 z-20 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[160px]">
@@ -247,7 +247,7 @@ export const EmailEditor: React.FC<Props> = ({ htmlContent, onContentChange }) =
                   onClick={() => setShowVarDropdown(showVarDropdown === varKey ? null : varKey)}
                   className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-purple-50 text-purple-600 hover:bg-purple-100"
                 >
-                  <Variable size={12} /> Variável
+                  <Code size={12} /> Variável
                 </button>
                 {showVarDropdown === varKey && (
                   <div className="absolute top-8 left-0 z-20 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[160px]">

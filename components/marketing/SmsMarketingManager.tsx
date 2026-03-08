@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Smartphone, Plus, Search, Trash2, Edit3, Send, Clock,
+  Smartphone, Plus, Search, Trash2, Edit2, Send, Clock,
   Loader2, X, Check, Users, BarChart3
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -221,7 +221,7 @@ export const SmsMarketingManager: React.FC = () => {
 
                   <div className="mt-auto flex items-center gap-1.5 pt-3 border-t border-slate-100">
                     <button onClick={() => openEditor(c)} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl text-slate-600 bg-slate-50 hover:bg-purple-50 hover:text-purple-700 transition-colors">
-                      <Edit3 size={13} /> Editar
+                      <Edit2 size={13} /> Editar
                     </button>
                     <button onClick={() => deleteCampaign(c.id)} className="p-2 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Excluir">
                       <Trash2 size={14} />

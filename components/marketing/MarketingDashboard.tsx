@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users, Mail, MousePointerClick, TrendingUp, Eye, Target,
   ArrowRight, Loader2, BarChart3, Zap, Globe, MessageCircle,
-  Filter, UserPlus, DollarSign
+  Filter, DollarSign
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -75,7 +75,7 @@ export const MarketingDashboard: React.FC<Props> = ({ onNavigate }) => {
       { label: 'MQL', count: mql, icon: Target },
       { label: 'SQL', count: sql, icon: Filter },
       { label: 'Oportunidades', count: opportunities, icon: DollarSign },
-      { label: 'Clientes', count: customers, icon: UserPlus },
+      { label: 'Clientes', count: customers, icon: Users },
     ];
 
     return steps.map((step, i) => ({

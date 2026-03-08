@@ -47,8 +47,9 @@ import { PagBankManager } from './components/PagBankManager';
 import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { StudioDigitalManager } from './components/StudioDigitalManager';
-import { VollMarketingManager } from './components/VollMarketingManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
+
+const VollMarketingManager = React.lazy(() => import('./components/VollMarketingManager').then(m => ({ default: m.VollMarketingManager })));
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -724,7 +725,9 @@ function App() {
             </header>
 
             {dashboardTab === 'voll_marketing' && (
-                <VollMarketingManager onBack={() => setDashboardTab('overview')} />
+                <React.Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-fuchsia-600" size={40} /></div>}>
+                    <VollMarketingManager onBack={() => setDashboardTab('overview')} />
+                </React.Suspense>
             )}
 
             {dashboardTab !== 'voll_marketing' && <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank') && "max-w-full")}>

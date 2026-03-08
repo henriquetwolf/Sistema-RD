@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  MousePointerClick, Plus, Search, Trash2, Edit3, Eye, Loader2, X, Check,
-  BarChart3, ArrowDown, LogOut, Globe, FileText, Settings, ToggleLeft, ToggleRight
+  MousePointerClick, Plus, Search, Trash2, Edit2, Eye, Loader2, X, Check,
+  BarChart3, ArrowDown, LogOut, Globe, FileText, Settings, Circle, CheckCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -212,9 +212,9 @@ export const PopupManager: React.FC = () => {
                   <td className="py-3 px-3 text-center">
                     <button onClick={() => handleToggleActive(popup)} className="inline-flex items-center gap-1.5">
                       {popup.is_active ? (
-                        <ToggleRight size={22} className="text-purple-600" />
+                        <CheckCircle size={22} className="text-purple-600" />
                       ) : (
-                        <ToggleLeft size={22} className="text-slate-300" />
+                        <Circle size={22} className="text-slate-300" />
                       )}
                       <span className={clsx('text-xs font-medium', popup.is_active ? 'text-purple-600' : 'text-slate-400')}>
                         {popup.is_active ? 'Ativo' : 'Inativo'}
@@ -239,7 +239,7 @@ export const PopupManager: React.FC = () => {
                   <td className="py-3 px-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => openEditor(popup)} className="text-slate-400 hover:text-purple-600 transition-colors">
-                        <Edit3 size={15} />
+                        <Edit2 size={15} />
                       </button>
                       <button onClick={() => handleDelete(popup.id)} className="text-slate-400 hover:text-red-500 transition-colors">
                         <Trash2 size={15} />
@@ -447,7 +447,7 @@ export const PopupManager: React.FC = () => {
                         : 'border-slate-200 bg-slate-50 text-slate-400'
                     )}
                   >
-                    {editing.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    {editing.is_active ? <CheckCircle size={20} /> : <Circle size={20} />}
                     {editing.is_active ? 'Ativo' : 'Inativo'}
                   </button>
                 </div>

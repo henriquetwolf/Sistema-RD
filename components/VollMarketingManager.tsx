@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Megaphone, LayoutDashboard, Mail, FileText, MousePointerClick, Globe, Link2, Share2,
-  Zap, MessageCircle, Smartphone, Bell, Users, Filter, BarChart3, Settings2,
-  ArrowLeft, ChevronRight, Target, TrendingUp, Send, Sparkles, Eye, UserPlus
+  Zap, MessageCircle, Smartphone, Bell, Users, Filter, BarChart3, Settings,
+  ArrowLeft, ChevronRight, Target, TrendingUp, Send, Sparkles, Eye
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -55,7 +55,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'leads', label: 'Gestão de Leads', icon: <Users size={18} />, pillar: 'APRIMORAR' },
   { id: 'segments', label: 'Segmentação', icon: <Filter size={18} />, pillar: 'APRIMORAR' },
   { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} />, pillar: 'ANALISAR' },
-  { id: 'crm_integration', label: 'Integração CRM', icon: <Settings2 size={18} /> },
+  { id: 'crm_integration', label: 'Integração CRM', icon: <Settings size={18} /> },
 ];
 
 const PILLAR_COLORS: Record<string, string> = {
@@ -148,7 +148,7 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
-            <UserPlus size={14} />
+            <Users size={14} />
             <span>{quickStats.leads} leads</span>
           </div>
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">

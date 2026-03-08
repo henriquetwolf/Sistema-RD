@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Share2, Plus, Search, Trash2, Edit3, Calendar, Clock, Image,
+  Share2, Plus, Search, Trash2, Edit2, Calendar, Clock, Image,
   Loader2, X, Check, Eye, Send, AlertTriangle, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -315,7 +315,7 @@ export const SocialMediaManager: React.FC = () => {
                     {/* Actions */}
                     <div className="border-t px-4 py-2.5 flex items-center gap-1">
                       <button onClick={() => openEditor(post)} className="p-2 rounded-lg hover:bg-purple-50 text-gray-500 hover:text-purple-600 transition-colors" title="Editar">
-                        <Edit3 className="w-4 h-4" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
                       <button onClick={() => deletePost(post.id)} className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-500 transition-colors" title="Excluir">
                         <Trash2 className="w-4 h-4" />
@@ -428,7 +428,7 @@ export const SocialMediaManager: React.FC = () => {
                         </div>
                       </div>
                       <button onClick={() => openEditor(p)} className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-purple-600 transition-colors">
-                        <Edit3 className="w-4 h-4" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
                     </div>
                   );

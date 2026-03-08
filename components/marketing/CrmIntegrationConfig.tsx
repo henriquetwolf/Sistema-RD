@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Settings2, Save, Loader2, Check, X, ArrowRight, ArrowLeftRight, Database,
-  Users, Target, GitBranch, RefreshCw, AlertTriangle, CheckCircle, Clock,
-  Zap, Eye, ToggleLeft, ToggleRight, ChevronDown, ChevronRight
+  Settings, Save, Loader2, Check, X, ArrowRight, ArrowLeftRight, Database,
+  Users, Target, Zap, RefreshCw, AlertTriangle, CheckCircle, Clock,
+  Eye, Circle, ChevronDown, ChevronRight
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -182,7 +182,7 @@ export const CrmIntegrationConfig: React.FC = () => {
             onClick={() => setConfig(prev => ({ ...prev, is_enabled: !prev.is_enabled }))}
             className={clsx("p-1 rounded-full transition-colors", config.is_enabled ? "text-green-500" : "text-slate-300")}
           >
-            {config.is_enabled ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
+            {config.is_enabled ? <CheckCircle size={36} /> : <Circle size={36} />}
           </button>
         </div>
       </div>
@@ -205,7 +205,7 @@ export const CrmIntegrationConfig: React.FC = () => {
                 onClick={() => setConfig(prev => ({ ...prev, auto_pass_enabled: !prev.auto_pass_enabled }))}
                 className={clsx("p-1 rounded-full transition-colors", config.auto_pass_enabled ? "text-green-500" : "text-slate-300")}
               >
-                {config.auto_pass_enabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                {config.auto_pass_enabled ? <CheckCircle size={28} /> : <Circle size={28} />}
               </button>
             </div>
 
@@ -238,7 +238,7 @@ export const CrmIntegrationConfig: React.FC = () => {
           {/* Pipeline destination */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-100 p-2 rounded-lg"><GitBranch size={18} className="text-indigo-600" /></div>
+              <div className="bg-indigo-100 p-2 rounded-lg"><Zap size={18} className="text-indigo-600" /></div>
               <h3 className="font-bold text-slate-800">Destino no CRM</h3>
             </div>
 
@@ -371,7 +371,7 @@ export const CrmIntegrationConfig: React.FC = () => {
                 onClick={() => setConfig(prev => ({ ...prev, sync_crm_events_back: !prev.sync_crm_events_back }))}
                 className={clsx("p-1 rounded-full transition-colors", config.sync_crm_events_back ? "text-green-500" : "text-slate-300")}
               >
-                {config.sync_crm_events_back ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                {config.sync_crm_events_back ? <CheckCircle size={28} /> : <Circle size={28} />}
               </button>
             </div>
           </div>

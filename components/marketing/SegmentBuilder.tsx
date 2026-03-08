@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Filter, Plus, Search, Trash2, Edit3, Users, Eye, Loader2, X, Check,
-  Settings, PlusCircle, MinusCircle, ChevronDown, ChevronRight, Target,
+  Filter, Plus, Search, Trash2, Edit2, Users, Eye, Loader2, X, Check,
+  Settings, Minus, ChevronDown, ChevronRight, Target,
   Tag, BarChart3, Mail, Globe, Calendar, Star, Zap, Database
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -516,7 +516,7 @@ export const SegmentBuilder: React.FC = () => {
                       <div className="flex items-center gap-1">
                         {(editing.rules || []).length > 1 && (
                           <button onClick={() => removeGroup(group.id)} className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition-colors" title="Remover grupo">
-                            <MinusCircle size={16} />
+                            <Minus size={16} />
                           </button>
                         )}
                       </div>
@@ -624,7 +624,7 @@ export const SegmentBuilder: React.FC = () => {
                           onClick={() => addRuleToGroup(group.id)}
                           className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-semibold mt-2 transition-colors"
                         >
-                          <PlusCircle size={14} /> Adicionar regra
+                          <Plus size={14} /> Adicionar regra
                         </button>
                       </div>
                     )}
@@ -637,7 +637,7 @@ export const SegmentBuilder: React.FC = () => {
               onClick={addGroup}
               className="w-full border-2 border-dashed border-fuchsia-300 rounded-2xl py-4 text-fuchsia-600 hover:bg-fuchsia-50 transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
             >
-              <PlusCircle size={16} /> Adicionar grupo (OU)
+              <Plus size={16} /> Adicionar grupo (OU)
             </button>
 
             {/* Preview count */}
@@ -795,7 +795,7 @@ export const SegmentBuilder: React.FC = () => {
 
               <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
                 <button onClick={() => openEditor(seg)} className="flex-1 flex items-center justify-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-semibold py-1.5 rounded-lg hover:bg-purple-50 transition-colors">
-                  <Edit3 size={13} /> Editar
+                  <Edit2 size={13} /> Editar
                 </button>
                 <button onClick={() => handleViewLeads(seg.id)} className="flex-1 flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 font-semibold py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
                   <Eye size={13} /> Ver Leads

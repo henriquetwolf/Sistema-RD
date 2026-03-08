@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Zap, Plus, Play, Pause, Trash2, Edit3, Search, Loader2, X, Check,
+  Zap, Plus, Play, Pause, Trash2, Edit2, Search, Loader2, X, Check,
   ArrowRight, ArrowDown, Clock, Mail, MessageCircle, Smartphone, Bell,
-  Tag, Target, Users, GitBranch, Settings, BarChart3, Eye, Copy,
-  Archive, AlertTriangle
+  Tag, Target, Users, Settings, BarChart3, Eye, Copy,
+  AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -69,7 +69,7 @@ const ACTION_TYPES: { value: string; label: string; icon: React.ReactNode; categ
   { value: 'create_crm_task', label: 'Criar Tarefa CRM', icon: <Check size={16} />, category: 'action' },
   { value: 'update_crm_owner', label: 'Alterar Responsável', icon: <Users size={16} />, category: 'action' },
   { value: 'webhook', label: 'Webhook', icon: <Zap size={16} />, category: 'action' },
-  { value: 'condition_field', label: 'Condição por Campo', icon: <GitBranch size={16} />, category: 'condition' },
+  { value: 'condition_field', label: 'Condição por Campo', icon: <Zap size={16} />, category: 'condition' },
   { value: 'condition_tag', label: 'Condição por Tag', icon: <Tag size={16} />, category: 'condition' },
   { value: 'condition_score', label: 'Condição por Score', icon: <BarChart3 size={16} />, category: 'condition' },
   { value: 'condition_crm_stage', label: 'Condição por Estágio CRM', icon: <Settings size={16} />, category: 'condition' },
@@ -251,7 +251,7 @@ export const MarketingAutomationBuilder: React.FC = () => {
       await appBackend.saveMarketingAutomation({ ...auto, status: 'archived' as AutomationStatus });
       await loadAutomations();
     } catch (e) {
-      console.error('[Archive] Erro:', e);
+      console.error('[Trash2] Erro:', e);
     }
   };
 
@@ -424,7 +424,7 @@ export const MarketingAutomationBuilder: React.FC = () => {
                   {/* Actions */}
                   <div className="flex items-center gap-1 pt-3 border-t border-slate-100 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => openEditor(auto)} className="p-1.5 rounded-lg hover:bg-purple-50 text-slate-400 hover:text-purple-600 transition-colors" title="Editar">
-                      <Edit3 size={15} />
+                      <Edit2 size={15} />
                     </button>
                     <button onClick={() => duplicateAutomation(auto)} className="p-1.5 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors" title="Duplicar">
                       <Copy size={15} />
@@ -437,7 +437,7 @@ export const MarketingAutomationBuilder: React.FC = () => {
                       {auto.status === 'active' ? <Pause size={15} /> : <Play size={15} />}
                     </button>
                     <button onClick={() => archiveAutomation(auto.id)} className="p-1.5 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors" title="Arquivar">
-                      <Archive size={15} />
+                      <Trash2 size={15} />
                     </button>
                     <button onClick={() => deleteAutomation(auto.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors ml-auto" title="Excluir">
                       <Trash2 size={15} />
@@ -522,7 +522,7 @@ export const MarketingAutomationBuilder: React.FC = () => {
                   <div className="text-[10px] uppercase tracking-wider font-bold opacity-70">Gatilho</div>
                   <div className="font-semibold text-sm">{getTriggerLabel(editingAutomation?.trigger_type || 'form_submitted')}</div>
                 </div>
-                <Edit3 size={14} className="opacity-60" />
+                <Edit2 size={14} className="opacity-60" />
               </div>
             </div>
 
@@ -757,7 +757,7 @@ const StepCard: React.FC<{
         </div>
         <div className="flex items-center gap-1">
           <button onClick={e => { e.stopPropagation(); onToggleEdit(); }} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-purple-600">
-            <Edit3 size={13} />
+            <Edit2 size={13} />
           </button>
           <button onClick={e => { e.stopPropagation(); onRemove(); }} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500">
             <Trash2 size={13} />

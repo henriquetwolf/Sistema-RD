@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection, StudioDigitalEquipment, StudioDigitalItem, Product } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection, StudioDigitalEquipment, StudioDigitalExercise } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
 import { 
@@ -118,8 +118,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     // Studio Digital
     const [studioEquipments, setStudioEquipments] = useState<StudioDigitalEquipment[]>([]);
     const [selectedStudioEquipment, setSelectedStudioEquipment] = useState<StudioDigitalEquipment | null>(null);
-    const [studioItems, setStudioItems] = useState<(StudioDigitalItem & { _course?: OnlineCourse; _product?: Product })[]>([]);
+    const [studioExercises, setStudioExercises] = useState<StudioDigitalExercise[]>([]);
     const [isStudioLoading, setIsStudioLoading] = useState(false);
+    const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+    const [fullscreenVideoId, setFullscreenVideoId] = useState<string | null>(null);
 
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
@@ -143,7 +145,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'learning_profile') loadKnowledgeBase();
         if (activeTab === 'ai_tutor') { loadAvatarsAndSelection(); loadChatHistory(); }
         if (activeTab === 'franchise_presentation') loadFranchisePresentation();
-        if (activeTab === 'studio_digital') { loadStudioDigital(); setSelectedStudioEquipment(null); }
+        if (activeTab === 'studio_digital') { loadStudioDigital(); setSelectedStudioEquipment(null); setPlayingVideoId(null); setFullscreenVideoId(null); }
     }, [activeTab]);
 
     const loadStudioDigital = async () => {
@@ -156,23 +158,31 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
 
     const loadStudioEquipmentDetail = async (eq: StudioDigitalEquipment) => {
         setSelectedStudioEquipment(eq);
+        setStudioExercises([]);
+        setPlayingVideoId(null);
+        setFullscreenVideoId(null);
         setIsStudioLoading(true);
         try {
-            const rawItems = await appBackend.getStudioDigitalItems(eq.id, true);
-            const courseIds = rawItems.filter(i => i.item_type === 'course').map(i => i.item_id);
-            const productIds = rawItems.filter(i => i.item_type === 'product').map(i => i.item_id);
-            const [coursesRes, productsRes] = await Promise.all([
-                courseIds.length ? appBackend.client.from('crm_online_courses').select('*').in('id', courseIds) : Promise.resolve({ data: [] }),
-                productIds.length ? appBackend.client.from('crm_products').select('*').in('id', productIds) : Promise.resolve({ data: [] }),
-            ]);
-            const coursesMap = new Map((coursesRes.data || []).map((c: any) => [c.id, c]));
-            const productsMap = new Map((productsRes.data || []).map((p: any) => [p.id, p]));
-            setStudioItems(rawItems.map(item => ({
-                ...item,
-                _course: item.item_type === 'course' ? coursesMap.get(item.item_id) : undefined,
-                _product: item.item_type === 'product' ? productsMap.get(item.item_id) : undefined,
-            })));
-        } catch (e) { console.error(e); } finally { setIsStudioLoading(false); }
+            const exercises = await appBackend.getStudioDigitalExercises(eq.id, true);
+            setStudioExercises(exercises);
+        } catch (e) { console.error('[StudioDigital] Erro ao carregar exercícios:', e); } finally { setIsStudioLoading(false); }
+    };
+
+    const getVideoEmbedUrl = (url: string): string | null => {
+        const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|shorts\/))([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0`;
+        const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+        if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`;
+        return null;
+    };
+
+    const isDirectVideo = (url: string): boolean => /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url);
+
+    const getVideoThumbnail = (ex: StudioDigitalExercise): string => {
+        if (ex.thumbnail_url) return ex.thumbnail_url;
+        const ytMatch = ex.video_url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|shorts\/))([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+        return '';
     };
 
     const loadFranchisePresentation = async () => {
@@ -2045,7 +2055,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                     </div>
                                     <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3 leading-tight">Studio Digital</h1>
                                     <p className="text-stone-300 text-base md:text-lg font-medium leading-relaxed max-w-xl">Treine no estúdio virtual com equipamentos Equipilates</p>
-                                    <p className="text-stone-400 text-sm mt-3 max-w-lg">Selecione um equipamento para visualizar os cursos e produtos disponíveis.</p>
+                                    <p className="text-stone-400 text-sm mt-3 max-w-lg">Selecione um equipamento para assistir aos exercícios em vídeo.</p>
                                 </div>
                             </section>
 
@@ -2099,7 +2109,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                     {activeTab === 'studio_digital' && selectedStudioEquipment && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             {/* Back */}
-                            <button onClick={() => setSelectedStudioEquipment(null)} className="text-stone-500 hover:text-stone-800 flex items-center gap-2 text-sm font-bold transition-colors">
+                            <button onClick={() => { setSelectedStudioEquipment(null); setPlayingVideoId(null); setFullscreenVideoId(null); }} className="text-stone-500 hover:text-stone-800 flex items-center gap-2 text-sm font-bold transition-colors">
                                 <ChevronLeft size={18} /> Voltar aos equipamentos
                             </button>
 
@@ -2124,96 +2134,95 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                 </div>
                             </div>
 
-                            {/* Items Section */}
+                            {/* Exercises Section */}
                             <div>
-                                <h3 className="text-sm font-black uppercase tracking-widest text-stone-400 mb-5">Cursos e produtos disponíveis</h3>
+                                <h3 className="text-sm font-black uppercase tracking-widest text-stone-400 mb-5 flex items-center gap-2">
+                                    <Video size={16} /> Exercícios disponíveis
+                                </h3>
 
                                 {isStudioLoading ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {[1,2,3].map(i => <div key={i} className="h-32 bg-stone-100 animate-pulse rounded-2xl" />)}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                        {[1,2,3].map(i => (
+                                            <div key={i} className="bg-stone-100 animate-pulse rounded-2xl" style={{ aspectRatio: '16/12' }} />
+                                        ))}
                                     </div>
-                                ) : studioItems.length === 0 ? (
+                                ) : studioExercises.length === 0 ? (
                                     <div className="py-16 text-center bg-white rounded-2xl border border-stone-200">
-                                        <Package size={36} className="mx-auto mb-3 text-stone-300" />
-                                        <p className="text-stone-500 font-bold text-sm">Nenhum conteúdo vinculado a este equipamento.</p>
+                                        <Video size={36} className="mx-auto mb-3 text-stone-300" />
+                                        <p className="text-stone-500 font-bold text-sm">Nenhum exercício cadastrado para este equipamento.</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {studioItems.map((item, idx) => {
-                                            const isCourse = item.item_type === 'course';
-                                            const title = isCourse ? (item._course?.title || 'Curso') : (item._product?.name || 'Produto');
-                                            const image = isCourse ? item._course?.imageUrl : item._product?.imageUrl;
-                                            const price = isCourse ? (item._course?.price || 0) : (item._product?.price || 0);
-                                            const isFree = price === 0;
-                                            const hasCourseAccess = isCourse && unlockedCourseIds.includes(item.item_id);
-                                            const hasAccess = isFree || hasCourseAccess;
-                                            const canPurchase = !hasAccess && price > 0;
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                        {studioExercises.map((ex, idx) => {
+                                            const thumb = getVideoThumbnail(ex);
+                                            const isPlaying = playingVideoId === ex.id;
+                                            const embedUrl = getVideoEmbedUrl(ex.video_url);
+                                            const isDirect = isDirectVideo(ex.video_url);
 
                                             return (
                                                 <div
-                                                    key={item.id}
-                                                    className={clsx(
-                                                        "bg-white rounded-2xl border shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden flex",
-                                                        hasAccess ? "border-emerald-200 border-l-4 border-l-emerald-500" :
-                                                        canPurchase ? "border-amber-200 border-l-4 border-l-amber-500" :
-                                                        "border-stone-200 opacity-75"
-                                                    )}
-                                                    style={{ animationDelay: `${idx * 80}ms` }}
+                                                    key={ex.id}
+                                                    className="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
+                                                    style={{ animationDelay: `${idx * 60}ms` }}
                                                 >
-                                                    <div className="w-28 md:w-36 flex-shrink-0 bg-stone-100 relative overflow-hidden">
-                                                        {image ? (
-                                                            <img src={image} alt={title} loading="lazy" className="w-full h-full object-cover" />
+                                                    {/* Video / Thumbnail area */}
+                                                    <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
+                                                        {isPlaying ? (
+                                                            <>
+                                                                {embedUrl ? (
+                                                                    <iframe
+                                                                        src={embedUrl}
+                                                                        className="w-full h-full"
+                                                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                                                        allowFullScreen
+                                                                        title={ex.name}
+                                                                    />
+                                                                ) : isDirect ? (
+                                                                    <video
+                                                                        src={ex.video_url}
+                                                                        className="w-full h-full object-contain"
+                                                                        controls
+                                                                        autoPlay
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center text-white text-sm">
+                                                                        <a href={ex.video_url} target="_blank" rel="noopener noreferrer" className="underline">Abrir vídeo</a>
+                                                                    </div>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => setPlayingVideoId(null)}
+                                                                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-full transition-colors z-10"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </>
                                                         ) : (
-                                                            <div className="w-full h-full flex items-center justify-center text-stone-300">
-                                                                {isCourse ? <GraduationCap size={28} /> : <Package size={28} />}
-                                                            </div>
-                                                        )}
-                                                        {canPurchase && (
-                                                            <div className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-md">
-                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price)}
-                                                            </div>
+                                                            <button
+                                                                onClick={() => setPlayingVideoId(ex.id)}
+                                                                className="w-full h-full relative cursor-pointer focus:outline-none"
+                                                            >
+                                                                {thumb ? (
+                                                                    <img src={thumb} alt={ex.name} loading="lazy" className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <div className="w-full h-full bg-gradient-to-br from-stone-700 to-stone-900 flex items-center justify-center">
+                                                                        <MonitorPlay size={40} className="text-stone-500" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                                                                    <div className="w-14 h-14 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform duration-300">
+                                                                        <Play size={22} className="text-stone-800 ml-1" />
+                                                                    </div>
+                                                                </div>
+                                                            </button>
                                                         )}
                                                     </div>
-                                                    <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
-                                                        <div>
-                                                            <div className="flex items-center gap-2 mb-1.5">
-                                                                <span className={clsx("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", isCourse ? "bg-indigo-50 text-indigo-600" : "bg-teal-50 text-teal-600")}>
-                                                                    {isCourse ? 'Curso' : 'Produto'}
-                                                                </span>
-                                                                {hasAccess && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">{isFree ? 'Gratuito' : 'Liberado'}</span>}
-                                                                {canPurchase && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">Disponível para compra</span>}
-                                                            </div>
-                                                            <h4 className="font-black text-stone-800 text-sm leading-tight truncate">{title}</h4>
-                                                        </div>
-                                                        <div className="mt-3">
-                                                            {hasAccess && isCourse && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const course = item._course || allCourses.find(c => c.id === item.item_id);
-                                                                        if (course) handleOpenCoursePlayer(course);
-                                                                    }}
-                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
-                                                                >
-                                                                    <Play size={12} /> Acessar Curso
-                                                                </button>
-                                                            )}
-                                                            {hasAccess && !isCourse && (
-                                                                <a href={item._product?.url || '#'} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors">
-                                                                    <Eye size={12} /> Ver Produto
-                                                                </a>
-                                                            )}
-                                                            {canPurchase && (
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className="text-sm font-black text-stone-800">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price)}</span>
-                                                                    <button
-                                                                        onClick={() => { if (isCourse) setCheckoutCourseId(item.item_id); }}
-                                                                        className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
-                                                                    >
-                                                                        <CreditCard size={12} /> {isCourse ? 'Comprar Curso' : 'Comprar / Saber Mais'}
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                        </div>
+
+                                                    {/* Info */}
+                                                    <div className="p-4">
+                                                        <h4 className="font-black text-stone-800 text-sm leading-tight line-clamp-2">{ex.name}</h4>
+                                                        {ex.description && (
+                                                            <p className="text-stone-500 text-xs mt-1.5 leading-relaxed line-clamp-2">{ex.description}</p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -2223,6 +2232,28 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                             </div>
                         </div>
                     )}
+
+                    {/* Fullscreen Video Modal */}
+                    {fullscreenVideoId && (() => {
+                        const ex = studioExercises.find(e => e.id === fullscreenVideoId);
+                        if (!ex) return null;
+                        const embedUrl = getVideoEmbedUrl(ex.video_url);
+                        const isDirect = isDirectVideo(ex.video_url);
+                        return (
+                            <div className="fixed inset-0 bg-black z-50 flex items-center justify-center" onClick={() => setFullscreenVideoId(null)}>
+                                <button onClick={() => setFullscreenVideoId(null)} className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors z-10">
+                                    <X size={20} />
+                                </button>
+                                <div className="w-full h-full max-w-[90vw] max-h-[90vh] mx-auto flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                                    {embedUrl ? (
+                                        <iframe src={embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen title={ex.name} />
+                                    ) : isDirect ? (
+                                        <video src={ex.video_url} className="max-w-full max-h-full" controls autoPlay />
+                                    ) : null}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* ── Apresentação Franquia VOLL Studios ───────────────────── */}
                     {activeTab === 'franchise_presentation' && (

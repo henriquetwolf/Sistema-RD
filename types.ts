@@ -1305,11 +1305,13 @@ export interface StudioDigitalEquipment {
   updated_at: string;
 }
 
-export interface StudioDigitalItem {
+export interface StudioDigitalExercise {
   id: string;
   equipment_id: string;
-  item_type: 'course' | 'product';
-  item_id: string;
+  name: string;
+  description: string;
+  video_url: string;
+  thumbnail_url: string;
   is_active: boolean;
   sort_order: number;
   created_at: string;

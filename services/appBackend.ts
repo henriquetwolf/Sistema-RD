@@ -9,7 +9,7 @@ import {
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
   WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig,
   ContaAzulProductMapping, FranchisePresentationSection,
-  StudioDigitalEquipment, StudioDigitalItem
+  StudioDigitalEquipment, StudioDigitalExercise
 } from '../types';
 import { whatsappService } from './whatsappService';
 
@@ -1335,7 +1335,8 @@ export const appBackend = {
     if (!isConfigured) return [];
     let q = supabase.from('studio_digital_equipments').select('*').order('sort_order');
     if (onlyActive) q = q.eq('is_active', true);
-    const { data } = await q;
+    const { data, error } = await q;
+    if (error) console.error('[StudioDigital] Erro ao buscar equipamentos:', error);
     return (data || []) as StudioDigitalEquipment[];
   },
 
@@ -1348,7 +1349,7 @@ export const appBackend = {
   upsertStudioDigitalEquipment: async (eq: Partial<StudioDigitalEquipment>): Promise<void> => {
     if (!isConfigured) return;
     const slug = eq.slug || slugify(eq.name || '');
-    await supabase.from('studio_digital_equipments').upsert({
+    const payload = {
       id: eq.id || crypto.randomUUID(),
       name: eq.name,
       slug,
@@ -1357,7 +1358,9 @@ export const appBackend = {
       image_url: eq.image_url || '',
       is_active: eq.is_active ?? true,
       sort_order: eq.sort_order ?? 0,
-    });
+    };
+    const { error } = await supabase.from('studio_digital_equipments').upsert(payload, { onConflict: 'slug' });
+    if (error) console.error('[StudioDigital] Erro ao salvar equipamento:', error);
   },
 
   toggleStudioDigitalEquipmentActive: async (id: string, isActive: boolean): Promise<void> => {
@@ -1365,40 +1368,44 @@ export const appBackend = {
     await supabase.from('studio_digital_equipments').update({ is_active: isActive }).eq('id', id);
   },
 
-  getStudioDigitalItems: async (equipmentId: string, onlyActive?: boolean): Promise<StudioDigitalItem[]> => {
+  getStudioDigitalExercises: async (equipmentId: string, onlyActive?: boolean): Promise<StudioDigitalExercise[]> => {
     if (!isConfigured) return [];
-    let q = supabase.from('studio_digital_items').select('*').eq('equipment_id', equipmentId).order('sort_order');
+    let q = supabase.from('studio_digital_exercises').select('*').eq('equipment_id', equipmentId).order('sort_order');
     if (onlyActive) q = q.eq('is_active', true);
-    const { data } = await q;
-    return (data || []) as StudioDigitalItem[];
+    const { data, error } = await q;
+    if (error) console.error('[StudioDigital] Erro ao buscar exercícios:', error);
+    return (data || []) as StudioDigitalExercise[];
   },
 
-  addStudioDigitalItem: async (item: { equipment_id: string; item_type: 'course' | 'product'; item_id: string }): Promise<void> => {
+  saveStudioDigitalExercise: async (exercise: Partial<StudioDigitalExercise> & { equipment_id: string; name: string; video_url: string }): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('studio_digital_items').upsert({
-      id: crypto.randomUUID(),
-      equipment_id: item.equipment_id,
-      item_type: item.item_type,
-      item_id: item.item_id,
-      is_active: true,
-      sort_order: 999,
-    }, { onConflict: 'equipment_id,item_type,item_id' });
+    const { error } = await supabase.from('studio_digital_exercises').upsert({
+      id: exercise.id || crypto.randomUUID(),
+      equipment_id: exercise.equipment_id,
+      name: exercise.name,
+      description: exercise.description || '',
+      video_url: exercise.video_url,
+      thumbnail_url: exercise.thumbnail_url || '',
+      is_active: exercise.is_active ?? true,
+      sort_order: exercise.sort_order ?? 999,
+    });
+    if (error) console.error('[StudioDigital] Erro ao salvar exercício:', error);
   },
 
-  removeStudioDigitalItem: async (id: string): Promise<void> => {
+  removeStudioDigitalExercise: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('studio_digital_items').delete().eq('id', id);
+    await supabase.from('studio_digital_exercises').delete().eq('id', id);
   },
 
-  toggleStudioDigitalItemActive: async (id: string, isActive: boolean): Promise<void> => {
+  toggleStudioDigitalExerciseActive: async (id: string, isActive: boolean): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('studio_digital_items').update({ is_active: isActive }).eq('id', id);
+    await supabase.from('studio_digital_exercises').update({ is_active: isActive }).eq('id', id);
   },
 
-  updateStudioDigitalItemOrder: async (items: { id: string; sort_order: number }[]): Promise<void> => {
+  updateStudioDigitalExerciseOrder: async (exercises: { id: string; sort_order: number }[]): Promise<void> => {
     if (!isConfigured) return;
-    for (const item of items) {
-      await supabase.from('studio_digital_items').update({ sort_order: item.sort_order }).eq('id', item.id);
+    for (const ex of exercises) {
+      await supabase.from('studio_digital_exercises').update({ sort_order: ex.sort_order }).eq('id', ex.id);
     }
   },
 };

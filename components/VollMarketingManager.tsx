@@ -1,10 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Megaphone, LayoutDashboard, Mail, FileText, Globe, Link2, Share2,
   Zap, MessageCircle, Smartphone, Bell, Users, Filter, BarChart3, Settings,
-  ArrowLeft, ChevronRight, Target, Send, Eye
+  ArrowLeft, ChevronRight, Target, Send, Eye, AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
+import { MarketingDashboard } from './marketing/MarketingDashboard';
+import { SocialMediaManager } from './marketing/SocialMediaManager';
+import { LinkBioManager } from './marketing/LinkBioManager';
+import { LandingPageManager } from './LandingPageManager';
+import { FormsManager } from './FormsManager';
+import { PopupManager } from './marketing/PopupManager';
+import { WhatsAppButtonManager } from './marketing/WhatsAppButtonManager';
+import { EmailMarketingManager } from './marketing/EmailMarketingManager';
+import { MarketingAutomationBuilder } from './marketing/MarketingAutomationBuilder';
+import { WhatsAppMarketingManager } from './marketing/WhatsAppMarketingManager';
+import { SmsMarketingManager } from './marketing/SmsMarketingManager';
+import { WebPushManager } from './marketing/WebPushManager';
+import { LeadManager } from './marketing/LeadManager';
+import { SegmentBuilder } from './marketing/SegmentBuilder';
+import { MarketingAnalytics } from './marketing/MarketingAnalytics';
+import { CrmIntegrationConfig } from './marketing/CrmIntegrationConfig';
+import { appBackend } from '../services/appBackend';
 
 type MarketingModule =
   | 'dashboard'
@@ -49,6 +66,28 @@ const PILLAR_COLORS: Record<string, string> = {
   'ANALISAR': 'text-rose-500',
 };
 
+class ModuleErrorBoundary extends React.Component<
+  { children: React.ReactNode; moduleName: string },
+  { hasError: boolean; error: string }
+> {
+  state = { hasError: false, error: '' };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
+          <AlertTriangle className="text-red-500 mx-auto mb-3" size={36} />
+          <h3 className="text-lg font-bold text-red-800 mb-2">Erro no módulo: {this.props.moduleName}</h3>
+          <p className="text-sm text-red-600 bg-white p-3 rounded-lg font-mono break-all">{this.state.error}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 interface Props {
   onBack: () => void;
 }
@@ -56,6 +95,27 @@ interface Props {
 export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
   const [activeModule, setActiveModule] = useState<MarketingModule>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [quickStats, setQuickStats] = useState({ leads: 0, sent: 0, active: 0 });
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const [leads, campaigns, automations] = await Promise.all([
+          appBackend.marketing.leads.list().catch(() => []),
+          appBackend.marketing.emailCampaigns.list().catch(() => []),
+          appBackend.marketing.automations.list().catch(() => []),
+        ]);
+        setQuickStats({
+          leads: Array.isArray(leads) ? leads.length : 0,
+          sent: Array.isArray(campaigns) ? campaigns.filter((c: any) => c.status === 'sent').length : 0,
+          active: Array.isArray(automations) ? automations.filter((a: any) => a.is_active).length : 0,
+        });
+      } catch {
+        // silently ignore stats loading errors
+      }
+    };
+    loadStats();
+  }, []);
 
   const groupedItems = React.useMemo(() => {
     const groups: { pillar: string | null; items: SidebarItem[] }[] = [];
@@ -70,6 +130,53 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
     }
     return groups;
   }, []);
+
+  const renderContent = () => {
+    const moduleLabel = SIDEBAR_ITEMS.find(i => i.id === activeModule)?.label || activeModule;
+
+    switch (activeModule) {
+      case 'dashboard':
+        return <MarketingDashboard onNavigate={(mod) => setActiveModule(mod as MarketingModule)} />;
+      case 'social_media':
+        return <SocialMediaManager />;
+      case 'link_bio':
+        return <LinkBioManager />;
+      case 'landing_pages':
+        return <LandingPageManager onBack={() => setActiveModule('dashboard')} />;
+      case 'forms':
+        return <FormsManager onBack={() => setActiveModule('dashboard')} />;
+      case 'popups':
+        return <PopupManager />;
+      case 'wa_button':
+        return <WhatsAppButtonManager />;
+      case 'email':
+        return <EmailMarketingManager />;
+      case 'automation':
+        return <MarketingAutomationBuilder />;
+      case 'wa_marketing':
+        return <WhatsAppMarketingManager />;
+      case 'sms':
+        return <SmsMarketingManager />;
+      case 'web_push':
+        return <WebPushManager />;
+      case 'leads':
+        return <LeadManager />;
+      case 'segments':
+        return <SegmentBuilder />;
+      case 'analytics':
+        return <MarketingAnalytics />;
+      case 'crm_integration':
+        return <CrmIntegrationConfig />;
+      default:
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+            <Megaphone size={48} className="text-purple-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-slate-800 mb-2">{moduleLabel}</h2>
+            <p className="text-slate-400 text-sm">Módulo em desenvolvimento.</p>
+          </div>
+        );
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -91,15 +198,15 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
             <Users size={14} />
-            <span>0 leads</span>
+            <span>{quickStats.leads} leads</span>
           </div>
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
             <Mail size={14} />
-            <span>0 enviados</span>
+            <span>{quickStats.sent} enviados</span>
           </div>
           <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
             <Zap size={14} />
-            <span>0 ativas</span>
+            <span>{quickStats.active} ativas</span>
           </div>
         </div>
       </div>
@@ -151,12 +258,9 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
         </aside>
 
         <main className="flex-1 min-w-0 overflow-y-auto p-6 bg-slate-50" style={{ height: 'calc(100vh - 76px)' }}>
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-            <Megaphone size={48} className="text-purple-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-black text-slate-800 mb-2">VOLL Marketing</h2>
-            <p className="text-slate-500 mb-4">Módulo ativo: <strong className="text-purple-600">{activeModule}</strong></p>
-            <p className="text-sm text-slate-400">Selecione um módulo na sidebar para começar.</p>
-          </div>
+          <ModuleErrorBoundary moduleName={SIDEBAR_ITEMS.find(i => i.id === activeModule)?.label || activeModule} key={activeModule}>
+            {renderContent()}
+          </ModuleErrorBoundary>
         </main>
       </div>
     </div>

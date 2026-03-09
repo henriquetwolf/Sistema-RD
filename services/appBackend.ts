@@ -336,6 +336,41 @@ export const appBackend = {
       return result;
   },
 
+  sendFranchiseEmail: async (to: string, subject: string, body: string): Promise<boolean> => {
+      const settings = await appBackend.getFranchiseMeetingSettings();
+      let apiKey = settings.brevo_api_key;
+      let senderEmail = settings.brevo_sender_email;
+      let senderName = settings.brevo_sender_name || 'VOLL Pilates';
+
+      if (!apiKey || !senderEmail) {
+          const generalConfig = await appBackend.getEmailConfig();
+          if (!generalConfig || !generalConfig.apiKey || !generalConfig.senderEmail) {
+              console.warn("[FRANCHISE EMAIL] Nenhuma configuração de e-mail disponível (franquia nem geral).");
+              return false;
+          }
+          apiKey = generalConfig.apiKey;
+          senderEmail = generalConfig.senderEmail;
+          senderName = generalConfig.senderName || 'VOLL Pilates';
+      }
+
+      const result = await brevoService.sendEmail(apiKey, senderEmail, senderName, { to, subject, htmlContent: body });
+      return result.success;
+  },
+
+  sendFranchiseTestEmail: async (testRecipient: string): Promise<{ success: boolean; error?: string }> => {
+      const settings = await appBackend.getFranchiseMeetingSettings();
+      let apiKey = settings.brevo_api_key;
+      let senderEmail = settings.brevo_sender_email;
+      let senderName = settings.brevo_sender_name || 'VOLL Pilates';
+
+      if (!apiKey || !senderEmail) {
+          return { success: false, error: 'Configuração de e-mail da franquia incompleta. Preencha a chave API e o e-mail remetente, ou configure o e-mail geral do sistema.' };
+      }
+
+      const result = await brevoService.sendTestEmail(apiKey, senderEmail, senderName, testRecipient);
+      return result;
+  },
+
   /**
    * Executa a lógica de automação de fluxo associada a uma submissão.
    * Otimizado para suportar esperas assíncronas e progressão contínua de nós.
@@ -1914,7 +1949,7 @@ export const appBackend = {
   },
 
   getFranchiseMeetingSettings: async (): Promise<FranchiseMeetingSettings> => {
-    const defaults: FranchiseMeetingSettings = { advance_days: 30, max_bookings_per_student: 1, admin_email: '', admin_phone: '', meeting_title: 'Reunião Franquia VOLL Studios', meeting_description: 'Reunião de apresentação da Franquia VOLL Studios' };
+    const defaults: FranchiseMeetingSettings = { advance_days: 30, max_bookings_per_student: 1, admin_email: '', admin_phone: '', meeting_title: 'Reunião Franquia VOLL Studios', meeting_description: 'Reunião de apresentação da Franquia VOLL Studios', brevo_api_key: '', brevo_sender_email: '', brevo_sender_name: '' };
     if (!isConfigured) return defaults;
     const { data } = await supabase.from('crm_settings').select('value').eq('key', 'franchise_meeting_config').maybeSingle();
     if (data?.value) {

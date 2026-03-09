@@ -1366,6 +1366,9 @@ export interface FranchiseMeetingSettings {
   admin_phone: string;
   meeting_title: string;
   meeting_description: string;
+  brevo_api_key: string;
+  brevo_sender_email: string;
+  brevo_sender_name: string;
 }
 
 export interface FranchiseMeetingSlot {

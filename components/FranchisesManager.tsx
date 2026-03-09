@@ -6,7 +6,7 @@ import {
   DollarSign, User, Building, Map as MapIcon, List,
   Navigation, AlertTriangle, CheckCircle, Briefcase, Globe, Info, Ruler, Dumbbell,
   AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned, Sparkles, Presentation,
-  Video, CalendarDays, Clock, Ban, Settings2, ExternalLink, ChevronLeft, ChevronRight, Trash, Eye
+  Video, CalendarDays, Clock, Ban, Settings2, ExternalLink, ChevronLeft, ChevronRight, Trash, Eye, Send
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -104,13 +104,16 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [meetingAvailability, setMeetingAvailability] = useState<FranchiseMeetingAvailability[]>([]);
   const [meetingBlockedDates, setMeetingBlockedDates] = useState<FranchiseMeetingBlockedDate[]>([]);
   const [meetingBookings, setMeetingBookings] = useState<FranchiseMeetingBooking[]>([]);
-  const [meetingSettings, setMeetingSettings] = useState<FranchiseMeetingSettings>({ advance_days: 30, max_bookings_per_student: 1, admin_email: '', admin_phone: '', meeting_title: 'Reunião Franquia VOLL Studios', meeting_description: 'Reunião de apresentação da Franquia VOLL Studios' });
+  const [meetingSettings, setMeetingSettings] = useState<FranchiseMeetingSettings>({ advance_days: 30, max_bookings_per_student: 1, admin_email: '', admin_phone: '', meeting_title: 'Reunião Franquia VOLL Studios', meeting_description: 'Reunião de apresentação da Franquia VOLL Studios', brevo_api_key: '', brevo_sender_email: '', brevo_sender_name: '' });
   const [meetingLoading, setMeetingLoading] = useState(false);
   const [meetingSaving, setMeetingSaving] = useState(false);
   const [meetingTab, setMeetingTab] = useState<'availability' | 'bookings' | 'settings'>('availability');
   const [newBlockedDate, setNewBlockedDate] = useState('');
   const [newBlockedReason, setNewBlockedReason] = useState('');
   const [meetingBookingFilter, setMeetingBookingFilter] = useState<'all' | 'scheduled' | 'completed' | 'cancelled'>('all');
+  const [franchiseTestEmail, setFranchiseTestEmail] = useState('');
+  const [isSendingFranchiseTest, setIsSendingFranchiseTest] = useState(false);
+  const [franchiseTestResult, setFranchiseTestResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   // Estados de Simulação no Mapa
   const [simAddress, setSimAddress] = useState('');
@@ -476,6 +479,21 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
           alert('Erro: ' + (e.message || e));
       } finally {
           setMeetingSaving(false);
+      }
+  };
+
+  const handleFranchiseTestEmail = async () => {
+      if (!franchiseTestEmail) return;
+      setIsSendingFranchiseTest(true);
+      setFranchiseTestResult(null);
+      try {
+          await appBackend.saveFranchiseMeetingSettings(meetingSettings);
+          const result = await appBackend.sendFranchiseTestEmail(franchiseTestEmail);
+          setFranchiseTestResult(result);
+      } catch (e: any) {
+          setFranchiseTestResult({ success: false, error: e.message || 'Erro desconhecido' });
+      } finally {
+          setIsSendingFranchiseTest(false);
       }
   };
 
@@ -902,6 +920,52 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                                 <p><span className="text-blue-600 font-bold">GOOGLE_CALENDAR_ID</span> = ID da agenda compartilhada (ex: xxx@group.calendar.google.com)</p>
                                             </div>
                                             <p className="text-xs text-blue-700 italic">Sem estas configurações, o agendamento funcionará normalmente mas sem link do Google Meet.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Brevo Franchise Email Config */}
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <Mail size={20} className="text-emerald-600" /> Configuração de E-mail (Brevo Franquia)
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-1">Configure uma chave Brevo específica para e-mails de agendamento de reuniões. Se vazio, será usado a configuração geral do sistema (Formulários &gt; E-mail).</p>
+                                    </div>
+                                    <div className="p-6 space-y-5">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Chave API Brevo</label>
+                                                <input type="password" value={meetingSettings.brevo_api_key} onChange={e => setMeetingSettings(s => ({ ...s, brevo_api_key: e.target.value }))} placeholder="xkeysib-..." className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail Remetente</label>
+                                                <input type="email" value={meetingSettings.brevo_sender_email} onChange={e => setMeetingSettings(s => ({ ...s, brevo_sender_email: e.target.value }))} placeholder="noreply@empresa.com" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome de Exibição</label>
+                                                <input type="text" value={meetingSettings.brevo_sender_name} onChange={e => setMeetingSettings(s => ({ ...s, brevo_sender_name: e.target.value }))} placeholder="VOLL Franquias" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+
+                                        <div className="border-t border-slate-100 pt-5">
+                                            <h4 className="text-xs font-black text-slate-500 uppercase mb-3">Envio de Teste</h4>
+                                            <div className="flex gap-2">
+                                                <input type="email" value={franchiseTestEmail} onChange={e => setFranchiseTestEmail(e.target.value)} placeholder="destinatario@email.com" className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                                <button onClick={handleFranchiseTestEmail} disabled={isSendingFranchiseTest || !franchiseTestEmail} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50 whitespace-nowrap">
+                                                    {isSendingFranchiseTest ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                                    Enviar Teste
+                                                </button>
+                                            </div>
+                                            {franchiseTestResult && (
+                                                <div className={clsx("mt-3 px-4 py-2.5 rounded-lg text-sm font-medium", franchiseTestResult.success ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200")}>
+                                                    {franchiseTestResult.success ? 'E-mail de teste enviado com sucesso!' : `Erro: ${franchiseTestResult.error}`}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                                            <p className="text-xs text-amber-800"><strong>Nota:</strong> Os campos acima são salvos junto com as demais configurações ao clicar em "Salvar" no topo. O envio de teste salva automaticamente antes de enviar. Se os campos estiverem vazios, os e-mails de reunião usarão a configuração geral do Brevo (Formulários &gt; Configurar E-mail).</p>
                                         </div>
                                     </div>
                                 </div>

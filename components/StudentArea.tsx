@@ -369,7 +369,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         // Email to student
         if (booking.student_email) {
             try {
-                await appBackend.sendEmailViaSendGrid(
+                await appBackend.sendFranchiseEmail(
                     booking.student_email,
                     `Reunião Franquia VOLL - ${dateStr} às ${timeStr}`,
                     emailBody
@@ -380,7 +380,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         // Email to admin
         if (meetingSettings?.admin_email) {
             try {
-                await appBackend.sendEmailViaSendGrid(
+                await appBackend.sendFranchiseEmail(
                     meetingSettings.admin_email,
                     `Nova Reunião Franquia - ${booking.student_name} - ${dateStr} às ${timeStr}`,
                     emailBody

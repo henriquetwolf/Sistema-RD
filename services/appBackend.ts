@@ -1987,7 +1987,16 @@ export const appBackend = {
     const { data, error } = await supabase.functions.invoke('google-meet', {
       body: { action: 'create-meeting', ...payload },
     });
-    if (error) throw error;
+    if (error) {
+      // Extract real error message from Edge Function response
+      try {
+        const body = typeof error === 'object' && 'context' in error ? await (error as any).context?.json?.() : null;
+        if (body?.error) throw new Error(body.error);
+      } catch (parseErr: any) {
+        if (parseErr.message && parseErr.message !== error.message) throw parseErr;
+      }
+      throw new Error(data?.error || error.message || 'Erro ao agendar reunião.');
+    }
     if (data?.error) throw new Error(data.error);
     return data;
   },
@@ -1997,7 +2006,15 @@ export const appBackend = {
     const { data, error } = await supabase.functions.invoke('google-meet', {
       body: { action: 'cancel-meeting', booking_id: bookingId },
     });
-    if (error) throw error;
+    if (error) {
+      try {
+        const body = typeof error === 'object' && 'context' in error ? await (error as any).context?.json?.() : null;
+        if (body?.error) throw new Error(body.error);
+      } catch (parseErr: any) {
+        if (parseErr.message && parseErr.message !== error.message) throw parseErr;
+      }
+      throw new Error(data?.error || error.message || 'Erro ao cancelar reunião.');
+    }
     if (data?.error) throw new Error(data.error);
   },
 

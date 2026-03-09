@@ -136,11 +136,16 @@ async function createCalendarEvent(
   startTime: string,
   endTime: string,
 ): Promise<{ eventId: string; meetLink: string }> {
-  const event: any = {
+  const baseEvent: any = {
     summary,
     description,
     start: { dateTime: startTime, timeZone: "America/Sao_Paulo" },
     end: { dateTime: endTime, timeZone: "America/Sao_Paulo" },
+  };
+
+  // Try with Google Meet conference data first
+  const eventWithMeet = {
+    ...baseEvent,
     conferenceData: {
       createRequest: {
         requestId: crypto.randomUUID(),
@@ -149,7 +154,7 @@ async function createCalendarEvent(
     },
   };
 
-  const resp = await fetch(
+  let resp = await fetch(
     `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
     {
       method: "POST",
@@ -157,13 +162,31 @@ async function createCalendarEvent(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(event),
+      body: JSON.stringify(eventWithMeet),
     }
   );
 
+  // If Meet conference fails (personal Gmail), retry without conferenceData
   if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Google Calendar API error: ${err}`);
+    const errText = await resp.text();
+    console.warn("[google-meet] Meet link failed, creating event without Meet:", errText);
+
+    resp = await fetch(
+      `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(baseEvent),
+      }
+    );
+
+    if (!resp.ok) {
+      const err2 = await resp.text();
+      throw new Error(`Google Calendar API error: ${err2}`);
+    }
   }
 
   const data = await resp.json();

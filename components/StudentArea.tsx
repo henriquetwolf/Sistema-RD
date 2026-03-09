@@ -129,6 +129,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [meetingBookingSuccess, setMeetingBookingSuccess] = useState<FranchiseMeetingBooking | null>(null);
     const [meetingCancellingId, setMeetingCancellingId] = useState<string | null>(null);
     const [allBookings, setAllBookings] = useState<FranchiseMeetingBooking[]>([]);
+    const [meetingReminders, setMeetingReminders] = useState<{ bookingId: string; type: string; message: string; meetLink?: string; dateStr: string; timeStr: string }[]>([]);
 
     // Studio Digital
     const [studioEquipments, setStudioEquipments] = useState<StudioDigitalEquipment[]>([]);
@@ -235,6 +236,60 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             setMeetingSlotsLoading(false);
         }
     };
+
+    const checkMeetingReminders = (meetings: FranchiseMeetingBooking[]) => {
+        const now = new Date();
+        const reminders: { bookingId: string; type: string; message: string; meetLink?: string; dateStr: string; timeStr: string }[] = [];
+
+        const scheduled = meetings.filter(m => m.status === 'scheduled');
+        for (const m of scheduled) {
+            const meetDate = new Date(m.meeting_start);
+            const diffMs = meetDate.getTime() - now.getTime();
+            const diffHours = diffMs / (1000 * 60 * 60);
+            const diffDays = diffHours / 24;
+            const dateStr = meetDate.toLocaleDateString('pt-BR');
+            const timeStr = meetDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+            if (diffMs < 0) continue;
+
+            if (diffDays <= 2 && diffDays > 1) {
+                reminders.push({ bookingId: m.id, type: '2d', message: `Sua reunião de franquia está marcada para daqui a 2 dias (${dateStr} às ${timeStr}).`, meetLink: m.meet_link, dateStr, timeStr });
+            } else if (diffDays <= 1 && diffHours > 12) {
+                reminders.push({ bookingId: m.id, type: '1d', message: `Sua reunião de franquia é amanhã (${dateStr} às ${timeStr})!`, meetLink: m.meet_link, dateStr, timeStr });
+            } else if (diffHours <= 12 && diffHours > 0.5) {
+                reminders.push({ bookingId: m.id, type: '0d', message: `Sua reunião de franquia é hoje às ${timeStr}!`, meetLink: m.meet_link, dateStr, timeStr });
+            } else if (diffHours <= 0.5 && diffMs > 0) {
+                reminders.push({ bookingId: m.id, type: '30m', message: `Sua reunião de franquia começa em menos de 30 minutos (${timeStr})!`, meetLink: m.meet_link, dateStr, timeStr });
+            }
+        }
+
+        setMeetingReminders(reminders);
+
+        // Persist reminders to notification system
+        (async () => {
+            try {
+                const alunoId = await getAlunoId();
+                if (!alunoId) return;
+                for (const r of reminders) {
+                    const key = `meeting_reminder_${r.bookingId}_${r.type}`;
+                    await appBackend.client.from('crm_ai_tutor_notifications').upsert({
+                        aluno_id: alunoId,
+                        notification_type: 'custom',
+                        notification_key: key,
+                        message: r.message,
+                        is_read: false,
+                    }, { onConflict: 'aluno_id,notification_key', ignoreDuplicates: true });
+                }
+            } catch (e) { console.debug('Reminder persistence error:', e); }
+        })();
+    };
+
+    useEffect(() => {
+        if (myMeetings.length === 0) return;
+        checkMeetingReminders(myMeetings);
+        const interval = setInterval(() => checkMeetingReminders(myMeetings), 60000);
+        return () => clearInterval(interval);
+    }, [myMeetings]);
 
     const getMeetingSlotsForDate = (dateStr: string): FranchiseMeetingSlot[] => {
         const date = new Date(dateStr + 'T12:00:00');
@@ -2584,26 +2639,78 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                             </div>
                                         ) : (
                                             <div className="space-y-6">
+                                                {/* Meeting reminders */}
+                                                {meetingReminders.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        {meetingReminders.map(r => (
+                                                            <div key={`${r.bookingId}-${r.type}`} className={clsx(
+                                                                "rounded-2xl p-4 flex items-center gap-3 border animate-pulse-slow",
+                                                                r.type === '30m' ? "bg-red-50 border-red-300" :
+                                                                r.type === '0d' ? "bg-orange-50 border-orange-300" :
+                                                                r.type === '1d' ? "bg-amber-50 border-amber-300" :
+                                                                "bg-blue-50 border-blue-200"
+                                                            )}>
+                                                                <div className={clsx(
+                                                                    "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
+                                                                    r.type === '30m' ? "bg-red-100 text-red-600" :
+                                                                    r.type === '0d' ? "bg-orange-100 text-orange-600" :
+                                                                    r.type === '1d' ? "bg-amber-100 text-amber-600" :
+                                                                    "bg-blue-100 text-blue-600"
+                                                                )}>
+                                                                    <Bell size={18} />
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className={clsx(
+                                                                        "text-sm font-bold",
+                                                                        r.type === '30m' ? "text-red-800" :
+                                                                        r.type === '0d' ? "text-orange-800" :
+                                                                        r.type === '1d' ? "text-amber-800" :
+                                                                        "text-blue-800"
+                                                                    )}>{r.message}</p>
+                                                                </div>
+                                                                {r.meetLink && (
+                                                                    <a href={r.meetLink} target="_blank" rel="noopener noreferrer" className={clsx(
+                                                                        "shrink-0 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all text-white",
+                                                                        r.type === '30m' ? "bg-red-600 hover:bg-red-700" :
+                                                                        r.type === '0d' ? "bg-orange-600 hover:bg-orange-700" :
+                                                                        "bg-teal-600 hover:bg-teal-700"
+                                                                    )}>
+                                                                        <Video size={14} /> Entrar na Reunião
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
                                                 {/* My scheduled meetings */}
                                                 {myMeetings.filter(m => m.status === 'scheduled').length > 0 && (
                                                     <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5 space-y-3">
                                                         <h5 className="text-sm font-black text-teal-800 uppercase tracking-widest flex items-center gap-2"><Calendar size={16} /> Suas Reuniões Agendadas</h5>
                                                         {myMeetings.filter(m => m.status === 'scheduled').map(m => (
-                                                            <div key={m.id} className="bg-white rounded-xl p-4 flex items-center justify-between border border-teal-100">
-                                                                <div>
-                                                                    <p className="text-sm font-bold text-slate-800">{new Date(m.meeting_start).toLocaleDateString('pt-BR')} às {new Date(m.meeting_start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                                                                    <p className="text-xs text-slate-500 mt-0.5">{m.meet_link ? 'Link do Meet disponível' : 'Link será gerado em breve'}</p>
+                                                            <div key={m.id} className="bg-white rounded-xl p-4 border border-teal-100">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <p className="text-sm font-bold text-slate-800">{new Date(m.meeting_start).toLocaleDateString('pt-BR')} às {new Date(m.meeting_start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                                                        <p className="text-xs text-slate-500 mt-0.5">{m.meet_link ? 'Link do Meet disponível' : 'Link será gerado em breve'}</p>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {m.meet_link && (
+                                                                            <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
+                                                                                <Video size={14} /> Entrar
+                                                                            </a>
+                                                                        )}
+                                                                        <button onClick={() => handleCancelMeeting(m.id)} disabled={meetingCancellingId === m.id} className="text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50">
+                                                                            {meetingCancellingId === m.id ? <Loader2 size={14} className="animate-spin" /> : 'Cancelar'}
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    {m.meet_link && (
-                                                                        <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
-                                                                            <Video size={14} /> Entrar
-                                                                        </a>
-                                                                    )}
-                                                                    <button onClick={() => handleCancelMeeting(m.id)} disabled={meetingCancellingId === m.id} className="text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50">
-                                                                        {meetingCancellingId === m.id ? <Loader2 size={14} className="animate-spin" /> : 'Cancelar'}
-                                                                    </button>
-                                                                </div>
+                                                                {m.meet_link && (
+                                                                    <div className="mt-3 pt-3 border-t border-teal-100">
+                                                                        <p className="text-[10px] font-black text-teal-600 uppercase mb-1">Link da Reunião</p>
+                                                                        <p className="text-xs text-teal-700 font-mono break-all bg-teal-50 px-3 py-1.5 rounded-lg">{m.meet_link}</p>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>

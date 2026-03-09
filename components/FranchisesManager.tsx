@@ -6,10 +6,12 @@ import {
   DollarSign, User, Building, Map as MapIcon, List,
   Navigation, AlertTriangle, CheckCircle, Briefcase, Globe, Info, Ruler, Dumbbell,
   AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned, Sparkles, Presentation,
-  Video, CalendarDays, Clock, Ban, Settings2, ExternalLink, ChevronLeft, ChevronRight, Trash, Eye, Send
+  Video, CalendarDays, Clock, Ban, Settings2, ExternalLink, ChevronLeft, ChevronRight, Trash, Eye, Send,
+  MessageCircle, Copy, ChevronDown, ChevronUp
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
+import { whatsappService } from '../services/whatsappService';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import { GoogleGenAI } from '@google/genai';
@@ -114,6 +116,10 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [franchiseTestEmail, setFranchiseTestEmail] = useState('');
   const [isSendingFranchiseTest, setIsSendingFranchiseTest] = useState(false);
   const [franchiseTestResult, setFranchiseTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null);
+  const [resendingWhatsApp, setResendingWhatsApp] = useState<string | null>(null);
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
 
   // Estados de Simulação no Mapa
   const [simAddress, setSimAddress] = useState('');
@@ -497,6 +503,63 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
       }
   };
 
+  const handleResendEmail = async (booking: FranchiseMeetingBooking) => {
+      if (!booking.student_email) { alert('Aluno não possui e-mail cadastrado.'); return; }
+      setResendingEmail(booking.id);
+      try {
+          const meetDate = new Date(booking.meeting_start);
+          const dateStr = meetDate.toLocaleDateString('pt-BR');
+          const timeStr = meetDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          const meetLink = booking.meet_link || 'Link será enviado em breve';
+          const emailBody = `
+              <h2>Reunião Franquia VOLL Studios</h2>
+              <p><strong>Data:</strong> ${dateStr}</p>
+              <p><strong>Horário:</strong> ${timeStr}</p>
+              <p><strong>Link Google Meet:</strong> <a href="${booking.meet_link}">${meetLink}</a></p>
+              <p><strong>Aluno:</strong> ${booking.student_name}</p>
+              <hr>
+              <p>Em caso de dúvidas, entre em contato conosco.</p>
+          `;
+          await appBackend.sendFranchiseEmail(booking.student_email, `Reunião Franquia VOLL - ${dateStr} às ${timeStr}`, emailBody);
+          alert('E-mail reenviado com sucesso!');
+      } catch (e: any) {
+          alert('Erro ao reenviar e-mail: ' + (e.message || e));
+      } finally {
+          setResendingEmail(null);
+      }
+  };
+
+  const handleResendWhatsApp = async (booking: FranchiseMeetingBooking) => {
+      const phone = booking.student_phone?.replace(/\D/g, '');
+      if (!phone) { alert('Aluno não possui telefone cadastrado.'); return; }
+      setResendingWhatsApp(booking.id);
+      try {
+          const meetDate = new Date(booking.meeting_start);
+          const dateStr = meetDate.toLocaleDateString('pt-BR');
+          const timeStr = meetDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          const meetLink = booking.meet_link || 'Link será enviado em breve';
+          const waMsg = `*Reunião Franquia VOLL Studios*\n\n📅 Data: ${dateStr}\n⏰ Horário: ${timeStr}\n📎 Link: ${meetLink}\n\nNos vemos lá! 🚀`;
+          await whatsappService.sendTextMessage({ wa_id: phone, contact_phone: phone }, waMsg);
+          alert('WhatsApp reenviado com sucesso!');
+      } catch (e: any) {
+          alert('Erro ao reenviar WhatsApp: ' + (e.message || e));
+      } finally {
+          setResendingWhatsApp(null);
+      }
+  };
+
+  const handleSaveBookingNotes = async (bookingId: string) => {
+      const notes = editingNotes[bookingId];
+      if (notes === undefined) return;
+      try {
+          await appBackend.updateFranchiseMeetingBooking(bookingId, { admin_notes: notes });
+          setMeetingBookings(prev => prev.map(b => b.id === bookingId ? { ...b, admin_notes: notes } : b));
+          alert('Observações salvas!');
+      } catch (e: any) {
+          alert('Erro ao salvar: ' + (e.message || e));
+      }
+  };
+
   const handleAddBlockedDate = async () => {
       if (!newBlockedDate) return;
       try {
@@ -814,42 +877,121 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                             <Video size={40} className="mx-auto mb-3 opacity-40" />
                                             <p className="font-bold">Nenhuma reunião encontrada.</p>
                                         </div>
-                                    ) : filteredBookings.map(b => (
-                                        <div key={b.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                            <div className="flex items-center gap-4">
-                                                <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center", b.status === 'scheduled' ? "bg-teal-100 text-teal-600" : b.status === 'completed' ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500")}>
-                                                    <Video size={18} />
+                                    ) : filteredBookings.map(b => {
+                                        const isExpanded = expandedBookingId === b.id;
+                                        const meetDate = new Date(b.meeting_start);
+                                        const dateStr = meetDate.toLocaleDateString('pt-BR');
+                                        const timeStr = meetDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                        return (
+                                        <div key={b.id} className="transition-colors">
+                                            <div className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer" onClick={() => setExpandedBookingId(isExpanded ? null : b.id)}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center", b.status === 'scheduled' ? "bg-teal-100 text-teal-600" : b.status === 'completed' ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500")}>
+                                                        <Video size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-800">{b.student_name}</p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {dateStr} às {timeStr}{' — '}{b.student_email}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-800">{b.student_name}</p>
-                                                    <p className="text-xs text-slate-500">
-                                                        {new Date(b.meeting_start).toLocaleDateString('pt-BR')} às {new Date(b.meeting_start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                                        {' — '}{b.student_email}
-                                                    </p>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={clsx("text-[10px] font-black px-2 py-1 rounded uppercase", b.status === 'scheduled' ? "bg-teal-100 text-teal-700" : b.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>
+                                                        {b.status === 'scheduled' ? 'Agendada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
+                                                    </span>
+                                                    {b.status === 'scheduled' && (
+                                                        <>
+                                                            <button onClick={e => { e.stopPropagation(); handleCompleteBooking(b.id); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Marcar como realizada">
+                                                                <CheckCircle size={16} />
+                                                            </button>
+                                                            <button onClick={e => { e.stopPropagation(); handleCancelBooking(b.id); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Cancelar">
+                                                                <X size={16} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {isExpanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className={clsx("text-[10px] font-black px-2 py-1 rounded uppercase", b.status === 'scheduled' ? "bg-teal-100 text-teal-700" : b.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>
-                                                    {b.status === 'scheduled' ? 'Agendada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
-                                                </span>
-                                                {b.meet_link && (
-                                                    <a href={b.meet_link} target="_blank" rel="noopener noreferrer" className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors" title="Abrir Google Meet">
-                                                        <ExternalLink size={16} />
-                                                    </a>
-                                                )}
-                                                {b.status === 'scheduled' && (
-                                                    <>
-                                                        <button onClick={() => handleCompleteBooking(b.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Marcar como realizada">
-                                                            <CheckCircle size={16} />
-                                                        </button>
-                                                        <button onClick={() => handleCancelBooking(b.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Cancelar">
-                                                            <X size={16} />
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
+
+                                            {isExpanded && (
+                                                <div className="px-6 pb-5 pt-0 space-y-4 bg-slate-50/50 border-t border-slate-100">
+                                                    {/* Google Meet Link */}
+                                                    <div className="pt-4">
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Link Google Meet</label>
+                                                        {b.meet_link ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-teal-700 truncate">
+                                                                    {b.meet_link}
+                                                                </div>
+                                                                <button onClick={() => { navigator.clipboard.writeText(b.meet_link || ''); alert('Link copiado!'); }} className="p-2 text-slate-500 hover:bg-white hover:text-teal-600 rounded-lg transition-colors border border-transparent hover:border-slate-200" title="Copiar link">
+                                                                    <Copy size={16} />
+                                                                </button>
+                                                                <a href={b.meet_link} target="_blank" rel="noopener noreferrer" className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors border border-transparent hover:border-teal-200" title="Abrir no navegador">
+                                                                    <ExternalLink size={16} />
+                                                                </a>
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-sm text-slate-400 italic">Link não disponível (Google Meet não configurado)</p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Resend buttons */}
+                                                    {b.status === 'scheduled' && (
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Reenviar Link para o Aluno</label>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => handleResendEmail(b)} disabled={resendingEmail === b.id} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
+                                                                    {resendingEmail === b.id ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                                                                    Enviar por E-mail
+                                                                </button>
+                                                                <button onClick={() => handleResendWhatsApp(b)} disabled={resendingWhatsApp === b.id} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
+                                                                    {resendingWhatsApp === b.id ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+                                                                    Enviar por WhatsApp
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Student info */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-0.5">E-mail</label>
+                                                            <p className="text-sm text-slate-700">{b.student_email || '—'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-0.5">Telefone</label>
+                                                            <p className="text-sm text-slate-700">{b.student_phone || '—'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-0.5">CPF</label>
+                                                            <p className="text-sm text-slate-700">{b.student_cpf}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Observations */}
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Observações</label>
+                                                        <div className="flex gap-2">
+                                                            <textarea
+                                                                value={editingNotes[b.id] !== undefined ? editingNotes[b.id] : (b.admin_notes || '')}
+                                                                onChange={e => setEditingNotes(prev => ({ ...prev, [b.id]: e.target.value }))}
+                                                                placeholder="Adicionar observações sobre esta reunião..."
+                                                                rows={2}
+                                                                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 outline-none"
+                                                            />
+                                                            {editingNotes[b.id] !== undefined && editingNotes[b.id] !== (b.admin_notes || '') && (
+                                                                <button onClick={() => handleSaveBookingNotes(b.id)} className="self-end px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-colors">
+                                                                    <Save size={14} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

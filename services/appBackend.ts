@@ -1339,23 +1339,54 @@ export const appBackend = {
     return data;
   },
 
-  lookupContaAzulByName: async (names: string[]) => {
-    if (!isConfigured || names.length === 0) return { receber: [], pagar: [] };
+  lookupContaAzulByCpfAndName: async (cpf: string, names: string[]) => {
+    if (!isConfigured) return { receber: [], pagar: [] };
+    const cleanCpf = cpf.replace(/\D/g, '');
     const validNames = names.filter(n => n && n.trim());
-    if (validNames.length === 0) return { receber: [], pagar: [] };
 
-    const [receber, pagar] = await Promise.all([
-      supabase.from('conta_azul_contas_receber')
-        .select('*').in('contato_nome', validNames)
-        .order('data_vencimento', { ascending: false }),
-      supabase.from('conta_azul_contas_pagar')
-        .select('*').in('fornecedor_nome', validNames)
-        .order('data_vencimento', { ascending: false }),
-    ]);
+    const queries: Promise<any>[] = [];
+
+    if (cleanCpf.length === 11) {
+      queries.push(
+        supabase.from('conta_azul_contas_receber')
+          .select('*').eq('contato_cpf', cleanCpf)
+          .order('data_vencimento', { ascending: false }),
+        supabase.from('conta_azul_contas_pagar')
+          .select('*').eq('contato_cpf', cleanCpf)
+          .order('data_vencimento', { ascending: false }),
+      );
+    } else {
+      queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+    }
+
+    if (validNames.length > 0) {
+      queries.push(
+        supabase.from('conta_azul_contas_receber')
+          .select('*').in('contato_nome', validNames)
+          .order('data_vencimento', { ascending: false }),
+        supabase.from('conta_azul_contas_pagar')
+          .select('*').in('fornecedor_nome', validNames)
+          .order('data_vencimento', { ascending: false }),
+      );
+    } else {
+      queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+    }
+
+    const [receberByCpf, pagarByCpf, receberByName, pagarByName] = await Promise.all(queries);
+
+    const dedup = (arr: any[]) => {
+      const seen = new Set<string>();
+      return arr.filter(item => {
+        const key = item.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
 
     return {
-      receber: receber.data || [],
-      pagar: pagar.data || [],
+      receber: dedup([...(receberByCpf.data || []), ...(receberByName.data || [])]),
+      pagar: dedup([...(pagarByCpf.data || []), ...(pagarByName.data || [])]),
     };
   },
 

@@ -95,13 +95,27 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
 
   const loadContaAzulData = async (r: CpfLookupResult) => {
     if (contaAzulLoaded) return;
-    const names = extractKnownNames(r);
-    if (names.length === 0) { setContaAzulLoaded(true); return; }
     setIsLoadingContaAzul(true);
     try {
-      const { receber, pagar } = await appBackend.lookupContaAzulByName(names);
-      setContaAzulReceber(receber);
-      setContaAzulPagar(pagar);
+      const cleanCpf = cpfInput.replace(/\D/g, '');
+      const names = extractKnownNames(r);
+      const { receber, pagar } = await appBackend.lookupContaAzulByCpfAndName(cleanCpf, names);
+
+      const rpcReceber = r.conta_azul_receber || [];
+      const rpcPagar = r.conta_azul_pagar || [];
+
+      const dedup = (arr: any[]) => {
+        const seen = new Set<string>();
+        return arr.filter(item => {
+          const key = item.id;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      };
+
+      setContaAzulReceber(dedup([...rpcReceber, ...receber]));
+      setContaAzulPagar(dedup([...rpcPagar, ...pagar]));
     } catch (e: any) {
       console.error('Erro ao buscar Conta Azul:', e);
     } finally {

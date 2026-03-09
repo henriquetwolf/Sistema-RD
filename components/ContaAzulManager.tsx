@@ -1903,30 +1903,34 @@ export const ContaAzulManager: React.FC = () => {
                       <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{cpfReceber.length}</span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-sm min-w-[800px]">
                         <thead>
                           <tr className="text-left text-[10px] font-bold text-blue-400 uppercase border-b border-blue-50 bg-blue-50/30">
                             <th className="p-3 pr-4">Descrição</th>
                             <th className="p-3 pr-4">Valor</th>
                             <th className="p-3 pr-4">Status</th>
                             <th className="p-3 pr-4">Vencimento</th>
-                            <th className="p-3">Categoria</th>
+                            <th className="p-3 pr-4">Categoria</th>
+                            <th className="p-3 pr-4">Centro de Custo</th>
+                            <th className="p-3">Nº Documento</th>
                           </tr>
                         </thead>
                         <tbody>
                           {cpfReceber.map((r: any, idx: number) => (
                             <tr key={r.id || idx} className="border-b border-blue-50/50 hover:bg-blue-50/20">
-                              <td className="p-3 pr-4 font-medium text-slate-700">{r.descricao || '—'}</td>
-                              <td className="p-3 pr-4 text-blue-700 font-bold">{r.valor ? formatCurrency(Number(r.valor)) : '—'}</td>
+                              <td className="p-3 pr-4 font-medium text-slate-700 whitespace-normal">{r.descricao || '—'}</td>
+                              <td className="p-3 pr-4 text-blue-700 font-bold whitespace-nowrap">{r.valor ? formatCurrency(Number(r.valor)) : '—'}</td>
                               <td className="p-3 pr-4">
-                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap",
                                   r.status === 'PAGO' ? "bg-green-100 text-green-700" :
                                   r.status === 'PENDENTE' ? "bg-amber-100 text-amber-700" :
                                   "bg-slate-100 text-slate-600"
                                 )}>{r.status}</span>
                               </td>
-                              <td className="p-3 pr-4 text-slate-500">{r.data_vencimento ? formatDate(r.data_vencimento) : '—'}</td>
-                              <td className="p-3 text-slate-500">{r.categoria_nome || '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500 whitespace-nowrap">{r.data_vencimento ? formatDate(r.data_vencimento) : '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500">{r.categoria_nome || '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500">{r.centro_custo_nome || '—'}</td>
+                              <td className="p-3 text-slate-500">{r.numero_documento || '—'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1945,30 +1949,36 @@ export const ContaAzulManager: React.FC = () => {
                       <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{cpfPagar.length}</span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-sm min-w-[900px]">
                         <thead>
                           <tr className="text-left text-[10px] font-bold text-orange-400 uppercase border-b border-orange-50 bg-orange-50/30">
                             <th className="p-3 pr-4">Descrição</th>
                             <th className="p-3 pr-4">Valor</th>
                             <th className="p-3 pr-4">Status</th>
                             <th className="p-3 pr-4">Vencimento</th>
-                            <th className="p-3">Fornecedor</th>
+                            <th className="p-3 pr-4">Fornecedor</th>
+                            <th className="p-3 pr-4">Categoria</th>
+                            <th className="p-3 pr-4">Centro de Custo</th>
+                            <th className="p-3">Nº Documento</th>
                           </tr>
                         </thead>
                         <tbody>
                           {cpfPagar.map((p: any, idx: number) => (
                             <tr key={p.id || idx} className="border-b border-orange-50/50 hover:bg-orange-50/20">
-                              <td className="p-3 pr-4 font-medium text-slate-700">{p.descricao || '—'}</td>
-                              <td className="p-3 pr-4 text-orange-700 font-bold">{p.valor ? formatCurrency(Number(p.valor)) : '—'}</td>
+                              <td className="p-3 pr-4 font-medium text-slate-700 whitespace-normal">{p.descricao || '—'}</td>
+                              <td className="p-3 pr-4 text-orange-700 font-bold whitespace-nowrap">{p.valor ? formatCurrency(Number(p.valor)) : '—'}</td>
                               <td className="p-3 pr-4">
-                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap",
                                   p.status === 'PAGO' ? "bg-green-100 text-green-700" :
                                   p.status === 'PENDENTE' ? "bg-amber-100 text-amber-700" :
                                   "bg-slate-100 text-slate-600"
                                 )}>{p.status}</span>
                               </td>
-                              <td className="p-3 pr-4 text-slate-500">{p.data_vencimento ? formatDate(p.data_vencimento) : '—'}</td>
-                              <td className="p-3 text-slate-500">{p.fornecedor_nome || '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500 whitespace-nowrap">{p.data_vencimento ? formatDate(p.data_vencimento) : '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500">{p.fornecedor_nome || '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500">{p.categoria_nome || '—'}</td>
+                              <td className="p-3 pr-4 text-slate-500">{p.centro_custo_nome || '—'}</td>
+                              <td className="p-3 text-slate-500">{p.numero_documento || '—'}</td>
                             </tr>
                           ))}
                         </tbody>

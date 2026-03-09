@@ -135,7 +135,6 @@ async function createCalendarEvent(
   description: string,
   startTime: string,
   endTime: string,
-  attendeeEmail?: string
 ): Promise<{ eventId: string; meetLink: string }> {
   const event: any = {
     summary,
@@ -150,12 +149,8 @@ async function createCalendarEvent(
     },
   };
 
-  if (attendeeEmail) {
-    event.attendees = [{ email: attendeeEmail }];
-  }
-
   const resp = await fetch(
-    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
     {
       method: "POST",
       headers: {
@@ -299,7 +294,6 @@ serve(async (req) => {
               description,
               start_time,
               end_time,
-              student_email || undefined
             );
             eventId = result.eventId;
             meetLink = result.meetLink;

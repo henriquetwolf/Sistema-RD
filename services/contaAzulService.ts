@@ -665,6 +665,13 @@ async function createSale(payload: ContaAzulCreateSalePayload, accountId: string
   });
 }
 
+async function updateSaleCostCenter(saleId: string, centroCustoNome: string, accountId: string): Promise<any> {
+  return edgeFetch('conta-azul-write', 'update-sale', {
+    method: 'POST',
+    body: withAccountId({ sale_id: saleId, centro_custo_nome: centroCustoNome }, accountId),
+  });
+}
+
 // ── Export ───────────────────────────────────────────────────
 
 export const contaAzulService = {
@@ -701,4 +708,5 @@ export const contaAzulService = {
   updateInstallment,
   getProducts,
   createSale,
+  updateSaleCostCenter,
 };

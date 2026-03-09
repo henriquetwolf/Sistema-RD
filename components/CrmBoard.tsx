@@ -4,7 +4,7 @@ import {
   Plus, Search, Filter, MoreHorizontal, Calendar, 
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
-  Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
+  Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw, Archive, ArchiveRestore,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown, CheckCircle, Circle,
   CheckSquare, AlertTriangle, Bell
 } from 'lucide-react';
@@ -49,6 +49,7 @@ interface Deal {
 
   contaAzulSaleNumberService?: string;
   contaAzulSaleNumberProduct?: string;
+  contaAzulSaleId?: string;
 
   email?: string;
   phone?: string;
@@ -73,6 +74,7 @@ interface Deal {
   owner: string;
   createdAt: Date;
   closedAt?: Date;
+  archivedAt?: Date;
   status: 'hot' | 'warm' | 'cold';
   nextTask?: string;
   tasks: DealTask[];
@@ -177,8 +179,9 @@ const formatCurrencyInput = (raw: string): { display: string; numeric: number } 
 };
 
 export const CrmBoard: React.FC = () => {
-  const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config' | 'tasks'>('pipeline');
+  const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config' | 'tasks' | 'archived'>('pipeline');
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [archivedDeals, setArchivedDeals] = useState<Deal[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
@@ -336,10 +339,11 @@ export const CrmBoard: React.FC = () => {
           ]);
 
           if (dealsResult.data) {
-              setDeals(dealsResult.data.map((d: any) => ({
+              const mapDeal = (d: any): Deal => ({
                   id: d.id, dealNumber: d.deal_number, title: d.title || '', contactName: d.contact_name || '', companyName: d.company_name || '',
                   value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
+                  archivedAt: d.archived_at ? new Date(d.archived_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
@@ -348,10 +352,15 @@ export const CrmBoard: React.FC = () => {
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name,
                   contaAzulSaleNumberService: d.conta_azul_sale_number_service || '', contaAzulSaleNumberProduct: d.conta_azul_sale_number_product || '',
+                  contaAzulSaleId: d.conta_azul_sale_id || '',
                   tasks: d.tasks || []
-              })));
+              });
+              const allDeals = dealsResult.data.map(mapDeal);
+              setDeals(allDeals.filter(d => !d.archivedAt));
+              setArchivedDeals(allDeals.filter(d => !!d.archivedAt));
           } else {
               setDeals([]);
+              setArchivedDeals([]);
           }
 
           setTeams(teamsResult.data || []);
@@ -784,12 +793,14 @@ export const CrmBoard: React.FC = () => {
               }, selectedCaAccountId!);
 
               const saleNum = saleResult?.numero_venda || saleResult?.data?.numero || '';
-              console.log('[CA] Número da venda unificada:', saleNum);
+              const saleId = saleResult?.data?.id || '';
+              console.log('[CA] Número da venda unificada:', saleNum, '| ID:', saleId);
 
               if (dealId && saleNum) {
                   await appBackend.client.from('crm_deals').update({
                       conta_azul_sale_number_service: String(saleNum),
                       conta_azul_sale_number_product: String(saleNum),
+                      ...(saleId ? { conta_azul_sale_id: String(saleId) } : {}),
                   }).eq('id', dealId);
               }
 
@@ -808,11 +819,13 @@ export const CrmBoard: React.FC = () => {
               }, selectedCaAccountId!);
 
               const saleNum = saleResult?.numero_venda || saleResult?.data?.numero || '';
-              console.log('[CA] Número de venda:', saleNum);
+              const saleId = saleResult?.data?.id || '';
+              console.log('[CA] Número de venda:', saleNum, '| ID:', saleId);
 
               if (dealId && saleNum) {
                   await appBackend.client.from('crm_deals').update({
                       conta_azul_sale_number_service: String(saleNum),
+                      ...(saleId ? { conta_azul_sale_id: String(saleId) } : {}),
                   }).eq('id', dealId);
               }
 
@@ -1270,6 +1283,7 @@ export const CrmBoard: React.FC = () => {
       };
       try {
           if (editingDealId) {
+              const originalDeal = [...deals, ...archivedDeals].find(d => d.id === editingDealId);
               const { data, error = null } = await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId).select().single();
               if (error) throw error;
               
@@ -1277,6 +1291,29 @@ export const CrmBoard: React.FC = () => {
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
                   triggerWhatsAppAutomation(data);
+              }
+
+              const oldClassMod1 = (originalDeal?.classMod1 || '').trim();
+              const newClassMod1 = (dealFormData.classMod1 || '').trim();
+              const saleId = originalDeal?.contaAzulSaleId;
+              if (saleId && newClassMod1 && oldClassMod1 !== newClassMod1) {
+                  try {
+                      const dealCnpj = (dealFormData.billingCnpj || '').replace(/\D/g, '');
+                      const matchedAccount = caAccounts.find(a => a.cnpj?.replace(/\D/g, '') === dealCnpj && dealCnpj.length > 0);
+                      if (matchedAccount?.id) {
+                          console.log(`[CA] Centro de Custo alterado: "${oldClassMod1}" -> "${newClassMod1}", atualizando venda ${saleId}...`);
+                          const result = await contaAzulService.updateSaleCostCenter(saleId, newClassMod1, matchedAccount.id);
+                          if (result?.success) {
+                              console.log('[CA] Centro de Custo atualizado com sucesso no Conta Azul');
+                          } else {
+                              console.warn('[CA] Falha ao atualizar Centro de Custo:', result?.error);
+                              alert(`Negócio salvo, mas houve um erro ao atualizar o Centro de Custo no Conta Azul: ${result?.error || 'Erro desconhecido'}`);
+                          }
+                      }
+                  } catch (caErr: any) {
+                      console.error('[CA] Erro ao atualizar Centro de Custo:', caErr.message);
+                      alert(`Negócio salvo, mas houve um erro ao atualizar o Centro de Custo no Conta Azul: ${caErr.message}`);
+                  }
               }
           } else {
               const dealNumber = generateDealNumber();
@@ -1294,11 +1331,27 @@ export const CrmBoard: React.FC = () => {
       } catch (e: any) { handleDbError(e); }
   };
 
-  const handleDeleteDeal = async () => {
-      if (editingDealId && window.confirm("Excluir esta negociação?")) {
+  const handleArchiveDeal = async () => {
+      if (editingDealId && window.confirm("Arquivar esta negociação? Ela poderá ser restaurada na aba Arquivados.")) {
           try {
-            await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
+            await appBackend.client.from('crm_deals').update({ archived_at: new Date().toISOString() }).eq('id', editingDealId);
             await fetchData(); setShowDealModal(false);
+          } catch(e: any) { alert(`Erro ao arquivar: ${e.message}`); }
+      }
+  };
+
+  const handleUnarchiveDeal = async (dealId: string) => {
+      try {
+          await appBackend.client.from('crm_deals').update({ archived_at: null }).eq('id', dealId);
+          await fetchData();
+      } catch(e: any) { alert(`Erro ao desarquivar: ${e.message}`); }
+  };
+
+  const handlePermanentDeleteDeal = async (dealId: string) => {
+      if (window.confirm("Excluir permanentemente esta negociação? Esta ação NÃO pode ser desfeita.")) {
+          try {
+              await appBackend.client.from('crm_deals').delete().eq('id', dealId);
+              await fetchData(); setShowDealModal(false);
           } catch(e: any) { alert(`Erro ao excluir: ${e.message}`); }
       }
   };
@@ -1385,6 +1438,10 @@ export const CrmBoard: React.FC = () => {
                 </button>
                 <button onClick={() => setActiveView('teams')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Equipes</button>
                 <button onClick={() => setActiveView('pipelines_config')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipelines_config' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><SettingsIcon size={16} /> Funis</button>
+                <button onClick={() => setActiveView('archived')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all relative", activeView === 'archived' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                    <Archive size={16} /> Arquivados
+                    {archivedDeals.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{archivedDeals.length}</span>}
+                </button>
             </div>
             <button onClick={fetchData} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"><RefreshCw size={18} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
@@ -1398,6 +1455,11 @@ export const CrmBoard: React.FC = () => {
                     </div>
                     <button onClick={openNewDealModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Novo Negócio</button>
                 </>
+            ) : activeView === 'archived' ? (
+                <div className="relative max-w-xs w-full hidden md:block">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input type="text" placeholder="Buscar nos arquivados..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border-transparent focus:bg-white focus:border-indigo-300 border rounded-full text-sm outline-none"/>
+                </div>
             ) : activeView === 'teams' ? (
                 <button onClick={openNewTeamModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Nova Equipe</button>
             ) : (
@@ -1602,6 +1664,68 @@ export const CrmBoard: React.FC = () => {
                         ))}
                         <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-teal-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-indigo-600">Novo Funil</span></button>
                     </div>
+                </div>
+            )}
+
+            {activeView === 'archived' && (
+                <div className="max-w-6xl mx-auto animate-in fade-in duration-300">
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Archive size={22} className="text-amber-600" /> Negociações Arquivadas</h2>
+                        <p className="text-sm text-slate-500">Negociações removidas do pipeline. Você pode visualizar, editar ou restaurá-las.</p>
+                    </div>
+                    {archivedDeals.filter(d =>
+                        !searchTerm || (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (d.dealNumber && d.dealNumber.toString().includes(searchTerm))
+                    ).length === 0 ? (
+                        <div className="text-center py-20 text-slate-400 bg-white rounded-xl border-2 border-dashed border-slate-200">
+                            <Archive size={48} className="mx-auto mb-4 opacity-20" />
+                            <p className="font-bold">{archivedDeals.length === 0 ? 'Nenhuma negociação arquivada' : 'Nenhum resultado encontrado'}</p>
+                            <p className="text-sm">Negociações arquivadas aparecerão aqui.</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Nº</th>
+                                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Cliente</th>
+                                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Produto</th>
+                                        <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Valor</th>
+                                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Pipeline</th>
+                                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Arquivado em</th>
+                                        <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {archivedDeals.filter(d =>
+                                        !searchTerm || (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        (d.dealNumber && d.dealNumber.toString().includes(searchTerm))
+                                    ).map(deal => (
+                                        <tr key={deal.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-4 py-3 font-mono text-xs text-slate-400">#{deal.dealNumber || '—'}</td>
+                                            <td className="px-4 py-3">
+                                                <p className="font-bold text-slate-800 truncate max-w-[200px]">{deal.companyName || deal.title}</p>
+                                                <p className="text-[10px] text-slate-400">{deal.email || deal.phone || ''}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600">{deal.productName || '—'}</td>
+                                            <td className="px-4 py-3 text-right font-bold text-slate-800">R$ {(deal.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                            <td className="px-4 py-3 text-slate-600 text-xs">{deal.pipeline || '—'}</td>
+                                            <td className="px-4 py-3 text-slate-500 text-xs">{deal.archivedAt ? deal.archivedAt.toLocaleDateString('pt-BR') : '—'}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button onClick={() => openEditDealModal(deal)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Visualizar / Editar"><Edit2 size={15} /></button>
+                                                    <button onClick={() => handleUnarchiveDeal(deal.id)} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Desarquivar"><ArchiveRestore size={15} /></button>
+                                                    <button onClick={() => handlePermanentDeleteDeal(deal.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir permanentemente"><Trash2 size={15} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             )}
         </>
@@ -2364,7 +2488,18 @@ export const CrmBoard: React.FC = () => {
 
             <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0 rounded-b-xl">
                 <div className="flex items-center gap-2">
-                    {editingDealId && <button onClick={handleDeleteDeal} className="text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"><Trash2 size={16}/> Excluir Negociação</button>}
+                    {editingDealId && (() => {
+                        const currentDeal = [...deals, ...archivedDeals].find(d => d.id === editingDealId);
+                        const isArchived = !!currentDeal?.archivedAt;
+                        return isArchived ? (
+                            <>
+                                <button onClick={() => { handleUnarchiveDeal(editingDealId); setShowDealModal(false); }} className="text-green-600 hover:bg-green-50 px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"><ArchiveRestore size={16}/> Desarquivar</button>
+                                <button onClick={() => handlePermanentDeleteDeal(editingDealId)} className="text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"><Trash2 size={16}/> Excluir Permanente</button>
+                            </>
+                        ) : (
+                            <button onClick={handleArchiveDeal} className="text-amber-600 hover:bg-amber-50 px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"><Archive size={16}/> Arquivar Negociação</button>
+                        );
+                    })()}
                 </div>
                 <div className="flex gap-3">
                     <button onClick={() => setShowDealModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-colors">Cancelar</button>

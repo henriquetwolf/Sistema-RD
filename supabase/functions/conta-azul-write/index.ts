@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
       case "payable": return await createPayable(req);
       case "installment": return await updateInstallment(req);
       case "sale": return await createSale(req);
+      case "update-sale": return await updateSaleCostCenter(req);
       case "products": return await listProducts(req);
       case "create-cost-center": return await createCostCenter(req);
       case "debug-services": return await debugServices(req);
@@ -762,4 +763,94 @@ async function createSale(req: Request): Promise<Response> {
   console.log(`createSale SUCESSO: numero_venda=${numeroVenda}`);
 
   return jsonResponse({ success: true, data: saleData, numero_venda: numeroVenda }, 201);
+}
+
+async function updateSaleCostCenter(req: Request): Promise<Response> {
+  const body = await req.json();
+  setAccountFromBody(body);
+
+  const saleId = body.sale_id;
+  const centroCustoNome = (body.centro_custo_nome || '').trim();
+
+  if (!saleId) return errorResponse("Campo 'sale_id' é obrigatório.");
+  if (!centroCustoNome) return errorResponse("Campo 'centro_custo_nome' é obrigatório.");
+
+  console.log(`updateSaleCostCenter: sale_id=${saleId}, centro_custo_nome=${centroCustoNome}`);
+
+  const getRes = await contaAzulFetch(`/v1/venda/${saleId}`, { method: "GET" });
+  if (!getRes.ok) {
+    const errText = await getRes.text();
+    return errorResponse(`Erro ao buscar venda ${saleId}: ${getRes.status} - ${errText}`, getRes.status);
+  }
+  const currentSale = await getRes.json();
+  console.log(`updateSaleCostCenter: venda encontrada, numero=${currentSale.numero}, versao=${currentSale.versao}`);
+
+  let ccId = '';
+  const listRes = await contaAzulFetch("/v1/centro-de-custo");
+  if (listRes.ok) {
+    const listBody = await listRes.json();
+    const list = Array.isArray(listBody) ? listBody : listBody.content || listBody.data || listBody.items || listBody.itens || [];
+    const match = list.find((cc: any) => (cc.nome || '').toLowerCase().trim() === centroCustoNome.toLowerCase());
+    if (match) {
+      ccId = String(match.id);
+      console.log(`updateSaleCostCenter: centro de custo encontrado: ${centroCustoNome} -> ${ccId}`);
+    }
+  }
+
+  if (!ccId) {
+    console.log(`updateSaleCostCenter: centro de custo não encontrado, criando: ${centroCustoNome}`);
+    const createRes = await contaAzulFetch("/v1/centro-de-custo", {
+      method: "POST",
+      body: JSON.stringify({ nome: centroCustoNome }),
+    });
+    if (createRes.ok) {
+      const created = await createRes.json();
+      ccId = String(created.id);
+      console.log(`updateSaleCostCenter: centro de custo criado: ${centroCustoNome} -> ${ccId}`);
+      const db = getSupabaseServiceClient();
+      await db.from("conta_azul_centros_custo").upsert({
+        account_id: _currentAccountId,
+        id_conta_azul: ccId,
+        nome: created.nome || centroCustoNome,
+        ativo: true,
+        synced_at: new Date().toISOString(),
+      }, { onConflict: "account_id,id_conta_azul" });
+    } else {
+      const errText = await createRes.text();
+      return errorResponse(`Erro ao criar centro de custo: ${createRes.status} - ${errText}`, createRes.status);
+    }
+  }
+
+  const updatePayload: any = {
+    id_cliente: currentSale.id_cliente || currentSale.cliente?.id,
+    numero: currentSale.numero,
+    situacao: currentSale.situacao || "APROVADO",
+    data_venda: currentSale.data_venda,
+    versao: currentSale.versao,
+    itens: (currentSale.itens || []).map((item: any) => ({
+      id: item.id || item.produto?.id || item.servico?.id,
+      valor: item.valor,
+      quantidade: item.quantidade || 1,
+      descricao: item.descricao || "",
+    })),
+    condicao_pagamento: currentSale.condicao_pagamento,
+    observacoes: currentSale.observacoes || "",
+    id_centro_custo: ccId,
+  };
+
+  console.log(`updateSaleCostCenter: PUT /v1/venda/${saleId}`, JSON.stringify(updatePayload));
+  const putRes = await contaAzulFetch(`/v1/venda/${saleId}`, {
+    method: "PUT",
+    body: JSON.stringify(updatePayload),
+  });
+
+  if (!putRes.ok) {
+    const errText = await putRes.text();
+    return errorResponse(`Erro ao atualizar venda: ${putRes.status} - ${errText}`, putRes.status);
+  }
+
+  const updatedSale = await putRes.json();
+  console.log(`updateSaleCostCenter SUCESSO: venda ${saleId} atualizada com centro de custo ${centroCustoNome}`);
+
+  return jsonResponse({ success: true, data: updatedSale, centro_custo_id: ccId, centro_custo_nome: centroCustoNome });
 }

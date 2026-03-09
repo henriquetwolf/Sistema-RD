@@ -152,13 +152,20 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const fetchFinanceiro = async () => {
       setIsLoadingFinanceiro(true);
       try {
-          const cleanCpf = (instructor.cpf || '').replace(/\D/g, '');
+          const rawCpf = (instructor.cpf || '').trim();
+          const cleanCpf = rawCpf.replace(/\D/g, '');
+          const formattedCpf = cleanCpf.length === 11
+              ? cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+              : '';
+
+          const cpfVariants = [...new Set([cleanCpf, formattedCpf, rawCpf].filter(v => v.length >= 11))];
+
           const queries: Promise<any>[] = [];
 
-          if (cleanCpf.length === 11) {
+          if (cpfVariants.length > 0) {
               queries.push(
-                  appBackend.client.from('conta_azul_contas_receber').select('*').eq('contato_cpf', cleanCpf).order('data_vencimento', { ascending: false }),
-                  appBackend.client.from('conta_azul_contas_pagar').select('*').eq('contato_cpf', cleanCpf).order('data_vencimento', { ascending: false }),
+                  appBackend.client.from('conta_azul_contas_receber').select('*').in('contato_cpf', cpfVariants).order('data_vencimento', { ascending: false }),
+                  appBackend.client.from('conta_azul_contas_pagar').select('*').in('contato_cpf', cpfVariants).order('data_vencimento', { ascending: false }),
               );
           } else {
               queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));

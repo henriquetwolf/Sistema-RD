@@ -10,7 +10,7 @@ import {
   Mail, Phone, Calendar, Hash, Palette, Sparkles, Image as ImageIcon,
   AlignCenter, Filter, Tag, ArrowRightLeft, User, Users, Info, FileSpreadsheet, RefreshCw, Megaphone,
   Zap, GitBranch, Settings, Smartphone, Wifi, WifiOff, Link2, History,
-  ChevronUp, ChevronDown, GripVertical, ToggleLeft, ToggleRight
+  ChevronUp, ChevronDown, GripVertical, ToggleLeft, ToggleRight, Send
 } from 'lucide-react';
 import { appBackend, Pipeline } from '../services/appBackend';
 import clsx from 'clsx';
@@ -117,8 +117,12 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [emailConfig, setEmailConfig] = useState<EmailConfig>({
     apiKey: '',
     senderEmail: '',
-    senderName: 'VOLL Pilates'
+    senderName: 'VOLL Pilates',
+    provider: 'brevo'
   });
+  const [testEmailRecipient, setTestEmailRecipient] = useState('');
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   const webhookUrlDisplay = "https://wfrzsnwisypmgsbeccfj.supabase.co/functions/v1/rapid-service";
 
@@ -203,13 +207,31 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const handleSaveEmailConfig = async () => {
     setIsSavingEmailConfig(true);
     try {
-      await appBackend.saveEmailConfig(emailConfig);
+      await appBackend.saveEmailConfig({ ...emailConfig, provider: 'brevo' });
       setShowEmailConfig(false);
-      alert("Configurações de E-mail salvas!");
+      alert("Configurações Brevo salvas com sucesso!");
     } catch (e: any) {
       alert(`Erro: ${e.message}`);
     } finally {
       setIsSavingEmailConfig(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
+      alert('Digite um e-mail válido para o teste.');
+      return;
+    }
+    setIsSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      await appBackend.saveEmailConfig({ ...emailConfig, provider: 'brevo' });
+      const result = await appBackend.sendTestEmail(testEmailRecipient);
+      setTestEmailResult(result);
+    } catch (e: any) {
+      setTestEmailResult({ success: false, error: e.message });
+    } finally {
+      setIsSendingTestEmail(false);
     }
   };
 
@@ -911,7 +933,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                         onClick={() => setShowEmailConfig(true)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
                     >
-                        <Mail size={16} /> Configurar E-mail
+                        <Mail size={16} /> Configurar E-mail (Brevo)
                     </button>
                     <div className={clsx("p-3 rounded-xl border flex items-center justify-between transition-all", waConfig.isConnected ? "bg-teal-50 border-teal-100" : "bg-red-50 border-red-100")}>
                         <div className="flex items-center gap-2">
@@ -1142,54 +1164,85 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           </div>
       )}
 
-      {/* EMAIL CONFIG MODAL */}
+      {/* EMAIL CONFIG MODAL (BREVO) */}
       {showEmailConfig && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
                   <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
-                      <div className="flex items-center gap-3"><Mail className="text-indigo-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Configuração SendGrid API</h3></div>
-                      <button onClick={() => setShowEmailConfig(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                      <div className="flex items-center gap-3"><Mail className="text-indigo-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Configuração Brevo (E-mail & SMS)</h3></div>
+                      <button onClick={() => { setShowEmailConfig(false); setTestEmailResult(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>
                   <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
                       <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3 text-xs text-blue-800 mb-2">
                         <Info size={16} className="shrink-0" />
-                        <p>Configure sua chave do SendGrid para disparar e-mails automáticos nos fluxos.</p>
+                        <div>
+                          <p className="font-bold mb-1">Provedor: Brevo (brevo.com)</p>
+                          <p>Configure sua chave de API do Brevo para envio de e-mails transacionais (automações, reuniões, notificações). Futuramente também para SMS.</p>
+                        </div>
                       </div>
                       <div className="space-y-4">
                           <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">SendGrid API Key</label>
-                            <input 
-                              type="password" 
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" 
-                              value={emailConfig.apiKey} 
-                              onChange={e => setEmailConfig({...emailConfig, apiKey: e.target.value})} 
-                              placeholder="SG.xxxxxxxxxxxxxx" 
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Chave API Brevo (api-key)</label>
+                            <input
+                              type="password"
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold"
+                              value={emailConfig.apiKey}
+                              onChange={e => setEmailConfig({...emailConfig, apiKey: e.target.value})}
+                              placeholder="xkeysib-xxxxxxxxxxxxxxxx"
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">E-mail do Remetente (Verified Sender)</label>
-                            <input 
-                              type="email" 
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" 
-                              value={emailConfig.senderEmail} 
-                              onChange={e => setEmailConfig({...emailConfig, senderEmail: e.target.value})} 
-                              placeholder="contato@seudominio.com" 
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">E-mail Remetente (Sender)</label>
+                            <input
+                              type="email"
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold"
+                              value={emailConfig.senderEmail}
+                              onChange={e => setEmailConfig({...emailConfig, senderEmail: e.target.value})}
+                              placeholder="noreply@seudominio.com.br"
                             />
                           </div>
                           <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome de Exibição</label>
-                            <input 
-                              type="text" 
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" 
-                              value={emailConfig.senderName} 
-                              onChange={e => setEmailConfig({...emailConfig, senderName: e.target.value})} 
-                              placeholder="VOLL Pilates Group" 
+                            <input
+                              type="text"
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold"
+                              value={emailConfig.senderName}
+                              onChange={e => setEmailConfig({...emailConfig, senderName: e.target.value})}
+                              placeholder="VOLL Pilates"
                             />
                           </div>
                       </div>
+
+                      {/* Test email section */}
+                      <div className="border-t border-slate-200 pt-5 space-y-3">
+                          <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Envio de Teste</h4>
+                          <div className="flex gap-2">
+                              <input
+                                type="email"
+                                className="flex-1 px-4 py-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all"
+                                value={testEmailRecipient}
+                                onChange={e => { setTestEmailRecipient(e.target.value); setTestEmailResult(null); }}
+                                placeholder="seuemail@teste.com"
+                              />
+                              <button
+                                onClick={handleSendTestEmail}
+                                disabled={isSendingTestEmail || !emailConfig.apiKey || !emailConfig.senderEmail}
+                                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all disabled:opacity-50 whitespace-nowrap"
+                              >
+                                {isSendingTestEmail ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                                Enviar Teste
+                              </button>
+                          </div>
+                          {testEmailResult && (
+                              <div className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${testEmailResult.success ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                  {testEmailResult.success ? <Check size={14} /> : <Info size={14} />}
+                                  {testEmailResult.success ? 'E-mail de teste enviado com sucesso! Verifique sua caixa de entrada.' : `Erro: ${testEmailResult.error}`}
+                              </div>
+                          )}
+                      </div>
                   </div>
                   <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]">
-                    <button onClick={() => setShowEmailConfig(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-all">Cancelar</button>
+                    <button onClick={() => { setShowEmailConfig(false); setTestEmailResult(null); }} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-all">Cancelar</button>
                     <button onClick={handleSaveEmailConfig} disabled={isSavingEmailConfig} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2">
                       {isSavingEmailConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações
                     </button>

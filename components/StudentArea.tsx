@@ -1,8 +1,9 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection, StudioDigitalEquipment, StudioDigitalExercise } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel, PagBankOrder, Aluno, AlunoEmail, AiAvatar, AlunoKnowledgeBase, AiChatMessage, AvatarTone, ExperienceLevel, LearningStyle, AiTutorNotification, FranchisePresentationSection, StudioDigitalEquipment, StudioDigitalExercise, FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings, FranchiseMeetingSlot } from '../types';
 import { appBackend } from '../services/appBackend';
 import { pagBankService } from '../services/pagBankService';
+import { whatsappService } from '../services/whatsappService';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
@@ -115,6 +116,20 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [franchiseLeadSuccess, setFranchiseLeadSuccess] = useState(false);
     const [franchiseInterestObservation, setFranchiseInterestObservation] = useState('');
 
+    // Franchise Meeting Scheduling
+    const [meetingAvailability, setMeetingAvailability] = useState<FranchiseMeetingAvailability[]>([]);
+    const [meetingBlockedDates, setMeetingBlockedDates] = useState<FranchiseMeetingBlockedDate[]>([]);
+    const [meetingSettings, setMeetingSettings] = useState<FranchiseMeetingSettings | null>(null);
+    const [myMeetings, setMyMeetings] = useState<FranchiseMeetingBooking[]>([]);
+    const [meetingSlotsLoading, setMeetingSlotsLoading] = useState(false);
+    const [meetingCalMonth, setMeetingCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+    const [meetingSelectedDate, setMeetingSelectedDate] = useState<string | null>(null);
+    const [meetingSelectedSlot, setMeetingSelectedSlot] = useState<FranchiseMeetingSlot | null>(null);
+    const [meetingBooking, setMeetingBooking] = useState(false);
+    const [meetingBookingSuccess, setMeetingBookingSuccess] = useState<FranchiseMeetingBooking | null>(null);
+    const [meetingCancellingId, setMeetingCancellingId] = useState<string | null>(null);
+    const [allBookings, setAllBookings] = useState<FranchiseMeetingBooking[]>([]);
+
     // Studio Digital
     const [studioEquipments, setStudioEquipments] = useState<StudioDigitalEquipment[]>([]);
     const [selectedStudioEquipment, setSelectedStudioEquipment] = useState<StudioDigitalEquipment | null>(null);
@@ -144,7 +159,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'my_data') loadMyData();
         if (activeTab === 'learning_profile') loadKnowledgeBase();
         if (activeTab === 'ai_tutor') { loadAvatarsAndSelection(); loadChatHistory(); }
-        if (activeTab === 'franchise_presentation') loadFranchisePresentation();
+        if (activeTab === 'franchise_presentation') { loadFranchisePresentation(); loadMeetingData(); }
         if (activeTab === 'studio_digital') { loadStudioDigital(); setSelectedStudioEquipment(null); setPlayingVideoId(null); setFullscreenVideoId(null); }
     }, [activeTab]);
 
@@ -195,6 +210,233 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         } finally {
             setFranchisePresentationLoading(false);
         }
+    };
+
+    // ── Meeting scheduling helpers ──────────────────────────────
+
+    const loadMeetingData = async () => {
+        setMeetingSlotsLoading(true);
+        try {
+            const [avail, blocked, settings, myMtgs, bookings] = await Promise.all([
+                appBackend.getFranchiseMeetingAvailability(),
+                appBackend.getFranchiseMeetingBlockedDates(),
+                appBackend.getFranchiseMeetingSettings(),
+                appBackend.getStudentFranchiseMeetings(student.cpf),
+                appBackend.getFranchiseMeetingBookings({ status: 'scheduled' }),
+            ]);
+            setMeetingAvailability(avail);
+            setMeetingBlockedDates(blocked);
+            setMeetingSettings(settings);
+            setMyMeetings(myMtgs);
+            setAllBookings(bookings);
+        } catch (e) {
+            console.error('Erro ao carregar dados de reunião:', e);
+        } finally {
+            setMeetingSlotsLoading(false);
+        }
+    };
+
+    const getMeetingSlotsForDate = (dateStr: string): FranchiseMeetingSlot[] => {
+        const date = new Date(dateStr + 'T12:00:00');
+        const dayOfWeek = date.getDay();
+        const avail = meetingAvailability.find(a => a.day_of_week === dayOfWeek);
+        if (!avail || !avail.is_active) return [];
+
+        const isBlocked = meetingBlockedDates.some(bd => bd.blocked_date === dateStr);
+        if (isBlocked) return [];
+
+        const slots: FranchiseMeetingSlot[] = [];
+        const [startH, startM] = avail.start_time.split(':').map(Number);
+        const [endH, endM] = avail.end_time.split(':').map(Number);
+        const startMinutes = startH * 60 + startM;
+        const endMinutes = endH * 60 + endM;
+        const duration = avail.slot_duration_minutes;
+
+        for (let m = startMinutes; m + duration <= endMinutes; m += duration) {
+            const slotStartH = Math.floor(m / 60).toString().padStart(2, '0');
+            const slotStartM = (m % 60).toString().padStart(2, '0');
+            const slotEndH = Math.floor((m + duration) / 60).toString().padStart(2, '0');
+            const slotEndM = ((m + duration) % 60).toString().padStart(2, '0');
+
+            const startISO = `${dateStr}T${slotStartH}:${slotStartM}:00-03:00`;
+            const endISO = `${dateStr}T${slotEndH}:${slotEndM}:00-03:00`;
+
+            const isBooked = allBookings.some(b =>
+                b.status === 'scheduled' &&
+                b.meeting_date === dateStr &&
+                new Date(b.meeting_start).toISOString().slice(11, 16) === `${slotStartH}:${slotStartM}`
+            );
+
+            // Don't show past slots
+            const now = new Date();
+            const slotDate = new Date(startISO);
+            if (slotDate < now) continue;
+
+            slots.push({
+                date: dateStr,
+                start: startISO,
+                end: endISO,
+                available: !isBooked,
+            });
+        }
+        return slots;
+    };
+
+    const isDateAvailable = (dateStr: string): boolean => {
+        const date = new Date(dateStr + 'T12:00:00');
+        const dayOfWeek = date.getDay();
+        const avail = meetingAvailability.find(a => a.day_of_week === dayOfWeek);
+        if (!avail || !avail.is_active) return false;
+        if (meetingBlockedDates.some(bd => bd.blocked_date === dateStr)) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (date < today) return false;
+        if (meetingSettings) {
+            const maxDate = new Date();
+            maxDate.setDate(maxDate.getDate() + meetingSettings.advance_days);
+            if (date > maxDate) return false;
+        }
+        return true;
+    };
+
+    const handleBookMeeting = async () => {
+        if (!meetingSelectedSlot) return;
+        setMeetingBooking(true);
+        try {
+            const deal = student.deals?.[0];
+            const result = await appBackend.bookFranchiseMeeting({
+                student_cpf: student.cpf?.replace(/\D/g, '') || '',
+                student_name: student.name || '',
+                student_email: student.email || '',
+                student_phone: deal?.phone || '',
+                meeting_date: meetingSelectedSlot.date,
+                start_time: meetingSelectedSlot.start,
+                end_time: meetingSelectedSlot.end,
+            });
+            setMeetingBookingSuccess(result.booking);
+            setMeetingSelectedSlot(null);
+            setMeetingSelectedDate(null);
+
+            // Send notifications (email + WhatsApp from frontend)
+            try { await sendMeetingNotifications(result.booking); } catch (e) { console.error('Notification error:', e); }
+
+            // Reload meetings
+            const [myMtgs, bookings] = await Promise.all([
+                appBackend.getStudentFranchiseMeetings(student.cpf),
+                appBackend.getFranchiseMeetingBookings({ status: 'scheduled' }),
+            ]);
+            setMyMeetings(myMtgs);
+            setAllBookings(bookings);
+        } catch (e: any) {
+            alert(e.message || 'Erro ao agendar reunião.');
+        } finally {
+            setMeetingBooking(false);
+        }
+    };
+
+    const handleCancelMeeting = async (id: string) => {
+        if (!confirm('Deseja cancelar esta reunião?')) return;
+        setMeetingCancellingId(id);
+        try {
+            await appBackend.cancelFranchiseMeeting(id);
+            setMyMeetings(prev => prev.map(m => m.id === id ? { ...m, status: 'cancelled' } : m));
+            setAllBookings(prev => prev.filter(b => b.id !== id));
+        } catch (e: any) {
+            alert(e.message || 'Erro ao cancelar.');
+        } finally {
+            setMeetingCancellingId(null);
+        }
+    };
+
+    const sendMeetingNotifications = async (booking: FranchiseMeetingBooking) => {
+        const meetDate = new Date(booking.meeting_start);
+        const dateStr = meetDate.toLocaleDateString('pt-BR');
+        const timeStr = meetDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const meetLink = booking.meet_link || 'Link será enviado em breve';
+
+        const emailBody = `
+            <h2>Reunião Franquia VOLL Studios Agendada!</h2>
+            <p><strong>Data:</strong> ${dateStr}</p>
+            <p><strong>Horário:</strong> ${timeStr}</p>
+            <p><strong>Link Google Meet:</strong> <a href="${booking.meet_link}">${meetLink}</a></p>
+            <p><strong>Aluno:</strong> ${booking.student_name}</p>
+            <p><strong>Email:</strong> ${booking.student_email}</p>
+            <p><strong>Telefone:</strong> ${booking.student_phone || 'N/A'}</p>
+            <hr>
+            <p>Em caso de dúvidas, entre em contato conosco.</p>
+        `;
+
+        // Email to student
+        if (booking.student_email) {
+            try {
+                await appBackend.sendEmailViaSendGrid(
+                    booking.student_email,
+                    `Reunião Franquia VOLL - ${dateStr} às ${timeStr}`,
+                    emailBody
+                );
+            } catch (e) { console.error('Email to student failed:', e); }
+        }
+
+        // Email to admin
+        if (meetingSettings?.admin_email) {
+            try {
+                await appBackend.sendEmailViaSendGrid(
+                    meetingSettings.admin_email,
+                    `Nova Reunião Franquia - ${booking.student_name} - ${dateStr} às ${timeStr}`,
+                    emailBody
+                );
+            } catch (e) { console.error('Email to admin failed:', e); }
+        }
+
+        // WhatsApp to student
+        const deal = student.deals?.[0];
+        const studentPhone = deal?.phone?.replace(/\D/g, '');
+        if (studentPhone) {
+            try {
+                const waMsg = `*Reunião Franquia VOLL Studios Agendada!*\n\n📅 Data: ${dateStr}\n⏰ Horário: ${timeStr}\n📎 Link: ${meetLink}\n\nNos vemos lá! 🚀`;
+                await whatsappService.sendTextMessage({ wa_id: studentPhone, contact_phone: studentPhone }, waMsg);
+            } catch (e) { console.error('WhatsApp to student failed:', e); }
+        }
+
+        // WhatsApp to admin
+        if (meetingSettings?.admin_phone) {
+            try {
+                const adminMsg = `*Nova Reunião Franquia Agendada!*\n\n👤 Aluno: ${booking.student_name}\n📧 Email: ${booking.student_email}\n📅 Data: ${dateStr}\n⏰ Horário: ${timeStr}\n📎 Link: ${meetLink}`;
+                await whatsappService.sendTextMessage({ wa_id: meetingSettings.admin_phone, contact_phone: meetingSettings.admin_phone }, adminMsg);
+            } catch (e) { console.error('WhatsApp to admin failed:', e); }
+        }
+
+        // Push notification to admin
+        try {
+            await appBackend.client.functions.invoke('push-notify', {
+                body: {
+                    action: 'send-to-topic',
+                    user_type: 'admin' as any,
+                    title: 'Nova Reunião Franquia',
+                    body: `${booking.student_name} agendou reunião para ${dateStr} às ${timeStr}`,
+                },
+            });
+        } catch (e) { console.error('Push notification failed:', e); }
+    };
+
+    const MEETING_DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const MEETING_MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    const getMeetingCalendarDays = () => {
+        const year = meetingCalMonth.getFullYear();
+        const month = meetingCalMonth.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const days: { day: number; dateStr: string; available: boolean; isToday: boolean }[] = [];
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+
+        for (let i = 0; i < firstDay; i++) days.push({ day: 0, dateStr: '', available: false, isToday: false });
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+            days.push({ day: d, dateStr, available: isDateAvailable(dateStr), isToday: dateStr === todayStr });
+        }
+        return days;
     };
 
     const handleFranchiseInterest = async () => {
@@ -2312,6 +2554,153 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                     Tenho interesse em ser franqueado!
                                                 </button>
                                             </>
+                                        )}
+                                    </div>
+
+                                    {/* ── Agendamento de Reunião Google Meet ──────── */}
+                                    <div className="bg-white rounded-[2.5rem] border-2 border-teal-200 p-8 shadow-lg">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <Video size={28} className="text-teal-600" />
+                                            <h4 className="text-xl font-black text-slate-800">Agende uma Reunião</h4>
+                                        </div>
+                                        <p className="text-slate-500 text-sm mb-6">Escolha um dia e horário para conversar sobre a Franquia VOLL Studios via Google Meet.</p>
+
+                                        {meetingSlotsLoading ? (
+                                            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-teal-600" size={28} /></div>
+                                        ) : meetingBookingSuccess ? (
+                                            <div className="flex flex-col items-center gap-4 py-6 animate-in fade-in zoom-in-95">
+                                                <CheckCircle className="w-16 h-16 text-teal-600" />
+                                                <h5 className="text-xl font-black text-slate-800">Reunião Agendada!</h5>
+                                                <p className="text-slate-500 text-sm text-center max-w-md">
+                                                    Sua reunião foi agendada para <strong>{new Date(meetingBookingSuccess.meeting_start).toLocaleDateString('pt-BR')}</strong> às <strong>{new Date(meetingBookingSuccess.meeting_start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>.
+                                                </p>
+                                                {meetingBookingSuccess.meet_link && (
+                                                    <a href={meetingBookingSuccess.meet_link} target="_blank" rel="noopener noreferrer" className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-teal-600/20 flex items-center gap-2 transition-all active:scale-95">
+                                                        <Video size={18} /> Link do Google Meet
+                                                    </a>
+                                                )}
+                                                <p className="text-xs text-slate-400">Você receberá confirmação por e-mail e WhatsApp.</p>
+                                                <button onClick={() => setMeetingBookingSuccess(null)} className="text-teal-600 text-sm font-bold mt-2 hover:underline">Voltar</button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-6">
+                                                {/* My scheduled meetings */}
+                                                {myMeetings.filter(m => m.status === 'scheduled').length > 0 && (
+                                                    <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5 space-y-3">
+                                                        <h5 className="text-sm font-black text-teal-800 uppercase tracking-widest flex items-center gap-2"><Calendar size={16} /> Suas Reuniões Agendadas</h5>
+                                                        {myMeetings.filter(m => m.status === 'scheduled').map(m => (
+                                                            <div key={m.id} className="bg-white rounded-xl p-4 flex items-center justify-between border border-teal-100">
+                                                                <div>
+                                                                    <p className="text-sm font-bold text-slate-800">{new Date(m.meeting_start).toLocaleDateString('pt-BR')} às {new Date(m.meeting_start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                                                    <p className="text-xs text-slate-500 mt-0.5">{m.meet_link ? 'Link do Meet disponível' : 'Link será gerado em breve'}</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {m.meet_link && (
+                                                                        <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
+                                                                            <Video size={14} /> Entrar
+                                                                        </a>
+                                                                    )}
+                                                                    <button onClick={() => handleCancelMeeting(m.id)} disabled={meetingCancellingId === m.id} className="text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50">
+                                                                        {meetingCancellingId === m.id ? <Loader2 size={14} className="animate-spin" /> : 'Cancelar'}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Calendar */}
+                                                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <button onClick={() => setMeetingCalMonth(new Date(meetingCalMonth.getFullYear(), meetingCalMonth.getMonth() - 1, 1))} className="p-2 hover:bg-white rounded-xl transition-colors"><ChevronLeft size={20} className="text-slate-600" /></button>
+                                                        <h5 className="text-sm font-black text-slate-700 uppercase tracking-widest">
+                                                            {MEETING_MONTH_NAMES[meetingCalMonth.getMonth()]} {meetingCalMonth.getFullYear()}
+                                                        </h5>
+                                                        <button onClick={() => setMeetingCalMonth(new Date(meetingCalMonth.getFullYear(), meetingCalMonth.getMonth() + 1, 1))} className="p-2 hover:bg-white rounded-xl transition-colors"><ChevronRight size={20} className="text-slate-600" /></button>
+                                                    </div>
+                                                    <div className="grid grid-cols-7 gap-1 mb-2">
+                                                        {MEETING_DAY_NAMES.map(d => (
+                                                            <div key={d} className="text-center text-[10px] font-black text-slate-400 uppercase py-1">{d}</div>
+                                                        ))}
+                                                    </div>
+                                                    <div className="grid grid-cols-7 gap-1">
+                                                        {getMeetingCalendarDays().map((d, i) => (
+                                                            <button
+                                                                key={i}
+                                                                disabled={!d.day || !d.available}
+                                                                onClick={() => { setMeetingSelectedDate(d.dateStr); setMeetingSelectedSlot(null); }}
+                                                                className={clsx(
+                                                                    "w-full aspect-square rounded-xl text-sm font-bold transition-all",
+                                                                    !d.day ? "invisible" :
+                                                                    d.dateStr === meetingSelectedDate ? "bg-teal-600 text-white shadow-lg shadow-teal-600/30 scale-105" :
+                                                                    d.available ? "bg-white hover:bg-teal-50 text-slate-800 border border-slate-200 hover:border-teal-300 cursor-pointer" :
+                                                                    "bg-slate-100 text-slate-300 cursor-not-allowed",
+                                                                    d.isToday && d.dateStr !== meetingSelectedDate ? "ring-2 ring-teal-400" : ""
+                                                                )}
+                                                            >
+                                                                {d.day || ''}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Time slots */}
+                                                {meetingSelectedDate && (
+                                                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                                        <h5 className="text-sm font-black text-slate-700 mb-4 flex items-center gap-2">
+                                                            <Clock size={16} className="text-teal-600" />
+                                                            Horários para {new Date(meetingSelectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                                        </h5>
+                                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                                            {getMeetingSlotsForDate(meetingSelectedDate).map((slot, idx) => {
+                                                                const timeStr = new Date(slot.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                                                const isSelected = meetingSelectedSlot?.start === slot.start;
+                                                                return (
+                                                                    <button
+                                                                        key={idx}
+                                                                        disabled={!slot.available}
+                                                                        onClick={() => setMeetingSelectedSlot(slot)}
+                                                                        className={clsx(
+                                                                            "px-4 py-3 rounded-xl text-sm font-bold transition-all",
+                                                                            isSelected ? "bg-teal-600 text-white shadow-lg shadow-teal-600/30" :
+                                                                            slot.available ? "bg-white border border-slate-200 text-slate-700 hover:border-teal-300 hover:bg-teal-50" :
+                                                                            "bg-slate-200 text-slate-400 cursor-not-allowed line-through"
+                                                                        )}
+                                                                    >
+                                                                        {timeStr}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                            {getMeetingSlotsForDate(meetingSelectedDate).length === 0 && (
+                                                                <p className="col-span-full text-center text-sm text-slate-400 py-4">Nenhum horário disponível nesta data.</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Confirmation */}
+                                                {meetingSelectedSlot && (
+                                                    <div className="bg-teal-50 border-2 border-teal-200 rounded-2xl p-6 text-center animate-in fade-in zoom-in-95 duration-200">
+                                                        <h5 className="text-lg font-black text-slate-800 mb-2">Confirmar Agendamento</h5>
+                                                        <p className="text-sm text-slate-600 mb-4">
+                                                            <strong>{new Date(meetingSelectedSlot.start).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                                                            {' às '}
+                                                            <strong>{new Date(meetingSelectedSlot.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>
+                                                        </p>
+                                                        <div className="flex items-center justify-center gap-3">
+                                                            <button onClick={() => setMeetingSelectedSlot(null)} className="px-6 py-3 text-slate-600 hover:bg-white rounded-2xl font-bold text-sm transition-all">Voltar</button>
+                                                            <button
+                                                                onClick={handleBookMeeting}
+                                                                disabled={meetingBooking}
+                                                                className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-10 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-teal-600/20 flex items-center gap-2 transition-all active:scale-95"
+                                                            >
+                                                                {meetingBooking ? <Loader2 size={18} className="animate-spin" /> : <Video size={18} />}
+                                                                Agendar Reunião
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>

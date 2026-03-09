@@ -9,9 +9,11 @@ import {
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
   WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig,
   ContaAzulProductMapping, FranchisePresentationSection,
-  StudioDigitalEquipment, StudioDigitalExercise
+  StudioDigitalEquipment, StudioDigitalExercise,
+  FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings
 } from '../types';
 import { whatsappService } from './whatsappService';
+import { brevoService } from './brevoService';
 
 export type { CompanySetting, Pipeline, WebhookTrigger, PipelineStage };
 
@@ -306,40 +308,32 @@ export const appBackend = {
   sendEmailViaSendGrid: async (to: string, subject: string, body: string): Promise<boolean> => {
       const config = await appBackend.getEmailConfig();
       if (!config || !config.apiKey || !config.senderEmail) {
-          console.warn("[SENDGRID] Configurações de e-mail incompletas.");
+          console.warn("[EMAIL] Configurações de e-mail incompletas.");
           return false;
       }
 
-      try {
-          const proxyUrl = "https://corsproxy.io/?";
-          const targetUrl = "https://api.sendgrid.com/v3/mail/send";
-          
-          const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
-              method: 'POST',
-              headers: {
-                  'Authorization': `Bearer ${config.apiKey.trim()}`,
-                  'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                  personalizations: [{ to: [{ email: to }] }],
-                  from: { email: config.senderEmail, name: config.senderName || "VOLL Pilates" },
-                  subject: subject,
-                  content: [{ type: 'text/html', value: body }]
-              })
-          });
+      const result = await brevoService.sendEmail(
+          config.apiKey,
+          config.senderEmail,
+          config.senderName || 'VOLL Pilates',
+          { to, subject, htmlContent: body }
+      );
 
-          if (!response.ok) {
-              const errData = await response.text();
-              console.error("[SENDGRID ERROR]", errData);
-              return false;
-          }
+      return result.success;
+  },
 
-          console.log(`[SENDGRID SUCCESS] E-mail enviado para: ${to}`);
-          return true;
-      } catch (err) {
-          console.error("[SENDGRID FETCH ERROR]", err);
-          return false;
+  sendTestEmail: async (testRecipient: string): Promise<{ success: boolean; error?: string }> => {
+      const config = await appBackend.getEmailConfig();
+      if (!config || !config.apiKey || !config.senderEmail) {
+          return { success: false, error: 'Configurações de e-mail incompletas. Salve a chave e o sender primeiro.' };
       }
+      const result = await brevoService.sendTestEmail(
+          config.apiKey,
+          config.senderEmail,
+          config.senderName || 'VOLL Pilates',
+          testRecipient
+      );
+      return result;
   },
 
   /**
@@ -1158,19 +1152,20 @@ export const appBackend = {
 
   getEmailConfig: async (): Promise<EmailConfig | null> => {
     const local = localStorage.getItem('crm_email_config');
-    if (local) { try { return JSON.parse(local); } catch (e) { return null; } }
+    if (local) { try { const c = JSON.parse(local); return { ...c, provider: c.provider || 'brevo' }; } catch (e) { return null; } }
     if (!isConfigured) return null;
     try {
         const { data } = await supabase.from('crm_settings').select('value').eq('key', 'email_config').maybeSingle();
-        if (data?.value) return JSON.parse(data.value);
+        if (data?.value) { const c = JSON.parse(data.value); return { ...c, provider: c.provider || 'brevo' }; }
     } catch (e) { return null; }
     return null;
   },
 
   saveEmailConfig: async (config: EmailConfig): Promise<void> => {
-    localStorage.setItem('crm_email_config', JSON.stringify(config));
+    const toSave = { ...config, provider: config.provider || 'brevo' };
+    localStorage.setItem('crm_email_config', JSON.stringify(toSave));
     if (!isConfigured) return;
-    await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(config) }, { onConflict: 'key' });
+    await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(toSave) }, { onConflict: 'key' });
   },
 
   // ── Conta Azul Product Mapping ─────────────────────────────
@@ -1876,5 +1871,103 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('marketing_lead_events').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(100);
     return data || [];
+  },
+
+  // ── Franchise Meeting Scheduling ────────────────────────────
+
+  getFranchiseMeetingAvailability: async (): Promise<FranchiseMeetingAvailability[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('franchise_meeting_availability').select('*').order('day_of_week');
+    if (error) throw error;
+    return data || [];
+  },
+
+  saveFranchiseMeetingAvailability: async (items: FranchiseMeetingAvailability[]): Promise<void> => {
+    if (!isConfigured) return;
+    for (const item of items) {
+      await supabase.from('franchise_meeting_availability').upsert({
+        id: item.id,
+        day_of_week: item.day_of_week,
+        start_time: item.start_time,
+        end_time: item.end_time,
+        slot_duration_minutes: item.slot_duration_minutes,
+        is_active: item.is_active,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  },
+
+  getFranchiseMeetingBlockedDates: async (): Promise<FranchiseMeetingBlockedDate[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('franchise_meeting_blocked_dates').select('*').order('blocked_date');
+    return data || [];
+  },
+
+  addFranchiseMeetingBlockedDate: async (date: string, reason: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('franchise_meeting_blocked_dates').upsert({ blocked_date: date, reason }, { onConflict: 'blocked_date' });
+  },
+
+  removeFranchiseMeetingBlockedDate: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('franchise_meeting_blocked_dates').delete().eq('id', id);
+  },
+
+  getFranchiseMeetingSettings: async (): Promise<FranchiseMeetingSettings> => {
+    const defaults: FranchiseMeetingSettings = { advance_days: 30, max_bookings_per_student: 1, admin_email: '', admin_phone: '', meeting_title: 'Reunião Franquia VOLL Studios', meeting_description: 'Reunião de apresentação da Franquia VOLL Studios' };
+    if (!isConfigured) return defaults;
+    const { data } = await supabase.from('crm_settings').select('value').eq('key', 'franchise_meeting_config').maybeSingle();
+    if (data?.value) {
+      try { return { ...defaults, ...JSON.parse(data.value) }; } catch { return defaults; }
+    }
+    return defaults;
+  },
+
+  saveFranchiseMeetingSettings: async (settings: FranchiseMeetingSettings): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_settings').upsert({ key: 'franchise_meeting_config', value: JSON.stringify(settings) }, { onConflict: 'key' });
+  },
+
+  getFranchiseMeetingBookings: async (filters?: { status?: string; from?: string; to?: string }): Promise<FranchiseMeetingBooking[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('franchise_meeting_bookings').select('*').order('meeting_start', { ascending: false });
+    if (filters?.status) query = query.eq('status', filters.status);
+    if (filters?.from) query = query.gte('meeting_date', filters.from);
+    if (filters?.to) query = query.lte('meeting_date', filters.to);
+    const { data } = await query;
+    return data || [];
+  },
+
+  getStudentFranchiseMeetings: async (cpf: string): Promise<FranchiseMeetingBooking[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('franchise_meeting_bookings').select('*').eq('student_cpf', cpf.replace(/\D/g, '')).order('meeting_start', { ascending: false });
+    return data || [];
+  },
+
+  bookFranchiseMeeting: async (payload: {
+    student_cpf: string; student_name: string; student_email: string; student_phone: string;
+    meeting_date: string; start_time: string; end_time: string;
+  }): Promise<{ booking: FranchiseMeetingBooking; meet_link: string; google_configured: boolean }> => {
+    if (!isConfigured) throw new Error('Backend não configurado');
+    const { data, error } = await supabase.functions.invoke('google-meet', {
+      body: { action: 'create-meeting', ...payload },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  cancelFranchiseMeeting: async (bookingId: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { data, error } = await supabase.functions.invoke('google-meet', {
+      body: { action: 'cancel-meeting', booking_id: bookingId },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+  },
+
+  updateFranchiseMeetingBooking: async (id: string, updates: Partial<FranchiseMeetingBooking>): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('franchise_meeting_bookings').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
   },
 };

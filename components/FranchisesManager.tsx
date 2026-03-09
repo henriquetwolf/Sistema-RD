@@ -5,14 +5,15 @@ import {
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
   DollarSign, User, Building, Map as MapIcon, List,
   Navigation, AlertTriangle, CheckCircle, Briefcase, Globe, Info, Ruler, Dumbbell,
-  AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned, Sparkles, Presentation
+  AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned, Sparkles, Presentation,
+  Video, CalendarDays, Clock, Ban, Settings2, ExternalLink, ChevronLeft, ChevronRight, Trash, Eye
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import { GoogleGenAI } from '@google/genai';
-import { Franchise, FranchisePresentationSection } from '../types';
+import { Franchise, FranchisePresentationSection, FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings } from '../types';
 
 interface FranchisesManagerProps {
   onBack: () => void;
@@ -87,7 +88,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'map' | 'presentation'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'map' | 'presentation' | 'meetings'>('list');
   const [activeTab, setActiveTab] = useState<'dados' | 'local' | 'studio'>('dados');
   
   const [formData, setFormData] = useState<Franchise>(INITIAL_FORM_STATE);
@@ -98,6 +99,18 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [presentationLoading, setPresentationLoading] = useState(false);
   const [presentationSaving, setPresentationSaving] = useState(false);
   const [aiHelpKey, setAiHelpKey] = useState<string | null>(null);
+
+  // Meetings / Agendamento
+  const [meetingAvailability, setMeetingAvailability] = useState<FranchiseMeetingAvailability[]>([]);
+  const [meetingBlockedDates, setMeetingBlockedDates] = useState<FranchiseMeetingBlockedDate[]>([]);
+  const [meetingBookings, setMeetingBookings] = useState<FranchiseMeetingBooking[]>([]);
+  const [meetingSettings, setMeetingSettings] = useState<FranchiseMeetingSettings>({ advance_days: 30, max_bookings_per_student: 1, admin_email: '', admin_phone: '', meeting_title: 'Reunião Franquia VOLL Studios', meeting_description: 'Reunião de apresentação da Franquia VOLL Studios' });
+  const [meetingLoading, setMeetingLoading] = useState(false);
+  const [meetingSaving, setMeetingSaving] = useState(false);
+  const [meetingTab, setMeetingTab] = useState<'availability' | 'bookings' | 'settings'>('availability');
+  const [newBlockedDate, setNewBlockedDate] = useState('');
+  const [newBlockedReason, setNewBlockedReason] = useState('');
+  const [meetingBookingFilter, setMeetingBookingFilter] = useState<'all' | 'scheduled' | 'completed' | 'cancelled'>('all');
 
   // Estados de Simulação no Mapa
   const [simAddress, setSimAddress] = useState('');
@@ -360,6 +373,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
 
   useEffect(() => {
       if (viewMode === 'presentation') loadPresentation();
+      if (viewMode === 'meetings') loadMeetingData();
   }, [viewMode]);
 
   const loadPresentation = async () => {
@@ -417,6 +431,104 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
       setPresentationSections(prev => prev.map(s => s.section_key === sectionKey ? { ...s, [field]: value } : s));
   };
 
+  // ── Meeting management functions ──────────────────────────────
+
+  const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+  const loadMeetingData = async () => {
+      setMeetingLoading(true);
+      try {
+          const [avail, blocked, bookings, settings] = await Promise.all([
+              appBackend.getFranchiseMeetingAvailability(),
+              appBackend.getFranchiseMeetingBlockedDates(),
+              appBackend.getFranchiseMeetingBookings(),
+              appBackend.getFranchiseMeetingSettings(),
+          ]);
+          setMeetingAvailability(avail);
+          setMeetingBlockedDates(blocked);
+          setMeetingBookings(bookings);
+          setMeetingSettings(settings);
+      } catch (e) {
+          console.error('Erro ao carregar reuniões:', e);
+      } finally {
+          setMeetingLoading(false);
+      }
+  };
+
+  const saveMeetingAvailability = async () => {
+      setMeetingSaving(true);
+      try {
+          await appBackend.saveFranchiseMeetingAvailability(meetingAvailability);
+          alert('Disponibilidade salva com sucesso!');
+      } catch (e: any) {
+          alert('Erro: ' + (e.message || e));
+      } finally {
+          setMeetingSaving(false);
+      }
+  };
+
+  const saveMeetingSettingsHandler = async () => {
+      setMeetingSaving(true);
+      try {
+          await appBackend.saveFranchiseMeetingSettings(meetingSettings);
+          alert('Configurações salvas com sucesso!');
+      } catch (e: any) {
+          alert('Erro: ' + (e.message || e));
+      } finally {
+          setMeetingSaving(false);
+      }
+  };
+
+  const handleAddBlockedDate = async () => {
+      if (!newBlockedDate) return;
+      try {
+          await appBackend.addFranchiseMeetingBlockedDate(newBlockedDate, newBlockedReason);
+          setNewBlockedDate('');
+          setNewBlockedReason('');
+          const blocked = await appBackend.getFranchiseMeetingBlockedDates();
+          setMeetingBlockedDates(blocked);
+      } catch (e: any) {
+          alert('Erro: ' + (e.message || e));
+      }
+  };
+
+  const handleRemoveBlockedDate = async (id: string) => {
+      try {
+          await appBackend.removeFranchiseMeetingBlockedDate(id);
+          setMeetingBlockedDates(prev => prev.filter(d => d.id !== id));
+      } catch (e: any) {
+          alert('Erro: ' + (e.message || e));
+      }
+  };
+
+  const handleCancelBooking = async (id: string) => {
+      if (!confirm('Deseja realmente cancelar este agendamento?')) return;
+      try {
+          await appBackend.cancelFranchiseMeeting(id);
+          setMeetingBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
+      } catch (e: any) {
+          alert('Erro ao cancelar: ' + (e.message || e));
+      }
+  };
+
+  const handleCompleteBooking = async (id: string) => {
+      try {
+          await appBackend.updateFranchiseMeetingBooking(id, { status: 'completed' });
+          setMeetingBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'completed' } : b));
+      } catch (e: any) {
+          alert('Erro: ' + (e.message || e));
+      }
+  };
+
+  const updateAvailDay = (dayOfWeek: number, field: string, value: any) => {
+      setMeetingAvailability(prev => prev.map(a => a.day_of_week === dayOfWeek ? { ...a, [field]: value } : a));
+  };
+
+  const filteredBookings = useMemo(() => {
+      if (meetingBookingFilter === 'all') return meetingBookings;
+      return meetingBookings.filter(b => b.status === meetingBookingFilter);
+  }, [meetingBookings, meetingBookingFilter]);
+
   const filtered = useMemo(() => {
     return franchises.filter(f => 
         f.franchiseeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -448,7 +560,10 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                         <MapIcon size={16} /> Mapa
                     </button>
                     <button onClick={() => setViewMode('presentation')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'presentation' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
-                        <Presentation size={16} /> Apresentação da Franquia
+                        <Presentation size={16} /> Apresentação
+                    </button>
+                    <button onClick={() => setViewMode('meetings')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'meetings' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
+                        <Video size={16} /> Reuniões
                     </button>
                 </div>
                 <button 
@@ -550,6 +665,250 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                         ))
                     )}
                 </div>
+            </div>
+        )}
+
+        {viewMode === 'meetings' && (
+            <div className="space-y-6">
+                {/* Sub-tabs */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-1 flex gap-1">
+                    <button onClick={() => setMeetingTab('availability')} className={clsx("flex-1 px-4 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all", meetingTab === 'availability' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-500 hover:bg-slate-50")}>
+                        <CalendarDays size={16} /> Disponibilidade
+                    </button>
+                    <button onClick={() => setMeetingTab('bookings')} className={clsx("flex-1 px-4 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all", meetingTab === 'bookings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-500 hover:bg-slate-50")}>
+                        <Video size={16} /> Agendamentos ({meetingBookings.filter(b => b.status === 'scheduled').length})
+                    </button>
+                    <button onClick={() => setMeetingTab('settings')} className={clsx("flex-1 px-4 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all", meetingTab === 'settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-500 hover:bg-slate-50")}>
+                        <Settings2 size={16} /> Configurações
+                    </button>
+                </div>
+
+                {meetingLoading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
+                ) : (
+                    <>
+                        {/* AVAILABILITY TAB */}
+                        {meetingTab === 'availability' && (
+                            <div className="space-y-6">
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <CalendarDays size={20} className="text-teal-600" /> Horários Disponíveis por Dia
+                                        </h3>
+                                        <button onClick={saveMeetingAvailability} disabled={meetingSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm disabled:opacity-50">
+                                            {meetingSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                            Salvar
+                                        </button>
+                                    </div>
+                                    <div className="p-6 space-y-3">
+                                        {meetingAvailability.map(day => (
+                                            <div key={day.day_of_week} className={clsx("flex items-center gap-4 p-4 rounded-xl border transition-all", day.is_active ? "bg-teal-50/50 border-teal-200" : "bg-slate-50 border-slate-200 opacity-60")}>
+                                                <label className="flex items-center gap-3 min-w-[140px] cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={day.is_active}
+                                                        onChange={e => updateAvailDay(day.day_of_week, 'is_active', e.target.checked)}
+                                                        className="w-5 h-5 rounded text-teal-600"
+                                                    />
+                                                    <span className="text-sm font-bold text-slate-700">{DAY_NAMES[day.day_of_week]}</span>
+                                                </label>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase">De</label>
+                                                    <input type="time" value={day.start_time} onChange={e => updateAvailDay(day.day_of_week, 'start_time', e.target.value)} disabled={!day.is_active} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm disabled:opacity-40" />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase">Até</label>
+                                                    <input type="time" value={day.end_time} onChange={e => updateAvailDay(day.day_of_week, 'end_time', e.target.value)} disabled={!day.is_active} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm disabled:opacity-40" />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase">Duração</label>
+                                                    <select value={day.slot_duration_minutes} onChange={e => updateAvailDay(day.day_of_week, 'slot_duration_minutes', parseInt(e.target.value))} disabled={!day.is_active} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm disabled:opacity-40">
+                                                        <option value={30}>30 min</option>
+                                                        <option value={60}>1 hora</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Blocked dates */}
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <Ban size={20} className="text-red-500" /> Datas Bloqueadas
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-1">Feriados, férias ou datas específicas sem atendimento.</p>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        <div className="flex gap-3 items-end">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Data</label>
+                                                <input type="date" value={newBlockedDate} onChange={e => setNewBlockedDate(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Motivo (opcional)</label>
+                                                <input type="text" value={newBlockedReason} onChange={e => setNewBlockedReason(e.target.value)} placeholder="Ex: Feriado Nacional" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <button onClick={handleAddBlockedDate} className="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                                                <Plus size={16} /> Bloquear
+                                            </button>
+                                        </div>
+                                        {meetingBlockedDates.length === 0 ? (
+                                            <p className="text-xs text-slate-400 italic text-center py-4">Nenhuma data bloqueada.</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {meetingBlockedDates.map(bd => (
+                                                    <div key={bd.id} className="flex items-center justify-between px-4 py-2 bg-red-50 border border-red-100 rounded-lg">
+                                                        <div className="flex items-center gap-3">
+                                                            <Ban size={14} className="text-red-400" />
+                                                            <span className="text-sm font-bold text-slate-800">{new Date(bd.blocked_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                                                            {bd.reason && <span className="text-xs text-slate-500">— {bd.reason}</span>}
+                                                        </div>
+                                                        <button onClick={() => handleRemoveBlockedDate(bd.id)} className="text-red-400 hover:text-red-600 p-1"><Trash size={14} /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* BOOKINGS TAB */}
+                        {meetingTab === 'bookings' && (
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                        <Video size={20} className="text-teal-600" /> Reuniões Agendadas
+                                    </h3>
+                                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                        {(['all', 'scheduled', 'completed', 'cancelled'] as const).map(f => (
+                                            <button key={f} onClick={() => setMeetingBookingFilter(f)} className={clsx("px-3 py-1 rounded-md text-xs font-bold transition-all", meetingBookingFilter === f ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
+                                                {f === 'all' ? 'Todas' : f === 'scheduled' ? 'Agendadas' : f === 'completed' ? 'Realizadas' : 'Canceladas'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="divide-y divide-slate-100">
+                                    {filteredBookings.length === 0 ? (
+                                        <div className="py-16 text-center text-slate-400">
+                                            <Video size={40} className="mx-auto mb-3 opacity-40" />
+                                            <p className="font-bold">Nenhuma reunião encontrada.</p>
+                                        </div>
+                                    ) : filteredBookings.map(b => (
+                                        <div key={b.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                            <div className="flex items-center gap-4">
+                                                <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center", b.status === 'scheduled' ? "bg-teal-100 text-teal-600" : b.status === 'completed' ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500")}>
+                                                    <Video size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-slate-800">{b.student_name}</p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {new Date(b.meeting_start).toLocaleDateString('pt-BR')} às {new Date(b.meeting_start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                        {' — '}{b.student_email}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={clsx("text-[10px] font-black px-2 py-1 rounded uppercase", b.status === 'scheduled' ? "bg-teal-100 text-teal-700" : b.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>
+                                                    {b.status === 'scheduled' ? 'Agendada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
+                                                </span>
+                                                {b.meet_link && (
+                                                    <a href={b.meet_link} target="_blank" rel="noopener noreferrer" className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors" title="Abrir Google Meet">
+                                                        <ExternalLink size={16} />
+                                                    </a>
+                                                )}
+                                                {b.status === 'scheduled' && (
+                                                    <>
+                                                        <button onClick={() => handleCompleteBooking(b.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Marcar como realizada">
+                                                            <CheckCircle size={16} />
+                                                        </button>
+                                                        <button onClick={() => handleCancelBooking(b.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Cancelar">
+                                                            <X size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* SETTINGS TAB */}
+                        {meetingTab === 'settings' && (
+                            <div className="space-y-6">
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <Settings2 size={20} className="text-teal-600" /> Configurações de Reuniões
+                                        </h3>
+                                        <button onClick={saveMeetingSettingsHandler} disabled={meetingSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm disabled:opacity-50">
+                                            {meetingSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                            Salvar
+                                        </button>
+                                    </div>
+                                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Dias de Antecedência para Agendar</label>
+                                            <input type="number" min={1} max={90} value={meetingSettings.advance_days} onChange={e => setMeetingSettings(s => ({ ...s, advance_days: parseInt(e.target.value) || 30 }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Máx. Reuniões por Aluno</label>
+                                            <input type="number" min={1} max={10} value={meetingSettings.max_bookings_per_student} onChange={e => setMeetingSettings(s => ({ ...s, max_bookings_per_student: parseInt(e.target.value) || 1 }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail do Responsável (notificações)</label>
+                                            <input type="email" value={meetingSettings.admin_email} onChange={e => setMeetingSettings(s => ({ ...s, admin_email: e.target.value }))} placeholder="admin@empresa.com" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Telefone do Responsável (WhatsApp)</label>
+                                            <input type="text" value={meetingSettings.admin_phone} onChange={e => setMeetingSettings(s => ({ ...s, admin_phone: e.target.value }))} placeholder="5511999999999" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Título da Reunião (Google Calendar)</label>
+                                            <input type="text" value={meetingSettings.meeting_title} onChange={e => setMeetingSettings(s => ({ ...s, meeting_title: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descrição da Reunião</label>
+                                            <input type="text" value={meetingSettings.meeting_description} onChange={e => setMeetingSettings(s => ({ ...s, meeting_description: e.target.value }))} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Google Calendar Setup */}
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <Video size={20} className="text-blue-600" /> Configuração Google Meet
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-1">Configure a integração com Google Calendar para gerar links do Google Meet automaticamente.</p>
+                                    </div>
+                                    <div className="p-6 space-y-6">
+                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
+                                            <h4 className="text-sm font-black text-blue-800 uppercase flex items-center gap-2"><Info size={16} /> Passo a Passo</h4>
+                                            <ol className="list-decimal list-inside text-sm text-blue-900 space-y-3 leading-relaxed">
+                                                <li>Acesse o <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="font-bold underline">Google Cloud Console</a> e crie um novo projeto (ou use um existente).</li>
+                                                <li>No menu lateral, vá em <strong>"APIs e Serviços" &gt; "Biblioteca"</strong> e habilite a <strong>Google Calendar API</strong>.</li>
+                                                <li>Vá em <strong>"APIs e Serviços" &gt; "Credenciais"</strong> e crie uma <strong>Conta de Serviço (Service Account)</strong>.</li>
+                                                <li>Na conta de serviço criada, vá na aba <strong>"Chaves"</strong> e gere uma chave no formato <strong>JSON</strong>.</li>
+                                                <li>No <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" className="font-bold underline">Google Calendar</a>, compartilhe uma agenda com o e-mail da conta de serviço (com permissão de <strong>editor</strong>).</li>
+                                                <li>Configure as seguintes variáveis de ambiente (Secrets) no <strong>Supabase Edge Functions</strong>:</li>
+                                            </ol>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-100 font-mono text-xs space-y-1">
+                                                <p><span className="text-blue-600 font-bold">GOOGLE_SERVICE_ACCOUNT_EMAIL</span> = e-mail da conta de serviço</p>
+                                                <p><span className="text-blue-600 font-bold">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> = chave privada do JSON (campo "private_key")</p>
+                                                <p><span className="text-blue-600 font-bold">GOOGLE_CALENDAR_ID</span> = ID da agenda compartilhada (ex: xxx@group.calendar.google.com)</p>
+                                            </div>
+                                            <p className="text-xs text-blue-700 italic">Sem estas configurações, o agendamento funcionará normalmente mas sem link do Google Meet.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         )}
 

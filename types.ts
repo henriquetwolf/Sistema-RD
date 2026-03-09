@@ -753,6 +753,7 @@ export interface EmailConfig {
   apiKey: string;
   senderEmail: string;
   senderName: string;
+  provider?: 'brevo' | 'sendgrid';
 }
 
 // ── Cadastro Geral de Alunos ────────────────────────────────
@@ -1318,4 +1319,58 @@ export interface StudioDigitalExercise {
   sort_order: number;
   created_at: string;
   updated_at: string;
+}
+
+// ── Franchise Meeting Scheduling ────────────────────────────
+
+export interface FranchiseMeetingAvailability {
+  id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration_minutes: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FranchiseMeetingBlockedDate {
+  id: string;
+  blocked_date: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface FranchiseMeetingBooking {
+  id: string;
+  student_cpf: string;
+  student_name: string;
+  student_email: string;
+  student_phone: string;
+  meeting_date: string;
+  meeting_start: string;
+  meeting_end: string;
+  google_event_id?: string;
+  meet_link?: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  admin_notes: string;
+  cancelled_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FranchiseMeetingSettings {
+  advance_days: number;
+  max_bookings_per_student: number;
+  admin_email: string;
+  admin_phone: string;
+  meeting_title: string;
+  meeting_description: string;
+}
+
+export interface FranchiseMeetingSlot {
+  date: string;
+  start: string;
+  end: string;
+  available: boolean;
 }

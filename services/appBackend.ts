@@ -1982,7 +1982,7 @@ export const appBackend = {
   bookFranchiseMeeting: async (payload: {
     student_cpf: string; student_name: string; student_email: string; student_phone: string;
     meeting_date: string; start_time: string; end_time: string;
-  }): Promise<{ booking: FranchiseMeetingBooking; meet_link: string; google_configured: boolean }> => {
+  }): Promise<{ booking: FranchiseMeetingBooking; meet_link: string; google_configured: boolean; google_error?: string }> => {
     if (!isConfigured) throw new Error('Backend não configurado');
     const { data, error } = await supabase.functions.invoke('google-meet', {
       body: { action: 'create-meeting', ...payload },

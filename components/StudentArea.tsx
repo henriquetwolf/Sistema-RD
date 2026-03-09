@@ -368,6 +368,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                 start_time: meetingSelectedSlot.start,
                 end_time: meetingSelectedSlot.end,
             });
+            if (result.google_error) {
+                console.warn('[Google Meet]', result.google_error);
+            }
             setMeetingBookingSuccess(result.booking);
             setMeetingSelectedSlot(null);
             setMeetingSelectedDate(null);

@@ -33,7 +33,11 @@ function errorResponse(message: string, status = 400) {
 // ── Google Service Account JWT Auth ─────────────────────────────
 
 function base64UrlEncode(data: Uint8Array): string {
-  const base64 = btoa(String.fromCharCode(...data));
+  let binary = "";
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  const base64 = btoa(binary);
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -263,6 +267,8 @@ serve(async (req) => {
           Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") &&
           calendarId;
 
+        let googleError = "";
+
         if (hasGoogleConfig) {
           try {
             const accessToken = await getGoogleAccessToken();
@@ -288,9 +294,15 @@ serve(async (req) => {
             );
             eventId = result.eventId;
             meetLink = result.meetLink;
-          } catch (googleErr) {
-            console.error("Google Calendar error (continuing without Meet link):", googleErr);
+          } catch (googleErr: any) {
+            googleError = googleErr.message || String(googleErr);
+            console.error("Google Calendar error (continuing without Meet link):", googleError);
           }
+        } else {
+          googleError = "Secrets não configurados: " +
+            (!Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL") ? "GOOGLE_SERVICE_ACCOUNT_EMAIL " : "") +
+            (!Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ? "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY " : "") +
+            (!calendarId ? "GOOGLE_CALENDAR_ID" : "");
         }
 
         // Save booking
@@ -320,6 +332,7 @@ serve(async (req) => {
           booking,
           meet_link: meetLink,
           google_configured: !!hasGoogleConfig,
+          google_error: googleError || undefined,
         });
       }
 

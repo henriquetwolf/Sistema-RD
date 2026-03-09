@@ -46,12 +46,19 @@ function strToBase64Url(str: string): string {
 }
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {
-  const lines = pem
-    .replace(/-----BEGIN .*-----/, "")
-    .replace(/-----END .*-----/, "")
-    .replace(/\\n/g, "")
-    .replace(/\s/g, "");
-  const binary = atob(lines);
+  let b64 = pem;
+  b64 = b64.replace(/-----BEGIN [A-Z ]+-----/gi, "");
+  b64 = b64.replace(/-----END [A-Z ]+-----/gi, "");
+  b64 = b64.replace(/\\n/g, "");
+  b64 = b64.replace(/[\n\r\s"']/g, "");
+
+  if (!b64) {
+    throw new Error(
+      "PEM key is empty after parsing. Check GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY secret format."
+    );
+  }
+
+  const binary = atob(b64);
   const buffer = new ArrayBuffer(binary.length);
   const view = new Uint8Array(buffer);
   for (let i = 0; i < binary.length; i++) {
@@ -69,6 +76,8 @@ async function getGoogleAccessToken(): Promise<string> {
       "Google Service Account not configured. Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY."
     );
   }
+
+  console.log(`[google-meet] SA email: ${email}, PEM length: ${privateKeyPem.length} chars`);
 
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };

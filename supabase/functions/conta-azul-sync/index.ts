@@ -143,9 +143,29 @@ function defaultDateRange() {
   };
 }
 
-function mapReceivableToRow(item: any, accountId: string) {
+async function fetchContactsCpfMap(accountId: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const contacts = await contaAzulFetchPaginated<any>(accountId, "/v1/contatos", {});
+    for (const c of contacts) {
+      const cpf = c.cpf_cnpj || c.cpf || c.cnpj || null;
+      if (cpf) {
+        map.set(String(c.id), cpf);
+      }
+    }
+    console.log(`[fetchContactsCpfMap] Loaded ${map.size} contacts with CPF/CNPJ out of ${contacts.length} total for account ${accountId}`);
+  } catch (e: any) {
+    console.warn(`[fetchContactsCpfMap] Error fetching contacts: ${e.message}`);
+  }
+  return map;
+}
+
+function mapReceivableToRow(item: any, accountId: string, cpfMap?: Map<string, string>) {
   const cat = Array.isArray(item.categorias) ? item.categorias[0] : item.categorias;
   const cc = Array.isArray(item.centros_custo) ? item.centros_custo[0] : item.centros_custo;
+  const contatoId = item.cliente?.id ? String(item.cliente.id) : item.contato?.id ? String(item.contato.id) : null;
+  const directCpf = item.cliente?.cpf_cnpj || item.contato?.cpf_cnpj || item.cliente?.cpf || item.contato?.cpf || null;
+  const resolvedCpf = directCpf || (contatoId && cpfMap ? cpfMap.get(contatoId) : null) || null;
   return {
     account_id: accountId,
     id_conta_azul: String(item.id),
@@ -167,17 +187,20 @@ function mapReceivableToRow(item: any, accountId: string) {
     parcela_numero: item.numero_parcela ?? null,
     total_parcelas: item.total_parcelas ?? null,
     contato_nome: item.cliente?.nome || item.contato?.nome || null,
-    contato_id: item.cliente?.id ? String(item.cliente.id) : item.contato?.id ? String(item.contato.id) : null,
-    contato_cpf: item.cliente?.cpf_cnpj || item.contato?.cpf_cnpj || item.cliente?.cpf || item.contato?.cpf || null,
+    contato_id: contatoId,
+    contato_cpf: resolvedCpf,
     observacoes: item.observacao || item.observacoes || null,
     numero_documento: item.numero_documento || null,
     synced_at: new Date().toISOString(),
   };
 }
 
-function mapPayableToRow(item: any, accountId: string) {
+function mapPayableToRow(item: any, accountId: string, cpfMap?: Map<string, string>) {
   const cat = Array.isArray(item.categorias) ? item.categorias[0] : item.categorias;
   const cc = Array.isArray(item.centros_custo) ? item.centros_custo[0] : item.centros_custo;
+  const contatoId = item.fornecedor?.id ? String(item.fornecedor.id) : item.contato?.id ? String(item.contato.id) : null;
+  const directCpf = item.fornecedor?.cpf_cnpj || item.contato?.cpf_cnpj || item.fornecedor?.cpf || item.contato?.cpf || null;
+  const resolvedCpf = directCpf || (contatoId && cpfMap ? cpfMap.get(contatoId) : null) || null;
   return {
     account_id: accountId,
     id_conta_azul: String(item.id),
@@ -199,8 +222,8 @@ function mapPayableToRow(item: any, accountId: string) {
     parcela_numero: item.numero_parcela ?? null,
     total_parcelas: item.total_parcelas ?? null,
     fornecedor_nome: item.fornecedor?.nome || item.contato?.nome || null,
-    fornecedor_id: item.fornecedor?.id ? String(item.fornecedor.id) : item.contato?.id ? String(item.contato.id) : null,
-    contato_cpf: item.fornecedor?.cpf_cnpj || item.contato?.cpf_cnpj || item.fornecedor?.cpf || item.contato?.cpf || null,
+    fornecedor_id: contatoId,
+    contato_cpf: resolvedCpf,
     observacoes: item.observacao || item.observacoes || null,
     numero_documento: item.numero_documento || null,
     synced_at: new Date().toISOString(),
@@ -243,7 +266,10 @@ async function syncReceivables(req: Request): Promise<Response> {
     }
 
     console.log(`[syncReceivables] Params: ${JSON.stringify(params)} for account ${accountId}`);
-    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
+    const [items, cpfMap] = await Promise.all([
+      contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params),
+      fetchContactsCpfMap(accountId),
+    ]);
     console.log(`[syncReceivables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
 
     // Diagnostic: log unique statuses, payment samples, and per-date counts
@@ -266,7 +292,7 @@ async function syncReceivables(req: Request): Promise<Response> {
 
     // Não apagar antes do upsert: com 150k+ registros, o delete + upsert pode causar timeout ou race;
     // só fazemos upsert — assim nunca esvaziamos a tabela. Registros removidos no Conta Azul ficam órfãos (aceitável).
-    const rows = items.map(item => mapReceivableToRow(item, accountId));
+    const rows = items.map(item => mapReceivableToRow(item, accountId, cpfMap));
     let batchErrors = 0;
     let rowErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {
@@ -325,7 +351,10 @@ async function syncPayables(req: Request): Promise<Response> {
     }
 
     console.log(`[syncPayables] Params: ${JSON.stringify(params)} for account ${accountId}`);
-    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
+    const [items, cpfMap] = await Promise.all([
+      contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params),
+      fetchContactsCpfMap(accountId),
+    ]);
     console.log(`[syncPayables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
 
     // Diagnostic: log unique status values for mapping verification
@@ -337,7 +366,7 @@ async function syncPayables(req: Request): Promise<Response> {
     }
 
     // Não apagar antes do upsert (evita esvaziar a tabela em sync com muitos registros).
-    const rows = items.map(item => mapPayableToRow(item, accountId));
+    const rows = items.map(item => mapPayableToRow(item, accountId, cpfMap));
     let batchErrors = 0;
     let rowErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {

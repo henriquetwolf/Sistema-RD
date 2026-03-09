@@ -50,6 +50,7 @@ import { StudioDigitalManager } from './components/StudioDigitalManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { pushService } from './services/pushService';
 import { VollMarketingManager } from './components/VollMarketingManager';
+import { InvoiceManager } from './components/InvoiceManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -66,7 +67,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing' | 'notas_fiscais';
 
 class MarketingErrorBoundary extends React.Component<
   { children: React.ReactNode; onBack: () => void },
@@ -760,7 +761,7 @@ function App() {
                 </MarketingErrorBoundary>
             )}
 
-            {dashboardTab !== 'voll_marketing' && <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank') && "max-w-full")}>
+            {dashboardTab !== 'voll_marketing' && <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul' || dashboardTab === 'pagbank' || dashboardTab === 'notas_fiscais') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -770,6 +771,7 @@ function App() {
                                 {canAccess('voll_marketing') && <button onClick={() => setDashboardTab('voll_marketing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'voll_marketing' ? "bg-fuchsia-600 text-white shadow-md shadow-fuchsia-200" : "text-fuchsia-600 hover:bg-fuchsia-50 font-bold")}><Megaphone size={18} /> VOLL Marketing</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
+                                {canAccess('notas_fiscais') && <button onClick={() => setDashboardTab('notas_fiscais')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'notas_fiscais' ? "bg-orange-50 text-orange-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileText size={18} /> Notas Fiscais</button>}
                                 {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
                                 {canAccess('suporte_interno') && <button onClick={() => setDashboardTab('suporte_interno')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'suporte_interno' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LifeBuoy size={18} /> Suporte Interno</button>}
                                 {canAccess('whatsapp') && <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MessageCircle size={18} /> Atendimento</button>}
@@ -908,6 +910,7 @@ function App() {
                         {dashboardTab === 'whatsapp_bulk' && <BulkWhatsAppSender />}
                         {dashboardTab === 'landing_pages' && <LandingPageManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'conta_azul' && <ContaAzulManager />}
+                        {dashboardTab === 'notas_fiscais' && <InvoiceManager />}
                         {dashboardTab === 'pagbank' && <PagBankManager />}
                         {dashboardTab === 'app_manual' && <AppManual />}
                         {dashboardTab === 'cpf_lookup' && <CpfLookup />}

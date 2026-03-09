@@ -146,9 +146,9 @@ function defaultDateRange() {
 async function fetchContactsCpfMap(accountId: string): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   try {
-    const contacts = await contaAzulFetchPaginated<any>(accountId, "/v1/contatos", {});
+    const contacts = await contaAzulFetchPaginated<any>(accountId, "/v1/pessoas", {});
     for (const c of contacts) {
-      const cpf = c.cpf_cnpj || c.cpf || c.cnpj || null;
+      const cpf = c.documento || c.cpf_cnpj || c.cpf || c.cnpj || null;
       if (cpf) {
         map.set(String(c.id), cpf);
       }

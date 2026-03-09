@@ -270,7 +270,7 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
     query = query.lte('data_vencimento', filters.endDate);
   }
   if (filters.search) {
-    query = query.or(`contato_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+    query = query.or(`contato_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%,contato_cpf.ilike.%${filters.search}%`);
   }
   if (filters.categoria) {
     query = query.ilike('categoria_nome', `%${filters.categoria}%`);
@@ -313,7 +313,7 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
     query = query.lte('data_vencimento', filters.endDate);
   }
   if (filters.search) {
-    query = query.or(`fornecedor_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+    query = query.or(`fornecedor_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%,contato_cpf.ilike.%${filters.search}%`);
   }
   if (filters.contaFinanceira) {
     query = query.ilike('conta_financeira_nome', `%${filters.contaFinanceira}%`);

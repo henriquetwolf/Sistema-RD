@@ -425,6 +425,7 @@ export const ContaAzulManager: React.FC = () => {
 
       const rows = data.map(r => ({
         'Contato': r.contato_nome || '',
+        'CPF/CNPJ': r.contato_cpf || '',
         'Descrição': r.descricao || '',
         'Vencimento': r.data_vencimento ? new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '',
         'Competência': r.data_competencia ? new Date(r.data_competencia + 'T00:00:00').toLocaleDateString('pt-BR') : '',
@@ -497,6 +498,7 @@ export const ContaAzulManager: React.FC = () => {
 
       const rows = data.map(p => ({
         'Fornecedor': p.fornecedor_nome || '',
+        'CPF/CNPJ': p.contato_cpf || '',
         'Descrição': p.descricao || '',
         'Vencimento': p.data_vencimento ? new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '',
         'Competência': p.data_competencia ? new Date(p.data_competencia + 'T00:00:00').toLocaleDateString('pt-BR') : '',
@@ -1290,6 +1292,7 @@ export const ContaAzulManager: React.FC = () => {
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                       <tr className="border-b border-slate-200">
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Contato</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">CPF/CNPJ</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Descrição</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vencimento</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Valor</th>
@@ -1305,6 +1308,7 @@ export const ContaAzulManager: React.FC = () => {
                           <td className="px-6 py-3">
                             <span className="font-bold text-slate-800 text-xs">{r.contato_nome || '--'}</span>
                           </td>
+                          <td className="px-6 py-3 text-xs text-slate-500 font-mono">{r.contato_cpf || '--'}</td>
                           <td className="px-6 py-3 text-xs text-slate-600 max-w-[200px] truncate">{r.descricao || '--'}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700">{formatDate(r.data_vencimento)}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700 text-right">{formatCurrency(r.valor)}</td>
@@ -1392,6 +1396,7 @@ export const ContaAzulManager: React.FC = () => {
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                       <tr className="border-b border-slate-200">
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Fornecedor</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">CPF/CNPJ</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Descrição</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vencimento</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Valor</th>
@@ -1407,6 +1412,7 @@ export const ContaAzulManager: React.FC = () => {
                           <td className="px-6 py-3">
                             <span className="font-bold text-slate-800 text-xs">{p.fornecedor_nome || '--'}</span>
                           </td>
+                          <td className="px-6 py-3 text-xs text-slate-500 font-mono">{p.contato_cpf || '--'}</td>
                           <td className="px-6 py-3 text-xs text-slate-600 max-w-[200px] truncate">{p.descricao || '--'}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700">{formatDate(p.data_vencimento)}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700 text-right">{formatCurrency(p.valor)}</td>

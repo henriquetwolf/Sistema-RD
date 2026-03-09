@@ -921,6 +921,7 @@ export interface ContaAzulReceivable {
   total_parcelas?: number;
   contato_nome?: string;
   contato_id?: string;
+  contato_cpf?: string;
   observacoes?: string;
   numero_documento?: string;
   synced_at: string;
@@ -950,6 +951,7 @@ export interface ContaAzulPayable {
   total_parcelas?: number;
   fornecedor_nome?: string;
   fornecedor_id?: string;
+  contato_cpf?: string;
   observacoes?: string;
   numero_documento?: string;
   synced_at: string;

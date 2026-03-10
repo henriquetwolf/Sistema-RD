@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   X, Loader2, Plus, Trash2, Upload, CheckCircle, DollarSign,
-  User, Mail, Phone, MapPin, Calendar, Landmark, ChevronDown, AlertTriangle, Edit3
+  User, Mail, Phone, MapPin, Calendar, Landmark, ChevronDown, AlertTriangle, Edit3, FileText
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
@@ -336,6 +336,20 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
                   />
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* Dados para Nota Fiscal */}
+          <section className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+            <h3 className="text-xs font-black text-blue-700 uppercase tracking-[0.15em] flex items-center gap-2 mb-3">
+              <FileText size={14} className="text-blue-600" /> Dados para Emissão de Nota Fiscal
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-blue-900">
+              <p><span className="font-black text-[10px] uppercase text-blue-500">Razão Social:</span> <span className="font-bold">Caeffis Com e Serv de Pilates Ltda</span></p>
+              <p><span className="font-black text-[10px] uppercase text-blue-500">CNPJ:</span> <span className="font-bold">14.204.979/0001-24</span></p>
+              <p><span className="font-black text-[10px] uppercase text-blue-500">IE:</span> <span className="font-bold">151.197.967.116</span></p>
+              <p><span className="font-black text-[10px] uppercase text-blue-500">CEP:</span> <span className="font-bold">13023-191</span></p>
+              <p className="md:col-span-2"><span className="font-black text-[10px] uppercase text-blue-500">Endereço:</span> <span className="font-bold">Rua Tiradentes, 777 - Vila Itapura, Campinas/SP</span></p>
             </div>
           </section>
 

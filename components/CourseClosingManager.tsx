@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Loader2, Search, ChevronLeft, X, CheckCircle, Clock, XCircle,
   ExternalLink, DollarSign, User, MapPin, Calendar, Landmark,
-  FileText, Eye, Filter, RefreshCw, Save, AlertCircle
+  FileText, Eye, Filter, RefreshCw, Save, AlertCircle, Database, AlertTriangle
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { CourseClosing, CourseClosingExpense } from '../types';
@@ -18,10 +18,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   rejeitado: { label: 'Rejeitado', color: 'bg-red-50 text-red-700 border-red-200', icon: <XCircle size={12} /> },
 };
 
+type DiagStatus = 'checking' | 'ok' | 'table_missing' | 'error';
+
 export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBack }) => {
   const [closings, setClosings] = useState<CourseClosing[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
+  const [diagStatus, setDiagStatus] = useState<DiagStatus>('checking');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedClosing, setSelectedClosing] = useState<CourseClosing | null>(null);
@@ -31,17 +34,49 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
   const [editNotes, setEditNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => { fetchClosings(); }, []);
+  useEffect(() => { runDiagnosticAndFetch(); }, []);
 
-  const fetchClosings = async () => {
+  const runDiagnosticAndFetch = async () => {
     setIsLoading(true);
     setFetchError('');
+    setDiagStatus('checking');
     try {
-      const data = await appBackend.fetchCourseClosings();
-      setClosings(data);
+      const result = await appBackend.client
+        .from('crm_course_closings')
+        .select('id', { count: 'exact', head: true });
+
+      if (result.error) {
+        const msg = result.error.message || '';
+        console.error('[CourseClosingManager] Diagnostic error:', result.error);
+        if (msg.includes('does not exist') || msg.includes('relation') || result.error.code === '42P01') {
+          setDiagStatus('table_missing');
+          setFetchError('A tabela crm_course_closings não existe no banco de dados.');
+        } else {
+          setDiagStatus('error');
+          setFetchError(`Erro do Supabase: ${msg} (code: ${result.error.code})`);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      setDiagStatus('ok');
+      console.log(`[CourseClosingManager] Tabela OK. Total de registros: ${result.count}`);
+
+      const { data, error } = await appBackend.client
+        .from('crm_course_closings')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        setFetchError(`Erro ao buscar dados: ${error.message}`);
+      } else {
+        setClosings(data || []);
+        console.log(`[CourseClosingManager] Dados carregados: ${(data || []).length} fechamento(s)`);
+      }
     } catch (err: any) {
-      console.error('[CourseClosingManager] Erro ao buscar fechamentos:', err);
-      setFetchError(err.message || 'Erro ao carregar fechamentos. Verifique se a migration 034_course_closing.sql foi aplicada no Supabase.');
+      console.error('[CourseClosingManager] Erro inesperado:', err);
+      setDiagStatus('error');
+      setFetchError(err.message || 'Erro inesperado ao conectar com o banco.');
     } finally {
       setIsLoading(false);
     }
@@ -55,6 +90,9 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
     try {
       const data = await appBackend.fetchCourseClosingExpenses(closing.id);
       setExpenses(data);
+    } catch (err: any) {
+      console.error('[CourseClosingManager] Erro despesas:', err);
+      setExpenses([]);
     } finally {
       setIsLoadingExpenses(false);
     }
@@ -101,6 +139,129 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
     rejeitado: closings.filter(c => c.status === 'rejeitado').length,
   }), [closings]);
 
+  const migrationSQL = `-- Execute este SQL no Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS crm_course_closings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    instructor_id TEXT NOT NULL,
+    instructor_name TEXT NOT NULL,
+    instructor_email TEXT DEFAULT '',
+    instructor_phone TEXT DEFAULT '',
+    class_id TEXT NOT NULL,
+    class_code TEXT DEFAULT '',
+    course_name TEXT DEFAULT '',
+    city TEXT DEFAULT '',
+    class_number TEXT DEFAULT '',
+    date_start DATE,
+    date_end DATE,
+    pix_key TEXT DEFAULT '',
+    bank TEXT DEFAULT '',
+    agency TEXT DEFAULT '',
+    account TEXT DEFAULT '',
+    account_holder TEXT DEFAULT '',
+    status TEXT DEFAULT 'pendente',
+    admin_notes TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE crm_course_closings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_read_course_closings" ON crm_course_closings FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_all_course_closings"  ON crm_course_closings FOR ALL TO anon USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS crm_course_closing_expenses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    closing_id UUID NOT NULL REFERENCES crm_course_closings(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    amount NUMERIC(12,2) DEFAULT 0,
+    receipt_url TEXT DEFAULT '',
+    observation TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_closing_expenses ON crm_course_closing_expenses(closing_id);
+ALTER TABLE crm_course_closing_expenses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_read_closing_expenses" ON crm_course_closing_expenses FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_all_closing_expenses"  ON crm_course_closing_expenses FOR ALL TO anon USING (true) WITH CHECK (true);
+
+INSERT INTO storage.buckets (id, name, public) VALUES ('course-closings', 'course-closings', true) ON CONFLICT (id) DO NOTHING;
+CREATE POLICY "course_closings_public_read" ON storage.objects FOR SELECT TO anon USING (bucket_id = 'course-closings');
+CREATE POLICY "course_closings_anon_insert" ON storage.objects FOR INSERT TO anon WITH CHECK (bucket_id = 'course-closings');
+CREATE POLICY "course_closings_anon_update" ON storage.objects FOR UPDATE TO anon USING (bucket_id = 'course-closings');
+CREATE POLICY "course_closings_anon_delete" ON storage.objects FOR DELETE TO anon USING (bucket_id = 'course-closings');`;
+
+  if (diagStatus === 'table_missing') {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors"><ChevronLeft size={20} /></button>
+          <div>
+            <h1 className="text-2xl font-black text-slate-800">Fechamento de Curso</h1>
+            <p className="text-sm text-slate-400 font-medium">Configuração necessária</p>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-8 space-y-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-amber-100 rounded-xl">
+              <Database size={28} className="text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-amber-800">Tabelas não encontradas</h2>
+              <p className="text-amber-700 text-sm mt-1">
+                As tabelas <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">crm_course_closings</code> e
+                <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs ml-1">crm_course_closing_expenses</code> precisam ser criadas no Supabase.
+              </p>
+              <p className="text-amber-600 text-xs mt-3 font-bold">
+                Siga os passos abaixo para configurar:
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm font-bold text-amber-800">
+              <span className="w-7 h-7 bg-amber-200 rounded-full flex items-center justify-center text-amber-800 font-black text-xs">1</span>
+              Acesse o painel do Supabase do projeto
+            </div>
+            <div className="flex items-center gap-3 text-sm font-bold text-amber-800">
+              <span className="w-7 h-7 bg-amber-200 rounded-full flex items-center justify-center text-amber-800 font-black text-xs">2</span>
+              Vá em <span className="bg-amber-200 px-2 py-0.5 rounded text-xs">SQL Editor</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm font-bold text-amber-800">
+              <span className="w-7 h-7 bg-amber-200 rounded-full flex items-center justify-center text-amber-800 font-black text-xs">3</span>
+              Cole o SQL abaixo e clique em <span className="bg-amber-200 px-2 py-0.5 rounded text-xs">Run</span>
+            </div>
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => { navigator.clipboard.writeText(migrationSQL); alert('SQL copiado para a área de transferência!'); }}
+              className="absolute top-3 right-3 bg-amber-200 hover:bg-amber-300 text-amber-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors z-10"
+            >
+              Copiar SQL
+            </button>
+            <pre className="bg-slate-900 text-green-400 p-5 rounded-xl text-xs overflow-x-auto max-h-[300px] overflow-y-auto font-mono leading-relaxed">
+              {migrationSQL}
+            </pre>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-2 text-sm font-bold text-amber-800">
+              <span className="w-7 h-7 bg-amber-200 rounded-full flex items-center justify-center text-amber-800 font-black text-xs">4</span>
+              Após executar, clique:
+            </div>
+            <button
+              onClick={runDiagnosticAndFetch}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition-all flex items-center gap-2 text-sm active:scale-95"
+            >
+              <RefreshCw size={14} /> Verificar Novamente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
@@ -111,9 +272,21 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
             <p className="text-sm text-slate-400 font-medium">Informe de custos enviados pelos instrutores</p>
           </div>
         </div>
-        <button onClick={fetchClosings} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 px-4 py-2 rounded-xl transition-colors">
-          <RefreshCw size={14} /> Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          {diagStatus === 'ok' && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+              <CheckCircle size={10} /> Conectado
+            </span>
+          )}
+          {diagStatus === 'error' && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200">
+              <AlertTriangle size={10} /> Erro
+            </span>
+          )}
+          <button onClick={runDiagnosticAndFetch} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 px-4 py-2 rounded-xl transition-colors">
+            <RefreshCw size={14} /> Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -166,14 +339,13 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
       </div>
 
       {/* Error */}
-      {fetchError && (
+      {fetchError && diagStatus !== 'table_missing' && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-start gap-4">
           <AlertCircle size={20} className="text-red-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <p className="font-bold text-red-800 text-sm">Erro ao carregar dados</p>
-            <p className="text-red-600 text-xs mt-1">{fetchError}</p>
-            <p className="text-red-500 text-xs mt-2">Certifique-se de que a migration <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono">034_course_closing.sql</code> foi executada no painel do Supabase.</p>
-            <button onClick={fetchClosings} className="mt-3 text-xs font-bold text-red-700 hover:text-red-900 flex items-center gap-1">
+            <p className="text-red-600 text-xs mt-1 font-mono">{fetchError}</p>
+            <button onClick={runDiagnosticAndFetch} className="mt-3 text-xs font-bold text-red-700 hover:text-red-900 flex items-center gap-1">
               <RefreshCw size={12} /> Tentar novamente
             </button>
           </div>
@@ -190,6 +362,11 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
           <p className="text-slate-400 text-sm mt-2">
             {searchTerm || statusFilter !== 'all' ? 'Tente ajustar os filtros.' : 'Os instrutores ainda não enviaram fechamentos.'}
           </p>
+          {diagStatus === 'ok' && !searchTerm && statusFilter === 'all' && (
+            <p className="text-emerald-500 text-xs mt-4 font-bold flex items-center justify-center gap-1">
+              <CheckCircle size={12} /> Tabela conectada e pronta para receber dados
+            </p>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -266,7 +443,6 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
             </div>
 
             <div className="p-8 space-y-8">
-              {/* Instructor info */}
               <section className="space-y-3">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2">
                   <User size={14} className="text-purple-600" /> Dados do Instrutor
@@ -287,7 +463,6 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
                 </div>
               </section>
 
-              {/* Course info */}
               <section className="space-y-3">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2">
                   <Calendar size={14} className="text-indigo-600" /> Dados do Curso
@@ -312,7 +487,6 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
                 </div>
               </section>
 
-              {/* Expenses */}
               <section className="space-y-3">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2">
                   <DollarSign size={14} className="text-emerald-600" /> Despesas
@@ -368,7 +542,6 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
                 )}
               </section>
 
-              {/* Bank info */}
               <section className="space-y-3">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2">
                   <Landmark size={14} className="text-blue-600" /> Dados Bancários
@@ -399,7 +572,6 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
                 )}
               </section>
 
-              {/* Status management */}
               <section className="space-y-3 bg-indigo-50/50 rounded-2xl p-6 border border-indigo-100">
                 <h3 className="text-xs font-black text-indigo-600 uppercase tracking-[0.15em] flex items-center gap-2">
                   <AlertCircle size={14} /> Gerenciar Status

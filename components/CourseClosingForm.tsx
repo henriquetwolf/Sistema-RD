@@ -37,8 +37,18 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
   const [cityAndClass, setCityAndClass] = useState(
     `${classData.city || ''}${classData.class_code ? ` - Turma ${classData.class_code}` : ''}`
   );
-  const [dateStart, setDateStart] = useState(classData.date_mod_1 || '');
-  const [dateEnd, setDateEnd] = useState(classData.date_mod_2 || '');
+  const extractDate = (val: any): string => {
+    if (!val) return '';
+    const s = String(val);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    try {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().split('T')[0];
+    } catch { return ''; }
+  };
+  const [dateStart, setDateStart] = useState(extractDate(classData.date_mod_1));
+  const [dateEnd, setDateEnd] = useState(extractDate(classData.date_mod_2));
 
   const [expenses, setExpenses] = useState<ExpenseItem[]>([
     { category: '', amount: '', file: null, receiptUrl: '', observation: '' },
@@ -69,6 +79,16 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
     setExpenses(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
 
+  const toDateOnly = (val: string): string => {
+    if (!val) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return val;
+      return d.toISOString().split('T')[0];
+    } catch { return val; }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -96,34 +116,40 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
         })
       );
 
-      await appBackend.submitCourseClosing(
-        {
-          instructor_id: instructor.id,
-          instructor_name: instructorName,
-          instructor_email: instructorEmail,
-          instructor_phone: instructorPhone,
-          class_id: classData.id,
-          class_code: classData.class_code || '',
-          course_name: classData.course || '',
-          city: classData.city || '',
-          class_number: classData.class_code || '',
-          date_start: dateStart,
-          date_end: dateEnd,
-          pix_key: pixKey,
-          bank,
-          agency,
-          account,
-          account_holder: accountHolder,
-          status: 'pendente',
-          admin_notes: '',
-        },
-        uploadedExpenses
-      );
+      const closingData = {
+        instructor_id: instructor.id,
+        instructor_name: instructorName,
+        instructor_email: instructorEmail,
+        instructor_phone: instructorPhone,
+        class_id: classData.id || '',
+        class_code: classData.class_code || '',
+        course_name: classData.course || '',
+        city: classData.city || '',
+        class_number: classData.class_code || '',
+        date_start: toDateOnly(dateStart),
+        date_end: toDateOnly(dateEnd),
+        pix_key: pixKey,
+        bank,
+        agency,
+        account,
+        account_holder: accountHolder,
+        status: 'pendente' as const,
+        admin_notes: '',
+      };
 
+      console.log('[CourseClosingForm] Enviando fechamento:', closingData);
+      console.log('[CourseClosingForm] Despesas:', uploadedExpenses);
+
+      const resultId = await appBackend.submitCourseClosing(closingData, uploadedExpenses);
+
+      console.log('[CourseClosingForm] Fechamento salvo com ID:', resultId);
       setIsSuccess(true);
       onSuccess?.();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao enviar fechamento.');
+      console.error('[CourseClosingForm] ERRO ao enviar:', err);
+      const msg = err.message || 'Erro desconhecido ao enviar fechamento.';
+      setErrorMsg(msg);
+      alert(`Erro ao enviar fechamento de curso:\n\n${msg}`);
     } finally {
       setIsSubmitting(false);
     }

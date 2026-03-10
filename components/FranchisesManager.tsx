@@ -1090,6 +1090,17 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                             </div>
                                         </details>
 
+                                        <div className="bg-violet-50 border border-violet-200 rounded-xl p-5 space-y-3">
+                                            <h4 className="text-sm font-black text-violet-800 uppercase flex items-center gap-2"><User size={16} /> Acesso de Usuário de Teste</h4>
+                                            <p className="text-sm text-violet-900 leading-relaxed">
+                                                Solicite ao administrador da conta <strong>vollpilatesadm@gmail.com</strong> para incluir seu acesso como <strong>Usuário de teste</strong> através do link:
+                                            </p>
+                                            <a href="https://console.cloud.google.com/auth/audience?authuser=1&project=agenda-franquias" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-lg font-bold text-sm transition-all shadow-sm">
+                                                <ExternalLink size={16} /> Acessar Tela de Audiência do Projeto
+                                            </a>
+                                            <p className="text-xs text-violet-600 font-mono break-all">https://console.cloud.google.com/auth/audience?authuser=1&project=agenda-franquias</p>
+                                        </div>
+
                                         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
                                             <p className="text-xs text-amber-800"><strong>Nota:</strong> Se ambos os métodos estiverem configurados, o sistema prioriza OAuth2. Sem nenhuma configuração, o agendamento funciona normalmente mas sem link do Google Meet.</p>
                                         </div>

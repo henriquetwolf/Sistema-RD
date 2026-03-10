@@ -251,6 +251,15 @@ export interface AuthenticatedUser {
   activeRole: UserRole | null;
 }
 
+export interface LinkedDocuments {
+  input: string;
+  is_cnpj: boolean;
+  primary_cpf: string;
+  linked_cpfs: string[];
+  linked_cnpjs: string[];
+  all_documents: string[];
+}
+
 export interface CpfLookupResult {
   cpf: string;
   profile: any | null;
@@ -267,6 +276,7 @@ export interface CpfLookupResult {
   pagbank_orders: any[];
   certificates: any[];
   knowledge_base: any | null;
+  linked_documents?: LinkedDocuments | null;
 }
 
 export interface CertificateModel {

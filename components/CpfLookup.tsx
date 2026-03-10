@@ -3,7 +3,7 @@ import {
   Search, Loader2, User, GraduationCap, BookOpen, Store, Building2, 
   Users, CreditCard, Award, Brain, Mail, Phone, MapPin, Calendar,
   DollarSign, ChevronDown, ChevronUp, Hash, Fingerprint, Copy, Check,
-  ShieldCheck, Package, FileText, AlertCircle, ArrowLeft
+  ShieldCheck, Package, FileText, AlertCircle, ArrowLeft, Link2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { CpfLookupResult, USER_ROLE_LABELS } from '../types';
@@ -13,12 +13,26 @@ interface CpfLookupProps {
   onBack?: () => void;
 }
 
+const formatCpfOrCnpj = (val: string) => {
+  const digits = val.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 11) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
 const formatCPF = (val: string) => {
-  const digits = val.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  const digits = val.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 11) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 };
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -99,7 +113,8 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
     try {
       const cleanCpf = cpfInput.replace(/\D/g, '');
       const names = extractKnownNames(r);
-      const { receber, pagar } = await appBackend.lookupContaAzulByCpfAndName(cleanCpf, names);
+      const linkedDocs = r.linked_documents?.all_documents || [];
+      const { receber, pagar } = await appBackend.lookupContaAzulByCpfAndName(cleanCpf, names, linkedDocs);
 
       const rpcReceber = r.conta_azul_receber || [];
       const rpcPagar = r.conta_azul_pagar || [];
@@ -127,7 +142,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = cpfInput.replace(/\D/g, '');
-    if (clean.length < 11) { setError('CPF deve ter 11 dígitos.'); return; }
+    if (clean.length < 11) { setError('CPF/CNPJ deve ter pelo menos 11 dígitos.'); return; }
 
     setIsLoading(true);
     setError(null);
@@ -181,8 +196,8 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
               <Fingerprint size={24} className="text-slate-200" />
             </div>
             <div>
-              <h2 className="text-2xl font-black">Busca por CPF</h2>
-              <p className="text-slate-400 text-sm">Raio-X completo de uma pessoa no sistema</p>
+              <h2 className="text-2xl font-black">Busca por CPF/CNPJ</h2>
+              <p className="text-slate-400 text-sm">Raio-X completo de uma pessoa no sistema (documentos vinculados incluídos automaticamente)</p>
             </div>
           </div>
 
@@ -191,11 +206,11 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
               <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
-                placeholder="000.000.000-00"
+                placeholder="CPF ou CNPJ"
                 value={cpfInput}
-                onChange={e => setCpfInput(formatCPF(e.target.value))}
+                onChange={e => setCpfInput(formatCpfOrCnpj(e.target.value))}
                 className="w-full pl-10 pr-10 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-teal-400 font-mono text-lg tracking-wider"
-                maxLength={14}
+                maxLength={18}
               />
               {cpfInput && (
                 <button type="button" onClick={handleCopy} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors">
@@ -249,6 +264,22 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                     <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">Sem perfil unificado</span>
                   )}
                 </div>
+                {result.linked_documents && (result.linked_documents.linked_cnpjs?.length > 0 || result.linked_documents.linked_cpfs?.length > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100">
+                    <Link2 size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Documentos vinculados:</span>
+                    {(result.linked_documents.linked_cnpjs || []).map((cnpj: string) => (
+                      <span key={cnpj} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono">
+                        CNPJ: {formatCPF(cnpj)}
+                      </span>
+                    ))}
+                    {(result.linked_documents.linked_cpfs || []).map((cpf: string) => (
+                      <span key={cpf} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-mono">
+                        CPF: {formatCPF(cpf)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -487,8 +518,8 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                !hasData(result.franchise) && !hasData(result.pagbank_orders) && (
                 <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                   <Fingerprint className="mx-auto text-slate-300 mb-3" size={48} />
-                  <p className="text-slate-500 font-medium">Nenhum registro encontrado para este CPF.</p>
-                  <p className="text-xs text-slate-400 mt-1">Verifique se o CPF está correto e tente novamente.</p>
+                  <p className="text-slate-500 font-medium">Nenhum registro encontrado para este CPF/CNPJ.</p>
+                  <p className="text-xs text-slate-400 mt-1">Verifique se o CPF ou CNPJ está correto e tente novamente.</p>
                 </div>
               )}
             </>
@@ -511,7 +542,7 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
                       </div>
                       <div>
                         <h3 className="text-lg font-black text-blue-900">Resumo Financeiro</h3>
-                        <p className="text-xs text-blue-600">CPF: {formatCPF(result.cpf)}</p>
+                        <p className="text-xs text-blue-600">{result.cpf.length > 11 ? 'CNPJ' : 'CPF'}: {formatCPF(result.cpf)}</p>
                       </div>
                     </div>
 
@@ -620,8 +651,8 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
               ) : contaAzulLoaded ? (
                 <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                   <DollarSign className="mx-auto text-slate-300 mb-3" size={48} />
-                  <p className="text-slate-500 font-medium">Nenhum registro financeiro encontrado no Conta Azul para este CPF.</p>
-                  <p className="text-xs text-slate-400 mt-1">Verifique se o CPF possui dados sincronizados no Conta Azul.</p>
+                  <p className="text-slate-500 font-medium">Nenhum registro financeiro encontrado no Conta Azul para este CPF/CNPJ.</p>
+                  <p className="text-xs text-slate-400 mt-1">Verifique se o CPF ou CNPJ possui dados sincronizados no Conta Azul.</p>
                 </div>
               ) : null}
             </>

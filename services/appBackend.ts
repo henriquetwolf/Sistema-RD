@@ -1344,20 +1344,28 @@ export const appBackend = {
     return data;
   },
 
-  lookupContaAzulByCpfAndName: async (cpf: string, names: string[]) => {
+  lookupContaAzulByCpfAndName: async (cpf: string, names: string[], linkedDocuments?: string[]) => {
     if (!isConfigured) return { receber: [], pagar: [] };
-    const cleanCpf = cpf.replace(/\D/g, '');
+    const cleanDoc = cpf.replace(/\D/g, '');
     const validNames = names.filter(n => n && n.trim());
+
+    const allDocs = new Set<string>();
+    if (cleanDoc.length >= 11) allDocs.add(cleanDoc);
+    (linkedDocuments || []).forEach(d => {
+      const clean = d.replace(/\D/g, '');
+      if (clean.length >= 11) allDocs.add(clean);
+    });
 
     const queries: Promise<any>[] = [];
 
-    if (cleanCpf.length === 11) {
+    if (allDocs.size > 0) {
+      const docsArray = Array.from(allDocs);
       queries.push(
         supabase.from('conta_azul_contas_receber')
-          .select('*').eq('contato_cpf', cleanCpf)
+          .select('*').in('contato_cpf', docsArray)
           .order('data_vencimento', { ascending: false }),
         supabase.from('conta_azul_contas_pagar')
-          .select('*').eq('contato_cpf', cleanCpf)
+          .select('*').in('contato_cpf', docsArray)
           .order('data_vencimento', { ascending: false }),
       );
     } else {
@@ -1377,7 +1385,7 @@ export const appBackend = {
       queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
     }
 
-    const [receberByCpf, pagarByCpf, receberByName, pagarByName] = await Promise.all(queries);
+    const [receberByDoc, pagarByDoc, receberByName, pagarByName] = await Promise.all(queries);
 
     const dedup = (arr: any[]) => {
       const seen = new Set<string>();
@@ -1390,8 +1398,8 @@ export const appBackend = {
     };
 
     return {
-      receber: dedup([...(receberByCpf.data || []), ...(receberByName.data || [])]),
-      pagar: dedup([...(pagarByCpf.data || []), ...(pagarByName.data || [])]),
+      receber: dedup([...(receberByDoc.data || []), ...(receberByName.data || [])]),
+      pagar: dedup([...(pagarByDoc.data || []), ...(pagarByName.data || [])]),
     };
   },
 

@@ -102,18 +102,21 @@ export const ContaAzulManager: React.FC = () => {
   const [cpfSearchError, setCpfSearchError] = useState<string | null>(null);
   const [cpfCopied, setCpfCopied] = useState(false);
 
-  const formatCPF = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 11);
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  const formatCpfOrCnpj = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 11) {
+      if (digits.length <= 3) return digits;
+      if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+      if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+      return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+    }
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
   };
 
   const handleCpfSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = cpfInput.replace(/\D/g, '');
-    if (clean.length < 11) { setCpfSearchError('CPF deve ter 11 dígitos.'); return; }
+    if (clean.length < 11) { setCpfSearchError('CPF/CNPJ deve ter pelo menos 11 dígitos.'); return; }
 
     setCpfSearchLoading(true);
     setCpfSearchError(null);
@@ -123,14 +126,13 @@ export const ContaAzulManager: React.FC = () => {
     try {
       const result = await appBackend.lookupCpfGlobal(clean);
       if (!result) {
-        setCpfSearchError('Erro ao consultar. Verifique a conexão ou se a função de busca por CPF está disponível.');
+        setCpfSearchError('Erro ao consultar. Verifique a conexão ou se a função de busca está disponível.');
         return;
       }
       if ((result as any).error) {
         setCpfSearchError((result as any).error);
         return;
       }
-      // O RPC lookup_cpf_global já retorna conta_azul_receber e conta_azul_pagar (por CPF e por nomes conhecidos)
       const receber = (result as any).conta_azul_receber ?? [];
       const pagar = (result as any).conta_azul_pagar ?? [];
       setCpfReceber(Array.isArray(receber) ? receber : []);
@@ -811,7 +813,7 @@ export const ContaAzulManager: React.FC = () => {
     { id: 'categories', label: 'Categorias', icon: <Tag size={15} /> },
     { id: 'create', label: 'Criar Lançamento', icon: <Plus size={15} /> },
     { id: 'contas', label: 'Contas', icon: <Building2 size={15} /> },
-    { id: 'cpf_search', label: 'Busca CPF', icon: <Fingerprint size={15} /> },
+    { id: 'cpf_search', label: 'Busca CPF/CNPJ', icon: <Fingerprint size={15} /> },
     { id: 'powerbi', label: 'Power BI', icon: <Monitor size={15} /> },
   ];
 
@@ -1808,8 +1810,8 @@ export const ContaAzulManager: React.FC = () => {
                     <Fingerprint size={24} className="text-blue-200" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-black">Busca por CPF — Conta Azul</h2>
-                    <p className="text-blue-300 text-xs">Encontre todas as contas a receber e a pagar de um CPF</p>
+                    <h2 className="text-xl font-black">Busca por CPF/CNPJ — Conta Azul</h2>
+                    <p className="text-blue-300 text-xs">Encontre todas as contas a receber e a pagar de um CPF ou CNPJ (documentos vinculados são incluídos automaticamente)</p>
                   </div>
                 </div>
 
@@ -1818,11 +1820,11 @@ export const ContaAzulManager: React.FC = () => {
                     <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" />
                     <input
                       type="text"
-                      placeholder="000.000.000-00"
+                      placeholder="CPF ou CNPJ"
                       value={cpfInput}
-                      onChange={e => setCpfInput(formatCPF(e.target.value))}
+                      onChange={e => setCpfInput(formatCpfOrCnpj(e.target.value))}
                       className="w-full pl-10 pr-10 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-blue-400 outline-none focus:ring-2 focus:ring-blue-300 font-mono text-lg tracking-wider"
-                      maxLength={14}
+                      maxLength={18}
                     />
                     {cpfInput && (
                       <button

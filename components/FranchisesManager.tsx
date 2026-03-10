@@ -1046,22 +1046,52 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                         <p className="text-xs text-slate-500 mt-1">Configure a integração com Google Calendar para gerar links do Google Meet automaticamente.</p>
                                     </div>
                                     <div className="p-6 space-y-6">
-                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
-                                            <h4 className="text-sm font-black text-blue-800 uppercase flex items-center gap-2"><Info size={16} /> Passo a Passo</h4>
-                                            <ol className="list-decimal list-inside text-sm text-blue-900 space-y-3 leading-relaxed">
-                                                <li>Acesse o <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="font-bold underline">Google Cloud Console</a> e crie um novo projeto (ou use um existente).</li>
-                                                <li>No menu lateral, vá em <strong>"APIs e Serviços" &gt; "Biblioteca"</strong> e habilite a <strong>Google Calendar API</strong>.</li>
-                                                <li>Vá em <strong>"APIs e Serviços" &gt; "Credenciais"</strong> e crie uma <strong>Conta de Serviço (Service Account)</strong>.</li>
-                                                <li>Na conta de serviço criada, vá na aba <strong>"Chaves"</strong> e gere uma chave no formato <strong>JSON</strong>.</li>
-                                                <li>No <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" className="font-bold underline">Google Calendar</a>, compartilhe uma agenda com o e-mail da conta de serviço (com permissão de <strong>editor</strong>).</li>
-                                                <li>Configure as seguintes variáveis de ambiente (Secrets) no <strong>Supabase Edge Functions</strong>:</li>
+                                        {/* OAuth2 - Recommended for personal Gmail */}
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 space-y-4">
+                                            <h4 className="text-sm font-black text-emerald-800 uppercase flex items-center gap-2"><Info size={16} /> Método Recomendado: OAuth2 (Gmail Pessoal ou Workspace)</h4>
+                                            <p className="text-xs text-emerald-700">Este método gera links do Google Meet para qualquer conta Gmail, inclusive contas pessoais.</p>
+                                            <ol className="list-decimal list-inside text-sm text-emerald-900 space-y-3 leading-relaxed">
+                                                <li>Acesse o <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="font-bold underline">Google Cloud Console</a> e crie um projeto (ou use um existente).</li>
+                                                <li>Habilite a <strong>Google Calendar API</strong> em "APIs e Serviços" &gt; "Biblioteca".</li>
+                                                <li>Vá em <strong>"APIs e Serviços" &gt; "Credenciais"</strong> e crie um <strong>ID do cliente OAuth 2.0</strong> (tipo: "Aplicativo da Web").</li>
+                                                <li>Em <strong>"URIs de redirecionamento autorizados"</strong>, adicione: <code className="bg-white px-1.5 py-0.5 rounded text-emerald-700 border border-emerald-200">https://developers.google.com/oauthplayground</code></li>
+                                                <li>Acesse o <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer" className="font-bold underline">OAuth2 Playground</a>, clique na engrenagem, marque <strong>"Use your own OAuth credentials"</strong> e insira seu Client ID e Client Secret.</li>
+                                                <li>No Step 1, selecione o scope <code className="bg-white px-1.5 py-0.5 rounded text-emerald-700 border border-emerald-200">https://www.googleapis.com/auth/calendar</code> e clique em "Authorize APIs".</li>
+                                                <li>Faça login com a <strong>conta Gmail que será dona das reuniões</strong> e autorize.</li>
+                                                <li>No Step 2, clique em <strong>"Exchange authorization code for tokens"</strong> e copie o <strong>Refresh Token</strong>.</li>
+                                                <li>Configure os Secrets no <strong>Supabase Edge Functions</strong>:</li>
                                             </ol>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-100 font-mono text-xs space-y-1">
-                                                <p><span className="text-blue-600 font-bold">GOOGLE_SERVICE_ACCOUNT_EMAIL</span> = e-mail da conta de serviço</p>
-                                                <p><span className="text-blue-600 font-bold">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> = chave privada do JSON (campo "private_key")</p>
-                                                <p><span className="text-blue-600 font-bold">GOOGLE_CALENDAR_ID</span> = ID da agenda compartilhada (ex: xxx@group.calendar.google.com)</p>
+                                            <div className="bg-white rounded-lg p-4 border border-emerald-100 font-mono text-xs space-y-1">
+                                                <p><span className="text-emerald-600 font-bold">GOOGLE_CLIENT_ID</span> = Client ID do OAuth2</p>
+                                                <p><span className="text-emerald-600 font-bold">GOOGLE_CLIENT_SECRET</span> = Client Secret do OAuth2</p>
+                                                <p><span className="text-emerald-600 font-bold">GOOGLE_REFRESH_TOKEN</span> = Refresh Token obtido no Playground</p>
+                                                <p><span className="text-emerald-600 font-bold">GOOGLE_CALENDAR_ID</span> = E-mail da conta Gmail ou ID da agenda (ex: seuemail@gmail.com)</p>
                                             </div>
-                                            <p className="text-xs text-blue-700 italic">Sem estas configurações, o agendamento funcionará normalmente mas sem link do Google Meet.</p>
+                                        </div>
+
+                                        {/* Service Account - Alternative for Workspace */}
+                                        <details className="group">
+                                            <summary className="cursor-pointer text-sm font-bold text-slate-500 hover:text-slate-700 flex items-center gap-2 py-2">
+                                                <ChevronDown size={16} className="group-open:rotate-180 transition-transform" /> Método Alternativo: Service Account (apenas Google Workspace)
+                                            </summary>
+                                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4 mt-2">
+                                                <p className="text-xs text-blue-700">Service Accounts geram links do Meet apenas em contas Google Workspace (empresarial). Para Gmail pessoal, use o método OAuth2 acima.</p>
+                                                <ol className="list-decimal list-inside text-sm text-blue-900 space-y-3 leading-relaxed">
+                                                    <li>Crie uma <strong>Conta de Serviço</strong> no Google Cloud Console.</li>
+                                                    <li>Gere uma chave JSON na aba "Chaves" da conta de serviço.</li>
+                                                    <li>Compartilhe a agenda do Google Calendar com o e-mail da conta de serviço (permissão de <strong>editor</strong>).</li>
+                                                    <li>Configure os Secrets no Supabase:</li>
+                                                </ol>
+                                                <div className="bg-white rounded-lg p-4 border border-blue-100 font-mono text-xs space-y-1">
+                                                    <p><span className="text-blue-600 font-bold">GOOGLE_SERVICE_ACCOUNT_EMAIL</span> = e-mail da conta de serviço</p>
+                                                    <p><span className="text-blue-600 font-bold">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> = chave privada do JSON</p>
+                                                    <p><span className="text-blue-600 font-bold">GOOGLE_CALENDAR_ID</span> = ID da agenda compartilhada</p>
+                                                </div>
+                                            </div>
+                                        </details>
+
+                                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                                            <p className="text-xs text-amber-800"><strong>Nota:</strong> Se ambos os métodos estiverem configurados, o sistema prioriza OAuth2. Sem nenhuma configuração, o agendamento funciona normalmente mas sem link do Google Meet.</p>
                                         </div>
                                     </div>
                                 </div>

@@ -30,7 +30,40 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
-// ── Google Service Account JWT Auth ─────────────────────────────
+// ── Google OAuth2 Refresh Token Auth (works with personal Gmail) ──
+
+async function getAccessTokenViaRefreshToken(): Promise<string> {
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  const refreshToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error("OAUTH2_NOT_CONFIGURED");
+  }
+
+  console.log("[google-meet] Using OAuth2 Refresh Token auth");
+
+  const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!tokenResp.ok) {
+    const err = await tokenResp.text();
+    throw new Error(`Google OAuth2 refresh token error: ${err}`);
+  }
+
+  const tokenData = await tokenResp.json();
+  return tokenData.access_token;
+}
+
+// ── Google Service Account JWT Auth (works with Workspace) ──────
 
 function base64UrlEncode(data: Uint8Array): string {
   let binary = "";
@@ -67,17 +100,15 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
   return buffer;
 }
 
-async function getGoogleAccessToken(): Promise<string> {
+async function getAccessTokenViaServiceAccount(): Promise<string> {
   const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   const privateKeyPem = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
 
   if (!email || !privateKeyPem) {
-    throw new Error(
-      "Google Service Account not configured. Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY."
-    );
+    throw new Error("SERVICE_ACCOUNT_NOT_CONFIGURED");
   }
 
-  console.log(`[google-meet] SA email: ${email}, PEM length: ${privateKeyPem.length} chars`);
+  console.log(`[google-meet] Using Service Account auth: ${email}`);
 
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
@@ -119,11 +150,29 @@ async function getGoogleAccessToken(): Promise<string> {
 
   if (!tokenResp.ok) {
     const err = await tokenResp.text();
-    throw new Error(`Google OAuth token error: ${err}`);
+    throw new Error(`Google SA token error: ${err}`);
   }
 
   const tokenData = await tokenResp.json();
   return tokenData.access_token;
+}
+
+// Tries OAuth2 Refresh Token first (supports Meet links on personal Gmail),
+// falls back to Service Account (requires Google Workspace for Meet links).
+async function getGoogleAccessToken(): Promise<{ token: string; method: "oauth2" | "service_account" }> {
+  try {
+    const token = await getAccessTokenViaRefreshToken();
+    return { token, method: "oauth2" };
+  } catch (e: any) {
+    if (e.message === "OAUTH2_NOT_CONFIGURED") {
+      console.log("[google-meet] OAuth2 not configured, trying Service Account...");
+    } else {
+      console.warn("[google-meet] OAuth2 refresh failed, trying Service Account:", e.message);
+    }
+  }
+
+  const token = await getAccessTokenViaServiceAccount();
+  return { token, method: "service_account" };
 }
 
 // ── Google Calendar API helpers ─────────────────────────────────
@@ -135,6 +184,7 @@ async function createCalendarEvent(
   description: string,
   startTime: string,
   endTime: string,
+  attendeeEmails?: string[],
 ): Promise<{ eventId: string; meetLink: string }> {
   const baseEvent: any = {
     summary,
@@ -143,7 +193,10 @@ async function createCalendarEvent(
     end: { dateTime: endTime, timeZone: "America/Sao_Paulo" },
   };
 
-  // Try with Google Meet conference data first
+  if (attendeeEmails?.length) {
+    baseEvent.attendees = attendeeEmails.map((email) => ({ email }));
+  }
+
   const eventWithMeet = {
     ...baseEvent,
     conferenceData: {
@@ -155,7 +208,7 @@ async function createCalendarEvent(
   };
 
   let resp = await fetch(
-    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`,
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
     {
       method: "POST",
       headers: {
@@ -166,13 +219,12 @@ async function createCalendarEvent(
     }
   );
 
-  // If Meet conference fails (personal Gmail), retry without conferenceData
   if (!resp.ok) {
     const errText = await resp.text();
     console.warn("[google-meet] Meet link failed, creating event without Meet:", errText);
 
     resp = await fetch(
-      `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`,
+      `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`,
       {
         method: "POST",
         headers: {
@@ -195,6 +247,7 @@ async function createCalendarEvent(
       (ep: any) => ep.entryPointType === "video"
     )?.uri || data.hangoutLink || "";
 
+  console.log(`[google-meet] Event created: id=${data.id}, meetLink=${meetLink || "(none)"}`);
   return { eventId: data.id, meetLink };
 }
 
@@ -284,21 +337,30 @@ serve(async (req) => {
           );
         }
 
-        // Try to create Google Calendar event
         let eventId = "";
         let meetLink = "";
+        let authMethod = "";
 
         const calendarId = Deno.env.get("GOOGLE_CALENDAR_ID");
-        const hasGoogleConfig =
+
+        const hasOAuth2 =
+          Deno.env.get("GOOGLE_CLIENT_ID") &&
+          Deno.env.get("GOOGLE_CLIENT_SECRET") &&
+          Deno.env.get("GOOGLE_REFRESH_TOKEN");
+
+        const hasServiceAccount =
           Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL") &&
-          Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") &&
-          calendarId;
+          Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
+
+        const hasGoogleConfig = (hasOAuth2 || hasServiceAccount) && calendarId;
 
         let googleError = "";
 
         if (hasGoogleConfig) {
           try {
-            const accessToken = await getGoogleAccessToken();
+            const { token: accessToken, method } = await getGoogleAccessToken();
+            authMethod = method;
+
             const summary =
               settings.meeting_title || "Reunião Franquia VOLL Studios";
             const description = [
@@ -310,6 +372,8 @@ serve(async (req) => {
               `CPF: ${student_cpf}`,
             ].join("\n");
 
+            const attendees = [student_email, settings.admin_email].filter(Boolean);
+
             const result = await createCalendarEvent(
               accessToken,
               calendarId!,
@@ -317,6 +381,7 @@ serve(async (req) => {
               description,
               start_time,
               end_time,
+              attendees,
             );
             eventId = result.eventId;
             meetLink = result.meetLink;
@@ -325,10 +390,10 @@ serve(async (req) => {
             console.error("Google Calendar error (continuing without Meet link):", googleError);
           }
         } else {
-          googleError = "Secrets não configurados: " +
-            (!Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL") ? "GOOGLE_SERVICE_ACCOUNT_EMAIL " : "") +
-            (!Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ? "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY " : "") +
-            (!calendarId ? "GOOGLE_CALENDAR_ID" : "");
+          const missing: string[] = [];
+          if (!hasOAuth2 && !hasServiceAccount) missing.push("Credenciais Google (OAuth2 ou Service Account)");
+          if (!calendarId) missing.push("GOOGLE_CALENDAR_ID");
+          googleError = "Secrets não configurados: " + missing.join(", ");
         }
 
         // Save booking
@@ -358,6 +423,7 @@ serve(async (req) => {
           booking,
           meet_link: meetLink,
           google_configured: !!hasGoogleConfig,
+          auth_method: authMethod || undefined,
           google_error: googleError || undefined,
         });
       }
@@ -375,12 +441,11 @@ serve(async (req) => {
 
         if (!booking) return errorResponse("Agendamento não encontrado.", 404);
 
-        // Cancel on Google Calendar
         if (booking.google_event_id) {
           const calendarId = Deno.env.get("GOOGLE_CALENDAR_ID");
           if (calendarId) {
             try {
-              const accessToken = await getGoogleAccessToken();
+              const { token: accessToken } = await getGoogleAccessToken();
               await deleteCalendarEvent(
                 accessToken,
                 calendarId,

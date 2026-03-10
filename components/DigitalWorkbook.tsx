@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Canvas as FabricCanvas, PencilBrush, Textbox, Rect, Circle, Line, Group, FabricObject } from 'fabric';
 import { appBackend } from '../services/appBackend';
 import { Apostila, ApostilaAnnotation } from '../types';
@@ -10,7 +11,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface DigitalWorkbookProps {
     studentCpf: string;

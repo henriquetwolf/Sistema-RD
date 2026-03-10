@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
     ArrowLeft, Loader2, Plus, Trash2, Save, BookOpen,
     Upload, FileText, CheckCircle2, AlertCircle, X, Edit2, ToggleLeft, ToggleRight
@@ -8,7 +9,7 @@ import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { Apostila } from '../types';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface ApostilaManagerProps {
     onBack: () => void;

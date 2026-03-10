@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Loader2, Search, ChevronLeft, X, CheckCircle, Clock, XCircle,
   ExternalLink, DollarSign, User, MapPin, Calendar, Landmark,
-  FileText, Eye, Filter, RefreshCw, Save, AlertCircle, Database, AlertTriangle
+  FileText, Eye, Filter, RefreshCw, Save, AlertCircle, Database, AlertTriangle,
+  History, ChevronDown
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { CourseClosing, CourseClosingExpense } from '../types';
+import { CourseClosing, CourseClosingExpense, CourseClosingHistory } from '../types';
 import clsx from 'clsx';
 
 interface CourseClosingManagerProps {
@@ -33,6 +34,9 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
   const [editStatus, setEditStatus] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [closingHistory, setClosingHistory] = useState<CourseClosingHistory[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   useEffect(() => { runDiagnosticAndFetch(); }, []);
 
@@ -87,14 +91,22 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
     setEditStatus(closing.status);
     setEditNotes(closing.admin_notes || '');
     setIsLoadingExpenses(true);
+    setIsLoadingHistory(true);
+    setClosingHistory([]);
+    setExpandedHistoryId(null);
     try {
-      const data = await appBackend.fetchCourseClosingExpenses(closing.id);
-      setExpenses(data);
+      const [expData, histData] = await Promise.all([
+        appBackend.fetchCourseClosingExpenses(closing.id),
+        appBackend.fetchCourseClosingHistory(closing.id).catch(() => [] as CourseClosingHistory[]),
+      ]);
+      setExpenses(expData);
+      setClosingHistory(histData);
     } catch (err: any) {
       console.error('[CourseClosingManager] Erro despesas:', err);
       setExpenses([]);
     } finally {
       setIsLoadingExpenses(false);
+      setIsLoadingHistory(false);
     }
   };
 
@@ -571,6 +583,107 @@ CREATE POLICY "course_closings_delete_storage" ON storage.objects FOR DELETE USI
                   </div>
                 )}
               </section>
+
+              {/* Histórico de edições */}
+              {isLoadingHistory ? (
+                  <div className="flex justify-center py-4"><Loader2 className="animate-spin text-slate-400" size={20} /></div>
+              ) : closingHistory.length > 0 && (
+                  <section className="space-y-3">
+                      <h3 className="text-xs font-black text-amber-600 uppercase tracking-[0.15em] flex items-center gap-2">
+                          <History size={14} /> Histórico de Edições ({closingHistory.length})
+                      </h3>
+                      <div className="space-y-2">
+                          {closingHistory.map(h => {
+                              const snap = h.snapshot as any;
+                              const expSnap = (h.expenses_snapshot || []) as any[];
+                              const isExpanded = expandedHistoryId === h.id;
+                              return (
+                                  <div key={h.id} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+                                      <button
+                                          onClick={() => setExpandedHistoryId(isExpanded ? null : h.id)}
+                                          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-100 transition-colors"
+                                      >
+                                          <div className="flex items-center gap-3">
+                                              <span className="text-[9px] font-black text-slate-400 bg-white px-2 py-0.5 rounded border">V{h.version}</span>
+                                              <div>
+                                                  <p className="text-xs font-bold text-slate-600">
+                                                      {h.edited_at ? new Date(h.edited_at).toLocaleString('pt-BR') : '--'}
+                                                  </p>
+                                                  <p className="text-[10px] text-slate-400 mt-0.5">
+                                                      Status: <span className="font-bold">{snap.status || '--'}</span>
+                                                      {h.reason && <> — Motivo: {h.reason}</>}
+                                                  </p>
+                                              </div>
+                                          </div>
+                                          <ChevronDown size={14} className={clsx("text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                                      </button>
+                                      {isExpanded && (
+                                          <div className="px-4 pb-4 border-t border-slate-200 bg-white space-y-3">
+                                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
+                                                  <div>
+                                                      <p className="text-[9px] font-black text-slate-400 uppercase">Instrutor</p>
+                                                      <p className="text-xs font-bold text-slate-700">{snap.instructor_name || '--'}</p>
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-[9px] font-black text-slate-400 uppercase">Início</p>
+                                                      <p className="text-xs font-bold text-slate-700">{snap.date_start ? new Date(snap.date_start + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</p>
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-[9px] font-black text-slate-400 uppercase">Término</p>
+                                                      <p className="text-xs font-bold text-slate-700">{snap.date_end ? new Date(snap.date_end + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</p>
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-[9px] font-black text-slate-400 uppercase">PIX</p>
+                                                      <p className="text-xs font-bold text-slate-700 truncate">{snap.pix_key || '--'}</p>
+                                                  </div>
+                                              </div>
+                                              {snap.admin_notes && (
+                                                  <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+                                                      <p className="text-[9px] font-black text-red-400 uppercase mb-0.5">Obs. Admin</p>
+                                                      <p className="text-xs text-red-700">{snap.admin_notes}</p>
+                                                  </div>
+                                              )}
+                                              {expSnap.length > 0 && (
+                                                  <div>
+                                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Despesas desta versão</p>
+                                                      <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                                                          <table className="w-full text-xs">
+                                                              <thead className="bg-slate-100 text-[9px] uppercase font-bold text-slate-500">
+                                                                  <tr>
+                                                                      <th className="px-3 py-2 text-left">Categoria</th>
+                                                                      <th className="px-3 py-2 text-right">Valor</th>
+                                                                      <th className="px-3 py-2 text-left">Obs.</th>
+                                                                      <th className="px-3 py-2 text-center">Comprovante</th>
+                                                                  </tr>
+                                                              </thead>
+                                                              <tbody className="divide-y divide-slate-100">
+                                                                  {expSnap.map((ex: any, i: number) => (
+                                                                      <tr key={i}>
+                                                                          <td className="px-3 py-2 font-medium text-slate-700">{ex.category}</td>
+                                                                          <td className="px-3 py-2 text-right font-medium text-slate-700">
+                                                                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(ex.amount) || 0)}
+                                                                          </td>
+                                                                          <td className="px-3 py-2 text-slate-500 truncate max-w-[150px]">{ex.observation || '--'}</td>
+                                                                          <td className="px-3 py-2 text-center">
+                                                                              {ex.receipt_url ? (
+                                                                                  <a href={ex.receipt_url} target="_blank" rel="noreferrer" className="text-purple-600 hover:text-purple-800 font-bold">Ver</a>
+                                                                              ) : <span className="text-slate-400">--</span>}
+                                                                          </td>
+                                                                      </tr>
+                                                                  ))}
+                                                              </tbody>
+                                                          </table>
+                                                      </div>
+                                                  </div>
+                                              )}
+                                          </div>
+                                      )}
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </section>
+              )}
 
               <section className="space-y-3 bg-indigo-50/50 rounded-2xl p-6 border border-indigo-100">
                 <h3 className="text-xs font-black text-indigo-600 uppercase tracking-[0.15em] flex items-center gap-2">

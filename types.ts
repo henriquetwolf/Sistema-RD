@@ -1446,3 +1446,13 @@ export interface CourseClosingExpense {
   observation: string;
   created_at: string;
 }
+
+export interface CourseClosingHistory {
+  id: string;
+  closing_id: string;
+  version: number;
+  snapshot: Record<string, any>;
+  expenses_snapshot: Record<string, any>[];
+  edited_at: string;
+  reason: string;
+}

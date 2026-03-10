@@ -5,12 +5,12 @@ import {
   Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
   ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
   FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft,
-  MonitorPlay, Play, CheckCircle2, Circle, Video, Download, Paperclip, AlertTriangle, Edit3, Lock
+  MonitorPlay, Play, CheckCircle2, Circle, Video, Download, Paperclip, AlertTriangle, Edit3, Lock, History, ChevronDown
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
-import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson, CourseClosing, CourseClosingExpense } from '../types';
+import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson, CourseClosing, CourseClosingExpense, CourseClosingHistory } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
 import { CourseClosingForm } from './CourseClosingForm';
@@ -46,6 +46,9 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [viewingClosingExpenses, setViewingClosingExpenses] = useState<{ closing: CourseClosing; expenses: CourseClosingExpense[] } | null>(null);
   const [isLoadingClosingExpenses, setIsLoadingClosingExpenses] = useState(false);
   const [editingClosing, setEditingClosing] = useState<{ closing: CourseClosing; expenses: CourseClosingExpense[] } | null>(null);
+  const [closingHistory, setClosingHistory] = useState<CourseClosingHistory[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   // Estados para Financeiro
   const [receivables, setReceivables] = useState<any[]>([]);
@@ -111,14 +114,22 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
   const handleViewClosingExpenses = async (closing: CourseClosing) => {
       setIsLoadingClosingExpenses(true);
+      setIsLoadingHistory(true);
+      setClosingHistory([]);
+      setExpandedHistoryId(null);
       setViewingClosingExpenses({ closing, expenses: [] });
       try {
-          const data = await appBackend.fetchCourseClosingExpenses(closing.id);
-          setViewingClosingExpenses({ closing, expenses: data });
+          const [expData, histData] = await Promise.all([
+              appBackend.fetchCourseClosingExpenses(closing.id),
+              appBackend.fetchCourseClosingHistory(closing.id).catch(() => [] as CourseClosingHistory[]),
+          ]);
+          setViewingClosingExpenses({ closing, expenses: expData });
+          setClosingHistory(histData);
       } catch (e) {
           console.error("Erro ao buscar despesas:", e);
       } finally {
           setIsLoadingClosingExpenses(false);
+          setIsLoadingHistory(false);
       }
   };
 
@@ -1457,6 +1468,100 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                           <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
                               <p className="text-[9px] font-black text-blue-500 uppercase mb-1">Observação da Administração</p>
                               <p className="text-sm text-blue-800">{viewingClosingExpenses.closing.admin_notes}</p>
+                          </div>
+                      )}
+
+                      {/* Histórico de edições */}
+                      {isLoadingHistory ? (
+                          <div className="flex justify-center py-4"><Loader2 className="animate-spin text-slate-400" size={20} /></div>
+                      ) : closingHistory.length > 0 && (
+                          <div>
+                              <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2 mb-3">
+                                  <History size={14} className="text-amber-500" /> Histórico de Edições ({closingHistory.length})
+                              </h3>
+                              <div className="space-y-2">
+                                  {closingHistory.map(h => {
+                                      const snap = h.snapshot as any;
+                                      const expSnap = (h.expenses_snapshot || []) as any[];
+                                      const isExpanded = expandedHistoryId === h.id;
+                                      return (
+                                          <div key={h.id} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+                                              <button
+                                                  onClick={() => setExpandedHistoryId(isExpanded ? null : h.id)}
+                                                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-100 transition-colors"
+                                              >
+                                                  <div className="flex items-center gap-3">
+                                                      <span className="text-[9px] font-black text-slate-400 bg-white px-2 py-0.5 rounded border">V{h.version}</span>
+                                                      <div>
+                                                          <p className="text-xs font-bold text-slate-600">
+                                                              {h.edited_at ? new Date(h.edited_at).toLocaleString('pt-BR') : '--'}
+                                                          </p>
+                                                          {h.reason && (
+                                                              <p className="text-[10px] text-slate-400 mt-0.5">Motivo: {h.reason}</p>
+                                                          )}
+                                                      </div>
+                                                  </div>
+                                                  <ChevronDown size={14} className={clsx("text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                                              </button>
+                                              {isExpanded && (
+                                                  <div className="px-4 pb-4 border-t border-slate-200 bg-white space-y-3">
+                                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
+                                                          <div>
+                                                              <p className="text-[9px] font-black text-slate-400 uppercase">Status</p>
+                                                              <p className="text-xs font-bold text-slate-700">{snap.status || '--'}</p>
+                                                          </div>
+                                                          <div>
+                                                              <p className="text-[9px] font-black text-slate-400 uppercase">Início</p>
+                                                              <p className="text-xs font-bold text-slate-700">{snap.date_start ? new Date(snap.date_start + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</p>
+                                                          </div>
+                                                          <div>
+                                                              <p className="text-[9px] font-black text-slate-400 uppercase">Término</p>
+                                                              <p className="text-xs font-bold text-slate-700">{snap.date_end ? new Date(snap.date_end + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</p>
+                                                          </div>
+                                                          <div>
+                                                              <p className="text-[9px] font-black text-slate-400 uppercase">PIX</p>
+                                                              <p className="text-xs font-bold text-slate-700 truncate">{snap.pix_key || '--'}</p>
+                                                          </div>
+                                                      </div>
+                                                      {snap.admin_notes && (
+                                                          <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+                                                              <p className="text-[9px] font-black text-red-400 uppercase mb-0.5">Obs. Admin</p>
+                                                              <p className="text-xs text-red-700">{snap.admin_notes}</p>
+                                                          </div>
+                                                      )}
+                                                      {expSnap.length > 0 && (
+                                                          <div>
+                                                              <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Despesas desta versão</p>
+                                                              <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                                                                  <table className="w-full text-xs">
+                                                                      <thead className="bg-slate-100 text-[9px] uppercase font-bold text-slate-500">
+                                                                          <tr>
+                                                                              <th className="px-3 py-2 text-left">Categoria</th>
+                                                                              <th className="px-3 py-2 text-right">Valor</th>
+                                                                              <th className="px-3 py-2 text-left">Obs.</th>
+                                                                          </tr>
+                                                                      </thead>
+                                                                      <tbody className="divide-y divide-slate-100">
+                                                                          {expSnap.map((ex: any, i: number) => (
+                                                                              <tr key={i}>
+                                                                                  <td className="px-3 py-2 font-medium text-slate-700">{ex.category}</td>
+                                                                                  <td className="px-3 py-2 text-right font-medium text-slate-700">
+                                                                                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(ex.amount) || 0)}
+                                                                                  </td>
+                                                                                  <td className="px-3 py-2 text-slate-500 truncate max-w-[150px]">{ex.observation || '--'}</td>
+                                                                              </tr>
+                                                                          ))}
+                                                                      </tbody>
+                                                                  </table>
+                                                              </div>
+                                                          </div>
+                                                      )}
+                                                  </div>
+                                              )}
+                                          </div>
+                                      );
+                                  })}
+                              </div>
                           </div>
                       )}
 

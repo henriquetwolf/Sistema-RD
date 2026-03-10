@@ -12,7 +12,7 @@ import {
   StudioDigitalEquipment, StudioDigitalExercise,
   FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings,
   Apostila, ApostilaAnnotation, ApostilaProgress,
-  CourseClosing, CourseClosingExpense
+  CourseClosing, CourseClosingExpense, CourseClosingHistory
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { brevoService } from './brevoService';
@@ -2284,6 +2284,31 @@ export const appBackend = {
     expenses: Omit<CourseClosingExpense, 'id' | 'closing_id' | 'created_at'>[]
   ): Promise<void> => {
     if (!isConfigured) throw new Error('Supabase não configurado.');
+
+    // Salvar snapshot do estado atual no histórico antes de atualizar
+    const { data: currentClosing } = await supabase
+      .from('crm_course_closings').select('*').eq('id', id).single();
+    const { data: currentExpenses } = await supabase
+      .from('crm_course_closing_expenses').select('*').eq('closing_id', id).order('created_at');
+
+    if (currentClosing) {
+      const { count } = await supabase
+        .from('crm_course_closing_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('closing_id', id);
+      const version = (count || 0) + 1;
+
+      await supabase.from('crm_course_closing_history').insert({
+        id: crypto.randomUUID(),
+        closing_id: id,
+        version,
+        snapshot: currentClosing,
+        expenses_snapshot: currentExpenses || [],
+        edited_at: new Date().toISOString(),
+        reason: currentClosing.admin_notes || 'Edição pelo instrutor',
+      });
+    }
+
     const { error: cErr } = await supabase.from('crm_course_closings').update({
       ...closing,
       status: 'pendente',
@@ -2307,5 +2332,16 @@ export const appBackend = {
       const { error: eErr } = await supabase.from('crm_course_closing_expenses').insert(rows);
       if (eErr) throw new Error(`Erro ao salvar despesas: ${eErr.message}`);
     }
+  },
+
+  fetchCourseClosingHistory: async (closingId: string): Promise<CourseClosingHistory[]> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const { data, error } = await supabase
+      .from('crm_course_closing_history')
+      .select('*')
+      .eq('closing_id', closingId)
+      .order('version', { ascending: false });
+    if (error) throw new Error(`Erro ao buscar histórico: ${error.message}`);
+    return data || [];
   },
 };

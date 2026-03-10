@@ -26,6 +26,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
     const [apostilas, setApostilas] = useState<Apostila[]>([]);
     const [selectedApostila, setSelectedApostila] = useState<Apostila | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(0);
     const [scale, setScale] = useState(1.2);
@@ -79,8 +80,14 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
         if (!selectedApostila) return;
         (async () => {
             setIsLoading(true);
+            setLoadError('');
             try {
-                const doc = await pdfjsLib.getDocument(selectedApostila.pdf_url).promise;
+                const response = await fetch(selectedApostila.pdf_url);
+                if (!response.ok) throw new Error(`HTTP ${response.status} ao baixar PDF`);
+                const arrayBuffer = await response.arrayBuffer();
+                const pdfData = new Uint8Array(arrayBuffer);
+
+                const doc = await pdfjsLib.getDocument({ data: pdfData }).promise;
                 pdfDocRef.current = doc;
                 setTotalPages(doc.numPages);
 
@@ -105,8 +112,9 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                 setCurrentPage(startPage);
 
                 generateThumbnails(doc, Math.min(doc.numPages, 50));
-            } catch (err) {
+            } catch (err: any) {
                 console.error('[Apostila] Erro ao carregar PDF:', err);
+                setLoadError(err.message || 'Erro ao carregar o PDF.');
             }
             setIsLoading(false);
         })();
@@ -579,7 +587,21 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <Loader2 className="animate-spin text-rose-600" size={40} />
-                <p className="text-slate-500 font-bold text-sm">Carregando apostila...</p>
+                <p className="text-slate-500 font-bold text-sm">Carregando apostila... (pode levar alguns segundos)</p>
+            </div>
+        );
+    }
+
+    // ── Error state ──────────────────────────────────────────
+    if (loadError) {
+        return (
+            <div className="max-w-lg mx-auto py-20 text-center space-y-4">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-600 text-sm font-bold">
+                    Erro ao carregar a apostila: {loadError}
+                </div>
+                <button onClick={() => setSelectedApostila(null)} className="text-sm text-slate-500 hover:text-slate-700 font-bold underline">
+                    Voltar
+                </button>
             </div>
         );
     }

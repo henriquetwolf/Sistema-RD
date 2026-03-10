@@ -404,7 +404,14 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">CPF do Responsável</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cpf} onChange={e => handleInputChange('cpf', e.target.value)} />
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cpf} maxLength={14} placeholder="000.000.000-00" onChange={e => {
+                                    const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                    let masked = digits;
+                                    if (digits.length > 9) masked = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+                                    else if (digits.length > 6) masked = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
+                                    else if (digits.length > 3) masked = `${digits.slice(0,3)}.${digits.slice(3)}`;
+                                    handleInputChange('cpf', masked);
+                                }} />
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Telefone Principal</label>
@@ -439,7 +446,15 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">CNPJ</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cnpj} onChange={e => handleInputChange('cnpj', e.target.value)} />
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cnpj} maxLength={18} placeholder="00.000.000/0000-00" onChange={e => {
+                                    const digits = e.target.value.replace(/\D/g, '').slice(0, 14);
+                                    let masked = digits;
+                                    if (digits.length > 12) masked = `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12)}`;
+                                    else if (digits.length > 8) masked = `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8)}`;
+                                    else if (digits.length > 5) masked = `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5)}`;
+                                    else if (digits.length > 2) masked = `${digits.slice(0,2)}.${digits.slice(2)}`;
+                                    handleInputChange('cnpj', masked);
+                                }} />
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">País</label>

@@ -369,7 +369,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                             </div>
                         )}
                     </div>
-                ) : activeTab === 'contracts' ? (
+                ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
                         <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 px-2"><FileSignature className="text-teal-600"/> Contratos Pendentes</h3>
                         {pendingContracts.length === 0 ? (

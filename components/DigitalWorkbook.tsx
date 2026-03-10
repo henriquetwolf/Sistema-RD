@@ -80,15 +80,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
         (async () => {
             setIsLoading(true);
             try {
-                let pdfSource: any = selectedApostila.pdf_url;
-                if (selectedApostila.pdf_url.startsWith('data:')) {
-                    const raw = selectedApostila.pdf_url.split(',')[1];
-                    const binary = atob(raw);
-                    const bytes = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                    pdfSource = { data: bytes };
-                }
-                const doc = await pdfjsLib.getDocument(pdfSource).promise;
+                const doc = await pdfjsLib.getDocument(selectedApostila.pdf_url).promise;
                 pdfDocRef.current = doc;
                 setTotalPages(doc.numPages);
 

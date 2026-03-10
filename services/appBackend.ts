@@ -2137,6 +2137,30 @@ export const appBackend = {
     if (error) console.error('[Apostila] Erro ao salvar progresso:', error);
   },
 
+  uploadApostilaPdf: async (file: File): Promise<string> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const ext = file.name.split('.').pop() || 'pdf';
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('apostilas').upload(path, file, {
+      contentType: 'application/pdf',
+      upsert: false,
+    });
+    if (error) throw new Error(`Erro no upload: ${error.message}`);
+    const { data: urlData } = supabase.storage.from('apostilas').getPublicUrl(path);
+    return urlData.publicUrl;
+  },
+
+  deleteApostilaPdf: async (pdfUrl: string): Promise<void> => {
+    if (!isConfigured) return;
+    try {
+      const url = new URL(pdfUrl);
+      const parts = url.pathname.split('/apostilas/');
+      if (parts.length > 1) {
+        await supabase.storage.from('apostilas').remove([parts[1]]);
+      }
+    } catch { /* ignore cleanup errors */ }
+  },
+
   upsertApostila: async (apostila: Partial<Apostila> & { title: string; pdf_url: string }): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_apostilas').upsert({
@@ -2148,15 +2172,17 @@ export const appBackend = {
       course_id: apostila.course_id || null,
       is_active: apostila.is_active ?? true,
     });
-    if (error) console.error('[Apostila] Erro ao salvar apostila:', error);
+    if (error) throw new Error(`Erro ao salvar apostila: ${error.message}`);
   },
 
   deleteApostila: async (id: string): Promise<void> => {
     if (!isConfigured) return;
+    const { data: apostila } = await supabase.from('crm_apostilas').select('pdf_url').eq('id', id).maybeSingle();
     await supabase.from('crm_apostila_annotations').delete().eq('apostila_id', id);
     await supabase.from('crm_apostila_progress').delete().eq('apostila_id', id);
     const { error } = await supabase.from('crm_apostilas').delete().eq('id', id);
     if (error) console.error('[Apostila] Erro ao excluir apostila:', error);
+    if (apostila?.pdf_url) await appBackend.deleteApostilaPdf(apostila.pdf_url);
   },
 
   toggleApostilaActive: async (id: string, isActive: boolean): Promise<void> => {

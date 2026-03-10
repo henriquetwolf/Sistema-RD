@@ -24,8 +24,9 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
     const [showModal, setShowModal] = useState(false);
     const [editingApostila, setEditingApostila] = useState<Apostila | null>(null);
     const [form, setForm] = useState({ title: '', description: '', total_pages: 0 });
-    const [pdfData, setPdfData] = useState<string>('');
+    const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [pdfFileName, setPdfFileName] = useState('');
+    const [existingPdfUrl, setExistingPdfUrl] = useState('');
     const [isCountingPages, setIsCountingPages] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -45,8 +46,9 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
     const openNewModal = () => {
         setEditingApostila(null);
         setForm({ title: '', description: '', total_pages: 0 });
-        setPdfData('');
+        setPdfFile(null);
         setPdfFileName('');
+        setExistingPdfUrl('');
         setSaveError('');
         setShowModal(true);
     };
@@ -54,8 +56,9 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
     const openEditModal = (a: Apostila) => {
         setEditingApostila(a);
         setForm({ title: a.title, description: a.description, total_pages: a.total_pages });
-        setPdfData(a.pdf_url);
-        setPdfFileName('PDF já carregado');
+        setPdfFile(null);
+        setPdfFileName('PDF atual mantido');
+        setExistingPdfUrl(a.pdf_url);
         setSaveError('');
         setShowModal(true);
     };
@@ -74,44 +77,46 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
             return;
         }
 
+        setPdfFile(file);
         setPdfFileName(file.name);
+        setExistingPdfUrl('');
         setSaveError('');
         setIsCountingPages(true);
 
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-            const base64 = reader.result as string;
-            setPdfData(base64);
-
-            try {
-                const raw = base64.split(',')[1];
-                const binary = atob(raw);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                const doc = await pdfjsLib.getDocument({ data: bytes }).promise;
-                setForm(prev => ({ ...prev, total_pages: doc.numPages }));
-            } catch (err) {
-                console.error('Erro ao contar paginas:', err);
-            }
-            setIsCountingPages(false);
-        };
-        reader.readAsDataURL(file);
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const doc = await pdfjsLib.getDocument({ data: bytes }).promise;
+            setForm(prev => ({ ...prev, total_pages: doc.numPages }));
+        } catch (err) {
+            console.error('Erro ao contar paginas:', err);
+        }
+        setIsCountingPages(false);
 
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const handleSave = async () => {
         if (!form.title.trim()) { setSaveError('Informe o titulo da apostila.'); return; }
-        if (!pdfData) { setSaveError('Faca o upload do arquivo PDF.'); return; }
+        if (!pdfFile && !existingPdfUrl) { setSaveError('Faca o upload do arquivo PDF.'); return; }
 
         setIsSaving(true);
         setSaveError('');
         try {
+            let finalPdfUrl = existingPdfUrl;
+
+            if (pdfFile) {
+                finalPdfUrl = await appBackend.uploadApostilaPdf(pdfFile);
+                if (editingApostila?.pdf_url) {
+                    await appBackend.deleteApostilaPdf(editingApostila.pdf_url);
+                }
+            }
+
             await appBackend.upsertApostila({
                 id: editingApostila?.id,
                 title: form.title.trim(),
                 description: form.description.trim(),
-                pdf_url: pdfData,
+                pdf_url: finalPdfUrl,
                 total_pages: form.total_pages,
                 is_active: editingApostila?.is_active ?? true,
             });
@@ -255,7 +260,7 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
                             {/* PDF Upload */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Arquivo PDF *</label>
-                                {pdfData ? (
+                                {(pdfFile || existingPdfUrl) ? (
                                     <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl">
                                         <FileText size={24} className="text-rose-600 shrink-0" />
                                         <div className="flex-1 min-w-0">
@@ -268,7 +273,7 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
                                                 )}
                                             </p>
                                         </div>
-                                        <button onClick={() => { setPdfData(''); setPdfFileName(''); setForm(prev => ({ ...prev, total_pages: 0 })); }} className="p-1.5 hover:bg-rose-100 rounded-lg transition-colors text-rose-400">
+                                        <button onClick={() => { setPdfFile(null); setPdfFileName(''); setExistingPdfUrl(''); setForm(prev => ({ ...prev, total_pages: 0 })); }} className="p-1.5 hover:bg-rose-100 rounded-lg transition-colors text-rose-400">
                                             <X size={16} />
                                         </button>
                                     </div>

@@ -167,8 +167,9 @@ export const ContaAzulManager: React.FC = () => {
       const dedup = (arr: any[]) => {
         const seen = new Set<string>();
         return arr.filter(item => {
-          if (seen.has(item.id)) return false;
-          seen.add(item.id);
+          const key = item.id_conta_azul || `${item.descricao}|${item.valor}|${item.data_vencimento}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
           return true;
         });
       };

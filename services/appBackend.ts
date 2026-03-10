@@ -1402,7 +1402,7 @@ export const appBackend = {
     const dedup = (arr: any[]) => {
       const seen = new Set<string>();
       return arr.filter(item => {
-        const key = item.id;
+        const key = item.id_conta_azul || `${item.descricao}|${item.valor}|${item.data_vencimento}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;

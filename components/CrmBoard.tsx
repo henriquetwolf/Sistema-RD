@@ -6,7 +6,7 @@ import {
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw, Archive, ArchiveRestore,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown, CheckCircle, Circle,
-  CheckSquare, AlertTriangle, Bell
+  CheckSquare, AlertTriangle, Bell, Minimize2, Maximize2, Layers
 } from 'lucide-react';
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
@@ -241,9 +241,18 @@ export const CrmBoard: React.FC = () => {
   const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
   const [isSavingPipeline, setIsSavingPipeline] = useState(false);
 
+  // Pipeline view controls
+  const [activePipelineTab, setActivePipelineTab] = useState<string | 'all'>('all');
+  const [compactMode, setCompactMode] = useState(() => localStorage.getItem('crm_compact_mode') === 'true');
+  const [showFunnelFilter, setShowFunnelFilter] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('crm_compact_mode', String(compactMode));
+  }, [compactMode]);
 
   useEffect(() => {
       const total = Number(dealFormData.value) || 0;
@@ -1446,9 +1455,15 @@ export const CrmBoard: React.FC = () => {
             <button onClick={fetchData} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"><RefreshCw size={18} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
         
-        <div className="flex items-center gap-4 flex-1 justify-end">
+        <div className="flex items-center gap-3 flex-1 justify-end">
             {activeView === 'pipeline' || activeView === 'tasks' ? (
                 <>
+                    {activeView === 'pipeline' && (
+                        <button onClick={() => setCompactMode(!compactMode)} className={clsx("p-1.5 rounded-lg border transition-all hidden md:flex items-center gap-1 text-xs font-medium", compactMode ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700")} title={compactMode ? "Modo normal" : "Modo compacto"}>
+                            {compactMode ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+                            <span className="hidden lg:inline">{compactMode ? "Normal" : "Compacto"}</span>
+                        </button>
+                    )}
                     <div className="relative max-w-xs w-full hidden md:block">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input type="text" placeholder="Buscar oportunidade ou Nº..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border-transparent focus:bg-white focus:border-indigo-300 border rounded-full text-sm outline-none"/>
@@ -1468,13 +1483,25 @@ export const CrmBoard: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative custom-scrollbar">
+      {activeView === 'pipeline' && pipelines.length > 1 && (
+        <div className="bg-white border-b border-slate-200 px-6 py-1.5 flex items-center gap-2 shrink-0 overflow-x-auto custom-scrollbar">
+            <Layers size={14} className="text-slate-400 flex-shrink-0" />
+            <button onClick={() => setActivePipelineTab('all')} className={clsx("px-3 py-1 text-xs font-semibold rounded-full transition-all whitespace-nowrap", activePipelineTab === 'all' ? "bg-indigo-100 text-indigo-700" : "text-slate-500 hover:bg-slate-100")}>Todos</button>
+            {pipelines.map(p => (
+                <button key={p.id} onClick={() => setActivePipelineTab(p.id)} className={clsx("px-3 py-1 text-xs font-semibold rounded-full transition-all whitespace-nowrap", activePipelineTab === p.id ? "bg-indigo-100 text-indigo-700" : "text-slate-500 hover:bg-slate-100")}>
+                    {p.name} <span className="text-[10px] opacity-60 ml-1">({filteredDeals.filter(d => d.pipeline === p.name).length})</span>
+                </button>
+            ))}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-x-auto bg-slate-100/50 p-4 relative custom-scrollbar">
         {isLoading && deals.length === 0 && pipelines.length === 0 ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>
         ) : (
         <>
             {activeView === 'pipeline' && (
-                <div className="flex flex-col gap-12 min-w-max">
+                <div className="flex flex-col gap-6 min-w-max">
                 {pipelines.length === 0 && !isLoading && (
                     <div className="text-center py-20 text-slate-400 bg-white rounded-xl border-2 border-dashed border-slate-200 w-full max-w-3xl mx-auto">
                         <Filter size={48} className="mx-auto mb-4 opacity-20" />
@@ -1482,63 +1509,75 @@ export const CrmBoard: React.FC = () => {
                         <p className="text-sm">Vá em "Configurar Funis" para criar seu primeiro processo de vendas.</p>
                     </div>
                 )}
-                {pipelines.map(pipeline => (
-                    <div key={pipeline.id} className="space-y-4">
-                        <div className="flex items-center justify-between bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
-                            <h2 className="text-lg font-black text-slate-700 flex items-center gap-2">
-                                <Filter size={20} className="text-indigo-600" /> Funil: {pipeline.name}
+                {pipelines.filter(p => activePipelineTab === 'all' || p.id === activePipelineTab).map(pipeline => (
+                    <div key={pipeline.id} className="space-y-2">
+                        {activePipelineTab === 'all' && <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                            <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                <Filter size={16} className="text-indigo-600" /> {pipeline.name}
                             </h2>
-                            <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">{filteredDeals.filter(d => d.pipeline === pipeline.name).length} Negócios</span>
-                        </div>
-                        <div className="flex gap-4 h-full">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{filteredDeals.filter(d => d.pipeline === pipeline.name).length} Negócios</span>
+                        </div>}
+                        <div className={clsx("flex h-full", compactMode ? "gap-2" : "gap-3")}>
                         {(pipeline.stages || []).map(stage => {
                             const summary = getStageSummary(pipeline.name, stage.id);
                             const columnDeals = filteredDeals.filter(d => d.pipeline === pipeline.name && d.stage === stage.id);
                             return (
-                                <div key={stage.id} className="w-[320px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, pipeline.name, stage.id)}>
-                                    <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", stage.color || "border-slate-200")}>
-                                        <div className="flex justify-between items-start mb-1">
-                                            <h3 className="font-semibold text-slate-700">{stage.title}</h3>
-                                            <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={16} /></button>
+                                <div key={stage.id} className={clsx("flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm", compactMode ? "w-[220px]" : "w-[270px]")} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, pipeline.name, stage.id)}>
+                                    <div className={clsx("border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", compactMode ? "px-2 py-1.5" : "p-2.5", stage.color || "border-slate-200")}>
+                                        <div className="flex justify-between items-center">
+                                            <h3 className={clsx("font-semibold text-slate-700", compactMode ? "text-xs" : "text-sm")}>{stage.title}</h3>
+                                            <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={14} /></button>
                                         </div>
                                         <div className="flex justify-between items-end">
-                                            <span className="text-xs text-slate-500 font-medium">{summary.count} negócios</span>
-                                            <span className="text-xs font-bold text-slate-800">{formatCurrency(summary.total)}</span>
+                                            <span className={clsx("text-slate-500 font-medium", compactMode ? "text-[10px]" : "text-xs")}>{summary.count} negócios</span>
+                                            <span className={clsx("font-bold text-slate-800", compactMode ? "text-[10px]" : "text-xs")}>{formatCurrency(summary.total)}</span>
                                         </div>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar min-h-[150px]">
+                                    <div className={clsx("flex-1 overflow-y-auto custom-scrollbar", compactMode ? "p-1 space-y-1 min-h-[80px]" : "p-1.5 space-y-2 min-h-[100px]")}>
                                     {columnDeals.length === 0 ? (
-                                        <div className="h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">Arraste aqui</div>
+                                        <div className={clsx("border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs", compactMode ? "h-14" : "h-20")}>Arraste aqui</div>
                                     ) : (
                                         columnDeals.map(deal => {
                                             const taskStatus = getDealTaskStatus(deal);
+                                            if (compactMode) {
+                                                return (
+                                                    <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white px-2 py-1.5 rounded border border-slate-200 hover:shadow-sm relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
+                                                        <div className={clsx("absolute left-0 top-1 bottom-1 w-0.5 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
+                                                        <div className="pl-2 flex items-center justify-between gap-1">
+                                                            <span className="text-xs font-semibold text-slate-800 truncate flex-1">{deal.title}</span>
+                                                            <span className="text-[10px] font-bold text-slate-600 whitespace-nowrap">{formatCurrency(deal.value)}</span>
+                                                            {taskStatus && <div className={clsx("flex-shrink-0", taskStatus.color)}><Clock size={8} /></div>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
                                             return (
-                                                <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
-                                                    <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
-                                                    <div className="pl-3">
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <div>
-                                                                {deal.dealNumber && <span className="text-[10px] text-slate-400 font-mono block">#{deal.dealNumber}</span>}
-                                                                <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
+                                                <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white p-2 rounded-lg border border-slate-200 shadow-sm hover:shadow-md relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
+                                                    <div className={clsx("absolute left-0 top-2 bottom-2 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
+                                                    <div className="pl-2.5">
+                                                        <div className="flex justify-between items-start mb-0.5">
+                                                            <div className="min-w-0 flex-1">
+                                                                {deal.dealNumber && <span className="text-[9px] text-slate-400 font-mono block">#{deal.dealNumber}</span>}
+                                                                <h4 className="font-bold text-slate-800 text-xs line-clamp-1 leading-tight">{deal.title}</h4>
                                                             </div>
-                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
-                                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180" /></button>
-                                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
+                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-shrink-0">
+                                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-0.5 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={12} className="rotate-180" /></button>
+                                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'next')}} className="p-0.5 hover:bg-green-50 rounded text-green-600"><ChevronRight size={12} /></button>
                                                             </div>
                                                         </div>
-                                                        <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
-                                                        <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                                                        <p className="text-[10px] text-slate-500 mb-1 truncate">{deal.companyName}</p>
+                                                        <div className="flex items-center justify-between pt-1 border-t border-slate-50">
                                                             <div className="flex items-center gap-1">
-                                                                <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
+                                                                <span className="font-bold text-slate-700 text-xs">{formatCurrency(deal.value)}</span>
                                                                 {taskStatus && (
-                                                                    <div className={clsx("flex items-center gap-0.5 ml-1", taskStatus.color)} title={`Tarefa ${taskStatus.label}`}>
-                                                                        <Clock size={10} />
+                                                                    <div className={clsx("flex items-center gap-0.5 ml-0.5", taskStatus.color)} title={`Tarefa ${taskStatus.label}`}>
+                                                                        <Clock size={8} />
                                                                     </div>
                                                                 )}
                                                             </div>
                                                             <div className="flex items-center gap-1">
-                                                                {deal.contaAzulSaleNumberService && <span className="text-[8px] bg-green-100 text-green-700 px-1 rounded font-bold" title={`CA Serviço: ${deal.contaAzulSaleNumberService}${deal.contaAzulSaleNumberProduct ? ' | Produto: ' + deal.contaAzulSaleNumberProduct : ''}`}>CA</span>}
-                                                                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
+                                                                {deal.contaAzulSaleNumberService && <span className="text-[7px] bg-green-100 text-green-700 px-0.5 rounded font-bold" title={`CA Serviço: ${deal.contaAzulSaleNumberService}${deal.contaAzulSaleNumberProduct ? ' | Produto: ' + deal.contaAzulSaleNumberProduct : ''}`}>CA</span>}
+                                                                <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[9px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
                                                                     {(getOwnerName(deal.owner) || '?').charAt(0)}
                                                                 </div>
                                                             </div>

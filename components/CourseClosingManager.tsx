@@ -21,6 +21,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBack }) => {
   const [closings, setClosings] = useState<CourseClosing[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedClosing, setSelectedClosing] = useState<CourseClosing | null>(null);
@@ -34,9 +35,13 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
 
   const fetchClosings = async () => {
     setIsLoading(true);
+    setFetchError('');
     try {
       const data = await appBackend.fetchCourseClosings();
       setClosings(data);
+    } catch (err: any) {
+      console.error('[CourseClosingManager] Erro ao buscar fechamentos:', err);
+      setFetchError(err.message || 'Erro ao carregar fechamentos. Verifique se a migration 034_course_closing.sql foi aplicada no Supabase.');
     } finally {
       setIsLoading(false);
     }
@@ -160,10 +165,25 @@ export const CourseClosingManager: React.FC<CourseClosingManagerProps> = ({ onBa
         </div>
       </div>
 
+      {/* Error */}
+      {fetchError && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-start gap-4">
+          <AlertCircle size={20} className="text-red-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-bold text-red-800 text-sm">Erro ao carregar dados</p>
+            <p className="text-red-600 text-xs mt-1">{fetchError}</p>
+            <p className="text-red-500 text-xs mt-2">Certifique-se de que a migration <code className="bg-red-100 px-1.5 py-0.5 rounded font-mono">034_course_closing.sql</code> foi executada no painel do Supabase.</p>
+            <button onClick={fetchClosings} className="mt-3 text-xs font-bold text-red-700 hover:text-red-900 flex items-center gap-1">
+              <RefreshCw size={12} /> Tentar novamente
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {isLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" size={32} /></div>
-      ) : filtered.length === 0 ? (
+      ) : fetchError ? null : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-16 text-center">
           <FileText size={48} className="mx-auto text-slate-300 mb-4" />
           <h3 className="text-lg font-black text-slate-700">Nenhum fechamento encontrado</h3>

@@ -10,7 +10,7 @@ import {
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
-import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson } from '../types';
+import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson, CourseClosing, CourseClosingExpense } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
 import { CourseClosingForm } from './CourseClosingForm';
@@ -23,7 +23,7 @@ interface InstructorAreaProps {
 }
 
 export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLogout }) => {
-  const [activeViewTab, setActiveViewTab] = useState<'dashboard' | 'contracts' | 'pending_contracts' | 'trainings' | 'financeiro'>('dashboard');
+  const [activeViewTab, setActiveViewTab] = useState<'dashboard' | 'contracts' | 'pending_contracts' | 'trainings' | 'financeiro' | 'fechamentos'>('dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [news, setNews] = useState<TeacherNews[]>([]);
@@ -39,6 +39,12 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
   const [courseClosingClass, setCourseClosingClass] = useState<any | null>(null);
+
+  // Estados para Fechamentos
+  const [myClosings, setMyClosings] = useState<CourseClosing[]>([]);
+  const [isLoadingClosings, setIsLoadingClosings] = useState(false);
+  const [viewingClosingExpenses, setViewingClosingExpenses] = useState<{ closing: CourseClosing; expenses: CourseClosingExpense[] } | null>(null);
+  const [isLoadingClosingExpenses, setIsLoadingClosingExpenses] = useState(false);
 
   // Estados para Financeiro
   const [receivables, setReceivables] = useState<any[]>([]);
@@ -87,6 +93,31 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           setPendingTicketsCount(pending);
       } catch (e) {
           console.error("Erro ao buscar notificações de suporte:", e);
+      }
+  };
+
+  const fetchMyClosings = async () => {
+      setIsLoadingClosings(true);
+      try {
+          const data = await appBackend.fetchInstructorClosings(instructor.id);
+          setMyClosings(data);
+      } catch (e) {
+          console.error("Erro ao buscar fechamentos:", e);
+      } finally {
+          setIsLoadingClosings(false);
+      }
+  };
+
+  const handleViewClosingExpenses = async (closing: CourseClosing) => {
+      setIsLoadingClosingExpenses(true);
+      setViewingClosingExpenses({ closing, expenses: [] });
+      try {
+          const data = await appBackend.fetchCourseClosingExpenses(closing.id);
+          setViewingClosingExpenses({ closing, expenses: data });
+      } catch (e) {
+          console.error("Erro ao buscar despesas:", e);
+      } finally {
+          setIsLoadingClosingExpenses(false);
       }
   };
 
@@ -425,6 +456,18 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                 )}
             >
                 <DollarSign size={18} /> Financeiro
+            </button>
+            <button 
+                onClick={() => { setActiveViewTab('fechamentos'); if (myClosings.length === 0) fetchMyClosings(); }}
+                className={clsx(
+                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap",
+                    activeViewTab === 'fechamentos' ? "bg-white text-orange-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600"
+                )}
+            >
+                <FileText size={18} /> Fechamentos
+                {myClosings.length > 0 && (
+                    <span className="ml-1 bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px]">{myClosings.length}</span>
+                )}
             </button>
             <button
                 onClick={() => setActiveViewTab('pending_contracts')}
@@ -868,6 +911,80 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                     </>
                 )}
             </div>
+        ) : activeViewTab === 'fechamentos' ? (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="flex items-center justify-between px-2">
+                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                        <FileText size={24} className="text-emerald-500" /> Meus Fechamentos de Curso
+                    </h2>
+                </div>
+                {isLoadingClosings ? (
+                    <div className="flex justify-center py-20"><Loader2 className="animate-spin text-purple-600" size={32} /></div>
+                ) : myClosings.length === 0 ? (
+                    <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
+                        <FileText size={48} className="mx-auto text-slate-300 mb-4" />
+                        <h3 className="text-lg font-black text-slate-700">Nenhum fechamento enviado</h3>
+                        <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium">
+                            Quando você enviar um fechamento de curso, ele aparecerá aqui.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {myClosings.map(closing => {
+                            const statusColors: Record<string, string> = {
+                                pendente: 'bg-amber-50 text-amber-700 border-amber-200',
+                                aprovado: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                                rejeitado: 'bg-red-50 text-red-700 border-red-200',
+                            };
+                            const statusLabels: Record<string, string> = {
+                                pendente: 'Pendente',
+                                aprovado: 'Aprovado',
+                                rejeitado: 'Rejeitado',
+                            };
+                            return (
+                                <div key={closing.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg transition-all">
+                                    <div className="p-6 flex flex-col md:flex-row md:items-center gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <h3 className="text-base font-black text-slate-800 truncate">{closing.course_name}</h3>
+                                                <span className="text-[9px] font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-500">#{closing.class_code}</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 font-medium">
+                                                <span className="flex items-center gap-1"><MapPin size={12} className="text-purple-500" /> {closing.city}</span>
+                                                <span className="flex items-center gap-1">
+                                                    <Calendar size={12} className="text-slate-400" />
+                                                    {closing.date_start ? new Date(closing.date_start + 'T00:00:00').toLocaleDateString('pt-BR') : '--'} — {closing.date_end ? new Date(closing.date_end + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}
+                                                </span>
+                                                <span className="flex items-center gap-1">
+                                                    <Clock size={12} className="text-slate-400" />
+                                                    Enviado em {closing.created_at ? new Date(closing.created_at).toLocaleDateString('pt-BR') : '--'}
+                                                </span>
+                                            </div>
+                                            {closing.admin_notes && closing.status !== 'pendente' && (
+                                                <div className="mt-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Observação da Administração</p>
+                                                    <p className="text-xs text-slate-600">{closing.admin_notes}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <span className={clsx("text-[9px] font-black px-3 py-1.5 rounded-full border uppercase", statusColors[closing.status] || 'bg-slate-50 text-slate-500 border-slate-200')}>
+                                                {statusLabels[closing.status] || closing.status}
+                                            </span>
+                                            <button
+                                                onClick={() => handleViewClosingExpenses(closing)}
+                                                className="px-4 py-2 bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                                            >
+                                                <ExternalLink size={12} /> Detalhes
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
         ) : activeViewTab === 'pending_contracts' ? (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2">
@@ -1183,7 +1300,119 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
               instructor={instructor}
               classData={courseClosingClass}
               onClose={() => setCourseClosingClass(null)}
+              onSuccess={() => { if (myClosings.length > 0) fetchMyClosings(); }}
           />
+      )}
+
+      {viewingClosingExpenses && (
+          <div className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl my-8 animate-in zoom-in-95 overflow-hidden">
+                  <div className="px-8 py-6 border-b bg-gradient-to-r from-emerald-600 to-teal-700 flex justify-between items-center">
+                      <div>
+                          <h2 className="text-xl font-black text-white">Detalhes do Fechamento</h2>
+                          <p className="text-emerald-200 text-xs font-medium mt-1">
+                              {viewingClosingExpenses.closing.course_name} — #{viewingClosingExpenses.closing.class_code}
+                          </p>
+                      </div>
+                      <button onClick={() => setViewingClosingExpenses(null)} className="p-2 hover:bg-white/20 rounded-full text-white/80 hover:text-white transition-colors">
+                          <X size={24} />
+                      </button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Cidade</p>
+                              <p className="text-sm font-bold text-slate-700">{viewingClosingExpenses.closing.city}</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Turma</p>
+                              <p className="text-sm font-bold text-slate-700">#{viewingClosingExpenses.closing.class_code}</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Início</p>
+                              <p className="text-sm font-bold text-slate-700">{viewingClosingExpenses.closing.date_start ? new Date(viewingClosingExpenses.closing.date_start + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Término</p>
+                              <p className="text-sm font-bold text-slate-700">{viewingClosingExpenses.closing.date_end ? new Date(viewingClosingExpenses.closing.date_end + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</p>
+                          </div>
+                      </div>
+
+                      <div>
+                          <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2 mb-3">
+                              <DollarSign size={14} className="text-emerald-600" /> Despesas Informadas
+                          </h3>
+                          {isLoadingClosingExpenses ? (
+                              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-emerald-600" size={24} /></div>
+                          ) : viewingClosingExpenses.expenses.length === 0 ? (
+                              <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                  <p className="text-sm font-bold text-slate-400">Nenhuma despesa registrada</p>
+                              </div>
+                          ) : (
+                              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                  <table className="w-full text-sm">
+                                      <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                                          <tr>
+                                              <th className="px-4 py-2.5 text-left">Categoria</th>
+                                              <th className="px-4 py-2.5 text-right">Valor</th>
+                                              <th className="px-4 py-2.5 text-left">Observação</th>
+                                              <th className="px-4 py-2.5 text-center">Comprovante</th>
+                                          </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                          {viewingClosingExpenses.expenses.map(ex => (
+                                              <tr key={ex.id} className="hover:bg-slate-50">
+                                                  <td className="px-4 py-3 font-bold text-slate-700">{ex.category}</td>
+                                                  <td className="px-4 py-3 text-right font-bold text-slate-700">
+                                                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ex.amount)}
+                                                  </td>
+                                                  <td className="px-4 py-3 text-xs text-slate-500 max-w-[200px] truncate">{ex.observation || '--'}</td>
+                                                  <td className="px-4 py-3 text-center">
+                                                      {ex.receipt_url ? (
+                                                          <a href={ex.receipt_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-800">
+                                                              <ExternalLink size={12} /> Ver
+                                                          </a>
+                                                      ) : (
+                                                          <span className="text-xs text-slate-400">--</span>
+                                                      )}
+                                                  </td>
+                                              </tr>
+                                          ))}
+                                      </tbody>
+                                      <tfoot className="bg-slate-50 border-t">
+                                          <tr>
+                                              <td className="px-4 py-3 font-black text-xs text-slate-500 uppercase">Total</td>
+                                              <td className="px-4 py-3 text-right font-black text-slate-800">
+                                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                                                      viewingClosingExpenses.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+                                                  )}
+                                              </td>
+                                              <td colSpan={2}></td>
+                                          </tr>
+                                      </tfoot>
+                                  </table>
+                              </div>
+                          )}
+                      </div>
+
+                      {viewingClosingExpenses.closing.admin_notes && viewingClosingExpenses.closing.status !== 'pendente' && (
+                          <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                              <p className="text-[9px] font-black text-blue-500 uppercase mb-1">Observação da Administração</p>
+                              <p className="text-sm text-blue-800">{viewingClosingExpenses.closing.admin_notes}</p>
+                          </div>
+                      )}
+
+                      <div className="flex justify-end pt-4 border-t border-slate-100">
+                          <button
+                              onClick={() => setViewingClosingExpenses(null)}
+                              className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-xl transition-all"
+                          >
+                              Fechar
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
 
       <SupportTicketModal 

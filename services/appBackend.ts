@@ -2237,34 +2237,34 @@ export const appBackend = {
   },
 
   fetchCourseClosings: async (): Promise<CourseClosing[]> => {
-    if (!isConfigured) return [];
+    if (!isConfigured) throw new Error('Supabase não configurado.');
     const { data, error } = await supabase
       .from('crm_course_closings')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) { console.error('[CourseClosing] Erro:', error); return []; }
+    if (error) throw new Error(`Erro ao buscar fechamentos: ${error.message}`);
     return data || [];
   },
 
   fetchCourseClosingExpenses: async (closingId: string): Promise<CourseClosingExpense[]> => {
-    if (!isConfigured) return [];
+    if (!isConfigured) throw new Error('Supabase não configurado.');
     const { data, error } = await supabase
       .from('crm_course_closing_expenses')
       .select('*')
       .eq('closing_id', closingId)
       .order('created_at', { ascending: true });
-    if (error) { console.error('[CourseClosing] Erro despesas:', error); return []; }
+    if (error) throw new Error(`Erro ao buscar despesas: ${error.message}`);
     return data || [];
   },
 
   fetchInstructorClosings: async (instructorId: string): Promise<CourseClosing[]> => {
-    if (!isConfigured) return [];
+    if (!isConfigured) throw new Error('Supabase não configurado.');
     const { data, error } = await supabase
       .from('crm_course_closings')
       .select('*')
       .eq('instructor_id', instructorId)
       .order('created_at', { ascending: false });
-    if (error) { console.error('[CourseClosing] Erro:', error); return []; }
+    if (error) throw new Error(`Erro ao buscar fechamentos do instrutor: ${error.message}`);
     return data || [];
   },
 

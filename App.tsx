@@ -47,6 +47,7 @@ import { PagBankManager } from './components/PagBankManager';
 import { CheckoutPage } from './components/CheckoutPage';
 import { AppManual } from './components/AppManual';
 import { StudioDigitalManager } from './components/StudioDigitalManager';
+import { ApostilaManager } from './components/ApostilaManager';
 import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { pushService } from './services/pushService';
 import { VollMarketingManager } from './components/VollMarketingManager';
@@ -63,11 +64,11 @@ import {
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
   LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser, Smartphone,
-  Fingerprint, ArrowLeftRight, Megaphone
+  Fingerprint, ArrowLeftRight, Megaphone, BookOpen
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing' | 'notas_fiscais';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing' | 'notas_fiscais' | 'apostila_digital';
 
 class MarketingErrorBoundary extends React.Component<
   { children: React.ReactNode; onBack: () => void },
@@ -792,6 +793,7 @@ function App() {
                                 {canAccess('students') && <button onClick={() => setDashboardTab('students')} title="Alunos" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'students' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Users size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Alunos</span>}</button>}
                                 {canAccess('certificates') && <button onClick={() => setDashboardTab('certificates')} title="Certificados" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'certificates' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Award size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Certificados</span>}</button>}
                                 {canAccess('studio_digital') && <button onClick={() => setDashboardTab('studio_digital')} title="Studio Digital" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'studio_digital' ? "bg-amber-50 text-amber-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MonitorPlay size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Studio Digital</span>}</button>}
+                                <button onClick={() => setDashboardTab('apostila_digital')} title="Apostila Digital" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'apostila_digital' ? "bg-rose-50 text-rose-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><BookOpen size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Apostila Digital</span>}</button>
                                 {canAccess('products') && <button onClick={() => setDashboardTab('products')} title="Produtos e Serviços" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'products' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><ShoppingBag size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Produtos e Serviços</span>}</button>}
                                 {canAccess('franchises') && <button onClick={() => setDashboardTab('franchises')} title="Franquias" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'franchises' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Store size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Franquias</span>}</button>}
                                 {canAccess('partner_studios') && <button onClick={() => setDashboardTab('partner_studios')} title="Studios Parceiros" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'partner_studios' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Building2 size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Studios Parceiros</span>}</button>}
@@ -923,6 +925,7 @@ function App() {
                         {dashboardTab === 'app_manual' && <AppManual />}
                         {dashboardTab === 'cpf_lookup' && <CpfLookup />}
                         {dashboardTab === 'studio_digital' && <StudioDigitalManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'apostila_digital' && <ApostilaManager onBack={() => setDashboardTab('overview')} />}
                     </div>
                 </div>
             </main>}

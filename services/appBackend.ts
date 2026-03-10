@@ -10,7 +10,8 @@ import {
   WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig,
   ContaAzulProductMapping, FranchisePresentationSection,
   StudioDigitalEquipment, StudioDigitalExercise,
-  FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings
+  FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings,
+  Apostila, ApostilaAnnotation, ApostilaProgress
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { brevoService } from './brevoService';
@@ -2052,5 +2053,114 @@ export const appBackend = {
   updateFranchiseMeetingBooking: async (id: string, updates: Partial<FranchiseMeetingBooking>): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('franchise_meeting_bookings').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+  },
+
+  // ── Apostila Digital ─────────────────────────────────────────
+
+  getApostilas: async (onlyActive?: boolean): Promise<Apostila[]> => {
+    if (!isConfigured) return [];
+    let q = supabase.from('crm_apostilas').select('*').order('created_at', { ascending: false });
+    if (onlyActive) q = q.eq('is_active', true);
+    const { data, error } = await q;
+    if (error) console.error('[Apostila] Erro ao buscar apostilas:', error);
+    return (data || []) as Apostila[];
+  },
+
+  getApostilaAnnotations: async (apostilaId: string, studentCpf: string): Promise<ApostilaAnnotation[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+      .from('crm_apostila_annotations')
+      .select('*')
+      .eq('apostila_id', apostilaId)
+      .eq('student_cpf', studentCpf)
+      .order('page_number');
+    if (error) console.error('[Apostila] Erro ao buscar anotações:', error);
+    return (data || []) as ApostilaAnnotation[];
+  },
+
+  saveApostilaAnnotation: async (annotation: {
+    apostila_id: string;
+    student_cpf: string;
+    page_number: number;
+    fabric_json: any;
+    bookmarked?: boolean;
+  }): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_apostila_annotations').upsert({
+      apostila_id: annotation.apostila_id,
+      student_cpf: annotation.student_cpf,
+      page_number: annotation.page_number,
+      fabric_json: annotation.fabric_json,
+      bookmarked: annotation.bookmarked ?? false,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'apostila_id,student_cpf,page_number' });
+    if (error) console.error('[Apostila] Erro ao salvar anotação:', error);
+  },
+
+  toggleApostilaBookmark: async (apostilaId: string, studentCpf: string, pageNumber: number, bookmarked: boolean): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_apostila_annotations').upsert({
+      apostila_id: apostilaId,
+      student_cpf: studentCpf,
+      page_number: pageNumber,
+      bookmarked,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'apostila_id,student_cpf,page_number' });
+    if (error) console.error('[Apostila] Erro ao alternar favorito:', error);
+  },
+
+  getApostilaProgress: async (apostilaId: string, studentCpf: string): Promise<ApostilaProgress | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase
+      .from('crm_apostila_progress')
+      .select('*')
+      .eq('apostila_id', apostilaId)
+      .eq('student_cpf', studentCpf)
+      .maybeSingle();
+    return data as ApostilaProgress | null;
+  },
+
+  saveApostilaProgress: async (progress: {
+    apostila_id: string;
+    student_cpf: string;
+    last_page: number;
+    pages_visited: number[];
+  }): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_apostila_progress').upsert({
+      apostila_id: progress.apostila_id,
+      student_cpf: progress.student_cpf,
+      last_page: progress.last_page,
+      pages_visited: progress.pages_visited,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'apostila_id,student_cpf' });
+    if (error) console.error('[Apostila] Erro ao salvar progresso:', error);
+  },
+
+  upsertApostila: async (apostila: Partial<Apostila> & { title: string; pdf_url: string }): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_apostilas').upsert({
+      id: apostila.id || crypto.randomUUID(),
+      title: apostila.title,
+      description: apostila.description || '',
+      pdf_url: apostila.pdf_url,
+      total_pages: apostila.total_pages || 0,
+      course_id: apostila.course_id || null,
+      is_active: apostila.is_active ?? true,
+    });
+    if (error) console.error('[Apostila] Erro ao salvar apostila:', error);
+  },
+
+  deleteApostila: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_apostila_annotations').delete().eq('apostila_id', id);
+    await supabase.from('crm_apostila_progress').delete().eq('apostila_id', id);
+    const { error } = await supabase.from('crm_apostilas').delete().eq('id', id);
+    if (error) console.error('[Apostila] Erro ao excluir apostila:', error);
+  },
+
+  toggleApostilaActive: async (id: string, isActive: boolean): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_apostilas').update({ is_active: isActive }).eq('id', id);
   },
 };

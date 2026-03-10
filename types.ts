@@ -1377,3 +1377,35 @@ export interface FranchiseMeetingSlot {
   end: string;
   available: boolean;
 }
+
+// ── Apostila Digital ────────────────────────────────────────
+
+export interface Apostila {
+  id: string;
+  title: string;
+  description: string;
+  pdf_url: string;
+  total_pages: number;
+  course_id?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ApostilaAnnotation {
+  id: string;
+  apostila_id: string;
+  student_cpf: string;
+  page_number: number;
+  fabric_json: any;
+  bookmarked: boolean;
+  updated_at: string;
+}
+
+export interface ApostilaProgress {
+  id: string;
+  apostila_id: string;
+  student_cpf: string;
+  last_page: number;
+  pages_visited: number[];
+  updated_at: string;
+}

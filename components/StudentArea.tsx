@@ -19,6 +19,7 @@ import { CheckoutPage } from './CheckoutPage';
 import { FormViewer } from './FormViewer';
 import { GoogleGenAI } from "@google/genai";
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
+import { DigitalWorkbook } from './DigitalWorkbook';
 import clsx from 'clsx';
 
 interface StudentAreaProps {
@@ -28,7 +29,7 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation' | 'studio_digital'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation' | 'studio_digital' | 'digital_workbook'>('classes');
     const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
     const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -1775,6 +1776,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' },
                         { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' },
                         { id: 'learning_profile', label: 'Meu Perfil', icon: Brain, color: 'text-pink-600' },
+                        { id: 'digital_workbook', label: 'Apostila Digital', icon: BookOpen, color: 'text-rose-600' },
                         { id: 'studio_digital', label: 'Studio Digital', icon: Sparkles, color: 'text-amber-600' },
                         { id: 'ai_tutor', label: 'Tutor IA', icon: Bot, color: 'text-purple-600' },
                         { id: 'franchise_presentation', label: 'Apresentação Franquia', icon: Store, color: 'text-teal-600' }
@@ -2340,6 +2342,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {/* ── Apostila Digital ──────────────────────────────────── */}
+                    {activeTab === 'digital_workbook' && (
+                        <DigitalWorkbook studentCpf={student.cpf} />
                     )}
 
                     {/* ── Studio Digital ─────────────────────────────────────── */}

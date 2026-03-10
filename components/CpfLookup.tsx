@@ -107,13 +107,34 @@ export const CpfLookup: React.FC<CpfLookupProps> = ({ onBack }) => {
     return Array.from(names).filter(n => n.trim());
   };
 
+  const extractLinkedDocuments = (r: CpfLookupResult): string[] => {
+    if (r.linked_documents?.all_documents?.length) return r.linked_documents.all_documents;
+    const docs = new Set<string>();
+    const cleanInput = cpfInput.replace(/\D/g, '');
+    if (cleanInput.length >= 11) docs.add(cleanInput);
+    const extractClean = (val: string | undefined | null) => {
+      if (!val) return;
+      const clean = val.replace(/\D/g, '');
+      if (clean.length >= 11) docs.add(clean);
+    };
+    extractClean(r.instructor?.cnpj);
+    extractClean(r.instructor?.cpf);
+    extractClean(r.franchise?.cnpj);
+    extractClean(r.franchise?.cpf);
+    extractClean(r.partner_studio?.cnpj);
+    (r.deals || []).forEach((d: any) => {
+      extractClean(d.billing_cnpj);
+    });
+    return Array.from(docs);
+  };
+
   const loadContaAzulData = async (r: CpfLookupResult) => {
     if (contaAzulLoaded) return;
     setIsLoadingContaAzul(true);
     try {
       const cleanCpf = cpfInput.replace(/\D/g, '');
       const names = extractKnownNames(r);
-      const linkedDocs = r.linked_documents?.all_documents || [];
+      const linkedDocs = extractLinkedDocuments(r);
       const { receber, pagar } = await appBackend.lookupContaAzulByCpfAndName(cleanCpf, names, linkedDocs);
 
       const rpcReceber = r.conta_azul_receber || [];

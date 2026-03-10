@@ -133,10 +133,48 @@ export const ContaAzulManager: React.FC = () => {
         setCpfSearchError((result as any).error);
         return;
       }
-      const receber = (result as any).conta_azul_receber ?? [];
-      const pagar = (result as any).conta_azul_pagar ?? [];
-      setCpfReceber(Array.isArray(receber) ? receber : []);
-      setCpfPagar(Array.isArray(pagar) ? pagar : []);
+      const rpcReceber = (result as any).conta_azul_receber ?? [];
+      const rpcPagar = (result as any).conta_azul_pagar ?? [];
+
+      const linkedDocs = new Set<string>();
+      linkedDocs.add(clean);
+      const addDoc = (val: string | undefined | null) => {
+        if (!val) return;
+        const d = val.replace(/\D/g, '');
+        if (d.length >= 11) linkedDocs.add(d);
+      };
+      if ((result as any).linked_documents?.all_documents) {
+        ((result as any).linked_documents.all_documents as string[]).forEach(d => linkedDocs.add(d));
+      } else {
+        addDoc((result as any).instructor?.cnpj);
+        addDoc((result as any).instructor?.cpf);
+        addDoc((result as any).franchise?.cnpj);
+        addDoc((result as any).franchise?.cpf);
+        addDoc((result as any).partner_studio?.cnpj);
+        ((result as any).deals || []).forEach((d: any) => addDoc(d.billing_cnpj));
+      }
+
+      const names: string[] = [];
+      const addName = (val: string | undefined | null) => { if (val?.trim()) names.push(val.trim()); };
+      addName((result as any).profile?.full_name);
+      addName((result as any).instructor?.full_name);
+      addName((result as any).instructor?.company_name);
+      addName((result as any).student?.full_name);
+      addName((result as any).collaborator?.full_name);
+
+      const { receber: extraReceber, pagar: extraPagar } = await appBackend.lookupContaAzulByCpfAndName(clean, names, Array.from(linkedDocs));
+
+      const dedup = (arr: any[]) => {
+        const seen = new Set<string>();
+        return arr.filter(item => {
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+      };
+
+      setCpfReceber(dedup([...(Array.isArray(rpcReceber) ? rpcReceber : []), ...extraReceber]));
+      setCpfPagar(dedup([...(Array.isArray(rpcPagar) ? rpcPagar : []), ...extraPagar]));
     } catch (err: any) {
       setCpfSearchError(err.message || 'Erro ao buscar dados.');
     } finally {

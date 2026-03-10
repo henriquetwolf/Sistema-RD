@@ -41,7 +41,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
       appBackend.client.from('crm_teachers').select('id').ilike('cpf', `%${clean}%`).eq('is_active', true).limit(1),
       appBackend.client.from('crm_alunos').select('id').eq('cpf', clean).limit(1),
       appBackend.client.from('crm_collaborators').select('id').ilike('cpf', `%${clean}%`).eq('status', 'active').limit(1),
-      appBackend.client.from('crm_partner_studios').select('id').ilike('cpf', `%${clean}%`).eq('status', 'Ativo').limit(1),
+      appBackend.client.from('crm_partner_studios').select('id').ilike('cpf', `%${clean}%`).in('status', ['active', 'Ativo']).limit(1),
       appBackend.client.from('crm_franchises').select('id').ilike('cpf', `%${clean}%`).limit(1),
     ]);
 

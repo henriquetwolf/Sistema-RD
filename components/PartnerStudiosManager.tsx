@@ -4,7 +4,7 @@ import {
   Building2, Plus, Search, MoreVertical, MapPin, Phone, Mail, 
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, DollarSign, User, 
   Dumbbell, CheckSquare, Paperclip, Filter, RefreshCw, KeyRound,
-  Users, Layers, Ruler, Tv, Info, Globe
+  Users, Layers, Ruler, Tv, Info, Globe, Power
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -179,6 +179,25 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
       setActiveMenuId(null);
   };
 
+  const handleToggleStatus = async (studio: PartnerStudio) => {
+      const newStatus = studio.status === 'active' ? 'inactive' : 'active';
+      const label = newStatus === 'active' ? 'ATIVAR' : 'DESATIVAR';
+      if (!confirm(`Deseja ${label} o studio "${studio.fantasyName}"?`)) return;
+      try {
+          await appBackend.savePartnerStudio({ ...studio, status: newStatus });
+          await appBackend.logActivity({
+              action: 'update',
+              module: 'partner_studios',
+              details: `${newStatus === 'active' ? 'Ativou' : 'Desativou'} studio parceiro: ${studio.fantasyName}`,
+              recordId: studio.id
+          });
+          await fetchStudios();
+      } catch (e: any) {
+          alert(`Erro ao alterar status: ${e.message}`);
+      }
+      setActiveMenuId(null);
+  };
+
   const filtered = studios.filter(s => {
       const matchesSearch = 
           (s.fantasyName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -279,7 +298,10 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
                                       <MoreVertical size={18} />
                                   </button>
                                   {activeMenuId === studio.id && (
-                                      <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                      <div className="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                          <button onClick={() => handleToggleStatus(studio)} className={clsx("w-full text-left px-3 py-2 text-xs flex items-center gap-2", studio.status === 'active' ? "text-orange-600 hover:bg-orange-50" : "text-green-600 hover:bg-green-50")}>
+                                              <Power size={12} /> {studio.status === 'active' ? 'Desativar' : 'Ativar'}
+                                          </button>
                                           <button onClick={() => openEdit(studio)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                                               <Edit2 size={12} /> Editar
                                           </button>

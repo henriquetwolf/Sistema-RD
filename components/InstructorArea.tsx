@@ -13,6 +13,7 @@ import { Teacher } from './TeachersManager';
 import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
+import { CourseClosingForm } from './CourseClosingForm';
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
@@ -37,6 +38,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [viewingContract, setViewingContract] = useState<Contract | null>(null);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
+  const [courseClosingClass, setCourseClosingClass] = useState<any | null>(null);
 
   // Estados para Financeiro
   const [receivables, setReceivables] = useState<any[]>([]);
@@ -584,6 +586,13 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                             >
                                                 <span className="flex items-center gap-2"><Info size={14} /> Ver Detalhes Logísticos</span>
                                                 <ChevronRight size={14} className="group-hover/det:translate-x-1 transition-transform" />
+                                            </button>
+                                            <button 
+                                                onClick={() => setCourseClosingClass(cls)}
+                                                className="px-8 py-4 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-white transition-all border-b border-slate-100 group/closing"
+                                            >
+                                                <span className="flex items-center gap-2"><FileText size={14} /> Fechamento de Curso</span>
+                                                <ChevronRight size={14} className="group-hover/closing:translate-x-1 transition-transform" />
                                             </button>
                                             <button 
                                                 onClick={() => setSelectedClass({
@@ -1167,6 +1176,14 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                   </div>
               </div>
           </div>
+      )}
+
+      {courseClosingClass && (
+          <CourseClosingForm
+              instructor={instructor}
+              classData={courseClosingClass}
+              onClose={() => setCourseClosingClass(null)}
+          />
       )}
 
       <SupportTicketModal 

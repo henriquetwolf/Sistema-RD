@@ -11,7 +11,8 @@ import {
   ContaAzulProductMapping, FranchisePresentationSection,
   StudioDigitalEquipment, StudioDigitalExercise,
   FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings,
-  Apostila, ApostilaAnnotation, ApostilaProgress
+  Apostila, ApostilaAnnotation, ApostilaProgress,
+  CourseClosing, CourseClosingExpense
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { brevoService } from './brevoService';
@@ -2188,5 +2189,92 @@ export const appBackend = {
   toggleApostilaActive: async (id: string, isActive: boolean): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_apostilas').update({ is_active: isActive }).eq('id', id);
+  },
+
+  // ── Fechamento de Curso ─────────────────────────────────────
+
+  uploadClosingReceipt: async (file: File): Promise<string> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const ext = file.name.split('.').pop() || 'pdf';
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('course-closings').upload(path, file, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: false,
+    });
+    if (error) throw new Error(`Erro no upload: ${error.message}`);
+    const { data: urlData } = supabase.storage.from('course-closings').getPublicUrl(path);
+    return urlData.publicUrl;
+  },
+
+  submitCourseClosing: async (
+    closing: Omit<CourseClosing, 'id' | 'created_at' | 'updated_at' | 'expenses'>,
+    expenses: Omit<CourseClosingExpense, 'id' | 'closing_id' | 'created_at'>[]
+  ): Promise<string> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const closingId = crypto.randomUUID();
+    const { error: cErr } = await supabase.from('crm_course_closings').insert({
+      id: closingId,
+      ...closing,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    if (cErr) throw new Error(`Erro ao salvar fechamento: ${cErr.message}`);
+
+    if (expenses.length > 0) {
+      const rows = expenses.map(e => ({
+        id: crypto.randomUUID(),
+        closing_id: closingId,
+        category: e.category,
+        amount: e.amount,
+        receipt_url: e.receipt_url,
+        observation: e.observation,
+        created_at: new Date().toISOString(),
+      }));
+      const { error: eErr } = await supabase.from('crm_course_closing_expenses').insert(rows);
+      if (eErr) throw new Error(`Erro ao salvar despesas: ${eErr.message}`);
+    }
+    return closingId;
+  },
+
+  fetchCourseClosings: async (): Promise<CourseClosing[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+      .from('crm_course_closings')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) { console.error('[CourseClosing] Erro:', error); return []; }
+    return data || [];
+  },
+
+  fetchCourseClosingExpenses: async (closingId: string): Promise<CourseClosingExpense[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+      .from('crm_course_closing_expenses')
+      .select('*')
+      .eq('closing_id', closingId)
+      .order('created_at', { ascending: true });
+    if (error) { console.error('[CourseClosing] Erro despesas:', error); return []; }
+    return data || [];
+  },
+
+  fetchInstructorClosings: async (instructorId: string): Promise<CourseClosing[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+      .from('crm_course_closings')
+      .select('*')
+      .eq('instructor_id', instructorId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('[CourseClosing] Erro:', error); return []; }
+    return data || [];
+  },
+
+  updateCourseClosingStatus: async (id: string, status: string, adminNotes: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_course_closings').update({
+      status,
+      admin_notes: adminNotes,
+      updated_at: new Date().toISOString(),
+    }).eq('id', id);
+    if (error) throw new Error(`Erro ao atualizar status: ${error.message}`);
   },
 };

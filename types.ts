@@ -1409,3 +1409,40 @@ export interface ApostilaProgress {
   pages_visited: number[];
   updated_at: string;
 }
+
+// ── Fechamento de Curso ─────────────────────────────────────
+
+export interface CourseClosing {
+  id: string;
+  instructor_id: string;
+  instructor_name: string;
+  instructor_email: string;
+  instructor_phone: string;
+  class_id: string;
+  class_code: string;
+  course_name: string;
+  city: string;
+  class_number: string;
+  date_start: string;
+  date_end: string;
+  pix_key: string;
+  bank: string;
+  agency: string;
+  account: string;
+  account_holder: string;
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  admin_notes: string;
+  created_at: string;
+  updated_at: string;
+  expenses?: CourseClosingExpense[];
+}
+
+export interface CourseClosingExpense {
+  id: string;
+  closing_id: string;
+  category: string;
+  amount: number;
+  receipt_url: string;
+  observation: string;
+  created_at: string;
+}

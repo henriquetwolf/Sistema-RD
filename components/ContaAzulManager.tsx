@@ -679,6 +679,10 @@ export const ContaAzulManager: React.FC = () => {
         const result = await contaAzulService.triggerSyncChunked(stepType, accId, (chunk, total) => {
           setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}`);
         });
+        if ((result as any).errors?.length) {
+          console.warn(`[Sync] ${stepLabel} chunks com erro:`, (result as any).errors);
+          setSyncMessage(`${prefix}${stepLabel}: ${result.sincronizados} sincronizados, ${(result as any).errors.length} chunk(s) com erro (ver console)`);
+        }
         return { synced: result.sincronizados ?? 0 };
       }
       setSyncMessage(`${prefix}Sincronizando ${stepLabel} (rápido)...`);

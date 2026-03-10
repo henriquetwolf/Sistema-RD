@@ -1456,3 +1456,34 @@ export interface CourseClosingHistory {
   edited_at: string;
   reason: string;
 }
+
+// ── Aluguel de Curso ─────────────────────────────────────
+
+export interface CourseRental {
+  id: string;
+  studio_id: string;
+  studio_name: string;
+  responsible_name: string;
+  cpf: string;
+  phone: string;
+  legal_name: string;
+  cnpj: string;
+  class_id: string;
+  class_code: string;
+  course_name: string;
+  city: string;
+  rental_type: 'aluguel' | 'intervalo' | 'aluguel_intervalo';
+  rental_value: number;
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  admin_notes: string;
+  created_at: string;
+  updated_at: string;
+  receipts?: CourseRentalReceipt[];
+}
+
+export interface CourseRentalReceipt {
+  id: string;
+  rental_id: string;
+  receipt_url: string;
+  created_at: string;
+}

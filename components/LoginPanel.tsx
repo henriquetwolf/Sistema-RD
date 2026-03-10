@@ -112,112 +112,116 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
             }
         }
 
-        // 3. TENTAR STUDIO PARCEIRO
+        // 3. TENTAR STUDIO PARCEIRO (email + CPF)
+        const inputCpf = cleanPassword.replace(/\D/g, '');
+
         const { data: studio } = await appBackend.client
             .from('crm_partner_studios')
-            .select('id, fantasy_name, responsible_name, email, cnpj, cpf, status, password')
+            .select('id, fantasy_name, responsible_name, email, cnpj, cpf, status')
             .eq('email', cleanEmail)
-            .eq('password', cleanPassword)
             .maybeSingle();
 
-        if (studio && studio.status === 'active') {
-            const cpf = (studio.cpf || '').replace(/\D/g, '');
-            if (cpf.length >= 11 && onMultiRoleLogin) {
-                const allRoles = await detectRolesByCpf(cpf);
-                if (allRoles.length > 1) {
-                    onMultiRoleLogin({ cpf, name: studio.responsible_name, email: studio.email, roles: allRoles });
-                    return;
+        if (studio && (studio.status === 'active' || studio.status === 'Ativo')) {
+            const studioCpf = (studio.cpf || '').replace(/\D/g, '');
+            if (studioCpf && studioCpf === inputCpf) {
+                if (studioCpf.length >= 11 && onMultiRoleLogin) {
+                    const allRoles = await detectRolesByCpf(studioCpf);
+                    if (allRoles.length > 1) {
+                        onMultiRoleLogin({ cpf: studioCpf, name: studio.responsible_name, email: studio.email, roles: allRoles });
+                        return;
+                    }
                 }
+                const session: PartnerStudioSession = {
+                    id: studio.id,
+                    fantasyName: studio.fantasy_name,
+                    responsibleName: studio.responsible_name,
+                    email: studio.email,
+                    cnpj: studio.cnpj
+                };
+                if (onStudioLogin) onStudioLogin(session);
+                return;
             }
-            const session: PartnerStudioSession = {
-                id: studio.id,
-                fantasyName: studio.fantasy_name,
-                responsibleName: studio.responsible_name,
-                email: studio.email,
-                cnpj: studio.cnpj
-            };
-            if (onStudioLogin) onStudioLogin(session);
-            return;
         }
 
-        // 4. TENTAR INSTRUTOR
+        // 4. TENTAR INSTRUTOR (email + CPF)
         const { data: instr } = await appBackend.client
             .from('crm_teachers')
             .select('*')
             .eq('email', cleanEmail)
-            .eq('password', cleanPassword)
             .maybeSingle();
 
         if (instr && instr.is_active) {
-            const cpf = (instr.cpf || '').replace(/\D/g, '');
-            if (cpf.length >= 11 && onMultiRoleLogin) {
-                const allRoles = await detectRolesByCpf(cpf);
-                if (allRoles.length > 1) {
-                    onMultiRoleLogin({ cpf, name: instr.full_name, email: instr.email, roles: allRoles });
-                    return;
+            const instrCpf = (instr.cpf || '').replace(/\D/g, '');
+            if (instrCpf && instrCpf === inputCpf) {
+                if (instrCpf.length >= 11 && onMultiRoleLogin) {
+                    const allRoles = await detectRolesByCpf(instrCpf);
+                    if (allRoles.length > 1) {
+                        onMultiRoleLogin({ cpf: instrCpf, name: instr.full_name, email: instr.email, roles: allRoles });
+                        return;
+                    }
                 }
+                const teacher: Teacher = {
+                    id: instr.id, 
+                    fullName: instr.full_name, 
+                    email: instr.email, 
+                    phone: instr.phone, 
+                    photoUrl: instr.photo_url,
+                    rg: instr.rg || '', 
+                    cpf: instr.cpf || '', 
+                    birthDate: instr.birth_date || '', 
+                    maritalStatus: instr.marital_status || '', 
+                    motherName: instr.mother_name || '', 
+                    address: instr.address || '', 
+                    district: instr.district || '', 
+                    city: instr.city || '', 
+                    state: instr.state || '', 
+                    cep: instr.cep || '', 
+                    emergencyContactName: instr.emergency_contact_name || '', 
+                    emergencyContactPhone: instr.emergency_contact_phone || '', 
+                    profession: instr.profession || '', 
+                    councilNumber: instr.council_number || '', 
+                    isCouncilActive: !!instr.is_council_active, 
+                    cnpj: instr.cnpj || '', 
+                    companyName: instr.company_name || '', 
+                    hasCnpjActive: !!instr.has_cnpj_active, 
+                    academicFormation: instr.academic_formation || '', 
+                    otherFormation: instr.other_formation || '', 
+                    courseType: instr.course_type || '', 
+                    teacherLevel: instr.teacher_level || '', 
+                    levelHonorarium: Number(instr.level_honorarium || 0), 
+                    isActive: !!instr.is_active, 
+                    bank: instr.bank || '', 
+                    agency: instr.agency || '', 
+                    accountNumber: instr.account_number || '', 
+                    accountDigit: instr.account_digit || '', 
+                    hasPjAccount: !!instr.has_pj_account, 
+                    pixKeyPj: instr.pix_key_pj || '', 
+                    pixKeyPf: instr.pix_key_pf || '', 
+                    regionAvailability: instr.region_availability || '', 
+                    weekAvailability: instr.week_availability || '', 
+                    shirtSize: instr.shirt_size || '', 
+                    hasNotebook: !!instr.has_notebook, 
+                    hasVehicle: !!instr.has_vehicle, 
+                    hasStudio: !!instr.has_studio, 
+                    studioAddress: instr.studio_address || '', 
+                    additional1: instr.additional_1 || '', 
+                    valueAdditional1: instr.value_additional_1 || '', 
+                    dateAdditional1: instr.date_additional_1 || '', 
+                    additional2: instr.additional_2 || '', 
+                    valueAdditional2: instr.value_additional_2 || '', 
+                    dateAdditional2: instr.date_additional_2 || '', 
+                    additional3: instr.additional_3 || '', 
+                    valueAdditional3: instr.value_additional_3 || '', 
+                    dateAdditional3: instr.date_additional_3 || '',
+                    password: instr.password
+                };
+                if (onInstructorLogin) onInstructorLogin(teacher);
+                return;
             }
-            const teacher: Teacher = {
-                id: instr.id, 
-                fullName: instr.full_name, 
-                email: instr.email, 
-                phone: instr.phone, 
-                photoUrl: instr.photo_url,
-                rg: instr.rg || '', 
-                cpf: instr.cpf || '', 
-                birthDate: instr.birth_date || '', 
-                maritalStatus: instr.marital_status || '', 
-                motherName: instr.mother_name || '', 
-                address: instr.address || '', 
-                district: instr.district || '', 
-                city: instr.city || '', 
-                state: instr.state || '', 
-                cep: instr.cep || '', 
-                emergencyContactName: instr.emergency_contact_name || '', 
-                emergencyContactPhone: instr.emergency_contact_phone || '', 
-                profession: instr.profession || '', 
-                councilNumber: instr.council_number || '', 
-                isCouncilActive: !!instr.is_council_active, 
-                cnpj: instr.cnpj || '', 
-                companyName: instr.company_name || '', 
-                hasCnpjActive: !!instr.has_cnpj_active, 
-                academicFormation: instr.academic_formation || '', 
-                otherFormation: instr.other_formation || '', 
-                courseType: instr.course_type || '', 
-                teacherLevel: instr.teacher_level || '', 
-                levelHonorarium: Number(instr.level_honorarium || 0), 
-                isActive: !!instr.is_active, 
-                bank: instr.bank || '', 
-                agency: instr.agency || '', 
-                accountNumber: instr.account_number || '', 
-                accountDigit: instr.account_digit || '', 
-                hasPjAccount: !!instr.has_pj_account, 
-                pixKeyPj: instr.pix_key_pj || '', 
-                pixKeyPf: instr.pix_key_pf || '', 
-                regionAvailability: instr.region_availability || '', 
-                weekAvailability: instr.week_availability || '', 
-                shirtSize: instr.shirt_size || '', 
-                hasNotebook: !!instr.has_notebook, 
-                hasVehicle: !!instr.has_vehicle, 
-                hasStudio: !!instr.has_studio, 
-                studioAddress: instr.studio_address || '', 
-                additional1: instr.additional_1 || '', 
-                valueAdditional1: instr.value_additional_1 || '', 
-                dateAdditional1: instr.date_additional_1 || '', 
-                additional2: instr.additional_2 || '', 
-                valueAdditional2: instr.value_additional_2 || '', 
-                dateAdditional2: instr.date_additional_2 || '', 
-                additional3: instr.additional_3 || '', 
-                valueAdditional3: instr.value_additional_3 || '', 
-                dateAdditional3: instr.date_additional_3 || '',
-                password: instr.password
-            };
-            if (onInstructorLogin) onInstructorLogin(teacher);
-            return;
         }
 
-        // 5. TENTAR ALUNO (O password aqui é o CPF limpo)
-        const cleanCpf = cleanPassword.replace(/\D/g, '');
+        // 5. TENTAR ALUNO (email + CPF)
+        const cleanCpf = inputCpf;
         const { data: deals } = await appBackend.client
             .from('crm_deals')
             .select('*')
@@ -301,7 +305,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
                 disabled={isLoading} 
               />
               <p className="text-[10px] text-slate-400 mt-2 px-1">
-                Alunos devem utilizar o <strong>CPF</strong> (apenas números) como senha.
+                Utilize seu <strong>CPF</strong> (apenas números) como senha. Colaboradores utilizam a senha cadastrada.
               </p>
             </div>
 

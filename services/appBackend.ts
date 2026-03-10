@@ -12,7 +12,8 @@ import {
   StudioDigitalEquipment, StudioDigitalExercise,
   FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings,
   Apostila, ApostilaAnnotation, ApostilaProgress,
-  CourseClosing, CourseClosingExpense, CourseClosingHistory
+  CourseClosing, CourseClosingExpense, CourseClosingHistory,
+  CourseRental, CourseRentalReceipt
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { brevoService } from './brevoService';
@@ -2343,5 +2344,89 @@ export const appBackend = {
       .order('version', { ascending: false });
     if (error) throw new Error(`Erro ao buscar histórico: ${error.message}`);
     return data || [];
+  },
+
+  // ── Aluguel de Curso ─────────────────────────────────────
+
+  uploadRentalReceipt: async (file: File): Promise<string> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const ext = file.name.split('.').pop() || 'pdf';
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('course-rentals').upload(path, file, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: false,
+    });
+    if (error) throw new Error(`Erro no upload: ${error.message}`);
+    const { data: urlData } = supabase.storage.from('course-rentals').getPublicUrl(path);
+    return urlData.publicUrl;
+  },
+
+  submitCourseRental: async (
+    rental: Omit<CourseRental, 'id' | 'created_at' | 'updated_at' | 'receipts'>,
+    receiptUrls: string[]
+  ): Promise<string> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const rentalId = crypto.randomUUID();
+    const { error: rErr } = await supabase.from('crm_course_rentals').insert({
+      id: rentalId,
+      ...rental,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    if (rErr) throw new Error(`Erro ao salvar aluguel: ${rErr.message}`);
+
+    if (receiptUrls.length > 0) {
+      const rows = receiptUrls.map(url => ({
+        id: crypto.randomUUID(),
+        rental_id: rentalId,
+        receipt_url: url,
+        created_at: new Date().toISOString(),
+      }));
+      const { error: rcErr } = await supabase.from('crm_course_rental_receipts').insert(rows);
+      if (rcErr) throw new Error(`Erro ao salvar comprovantes: ${rcErr.message}`);
+    }
+    return rentalId;
+  },
+
+  fetchCourseRentals: async (): Promise<CourseRental[]> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const { data, error } = await supabase
+      .from('crm_course_rentals')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(`Erro ao buscar aluguéis: ${error.message}`);
+    return data || [];
+  },
+
+  fetchCourseRentalReceipts: async (rentalId: string): Promise<CourseRentalReceipt[]> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const { data, error } = await supabase
+      .from('crm_course_rental_receipts')
+      .select('*')
+      .eq('rental_id', rentalId)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(`Erro ao buscar comprovantes: ${error.message}`);
+    return data || [];
+  },
+
+  fetchStudioRentals: async (studioId: string): Promise<CourseRental[]> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const { data, error } = await supabase
+      .from('crm_course_rentals')
+      .select('*')
+      .eq('studio_id', studioId)
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(`Erro ao buscar aluguéis do studio: ${error.message}`);
+    return data || [];
+  },
+
+  updateCourseRentalStatus: async (id: string, status: string, adminNotes: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_course_rentals').update({
+      status,
+      admin_notes: adminNotes,
+      updated_at: new Date().toISOString(),
+    }).eq('id', id);
+    if (error) throw new Error(`Erro ao atualizar status: ${error.message}`);
   },
 };

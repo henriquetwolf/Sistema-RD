@@ -2,12 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, Package, Building2, 
   ChevronRight, Inbox, Truck, Clock, CheckCircle2, User, Info,
-  CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle, LifeBuoy, FileSignature, ChevronLeft
+  CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle, LifeBuoy, FileSignature, ChevronLeft,
+  DollarSign, ExternalLink, FileText
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { PartnerStudioSession, InventoryRecord, SupportTicket, Contract } from '../types';
+import { PartnerStudioSession, InventoryRecord, SupportTicket, Contract, CourseRental, CourseRentalReceipt } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
+import { CourseRentalForm } from './CourseRentalForm';
 import clsx from 'clsx';
 
 interface PartnerStudioAreaProps {
@@ -16,7 +18,7 @@ interface PartnerStudioAreaProps {
 }
 
 export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'classes' | 'contracts'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'classes' | 'contracts' | 'alugueis'>('dashboard');
     const [movements, setMovements] = useState<InventoryRecord[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
@@ -25,6 +27,12 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     const [isSavingMove, setIsSavingMove] = useState<string | null>(null);
     const [showSupportModal, setShowSupportModal] = useState(false);
     const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
+
+    const [rentalFormClass, setRentalFormClass] = useState<any | null>(null);
+    const [myRentals, setMyRentals] = useState<CourseRental[]>([]);
+    const [isLoadingRentals, setIsLoadingRentals] = useState(false);
+    const [viewingRentalReceipts, setViewingRentalReceipts] = useState<{ rental: CourseRental; receipts: CourseRentalReceipt[] } | null>(null);
+    const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -63,6 +71,31 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
             console.error(e);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const fetchMyRentals = async () => {
+        setIsLoadingRentals(true);
+        try {
+            const data = await appBackend.fetchStudioRentals(studio.id);
+            setMyRentals(data);
+        } catch (e) {
+            console.error("Erro ao buscar aluguéis:", e);
+        } finally {
+            setIsLoadingRentals(false);
+        }
+    };
+
+    const handleViewRentalReceipts = async (rental: CourseRental) => {
+        setIsLoadingReceipts(true);
+        setViewingRentalReceipts({ rental, receipts: [] });
+        try {
+            const data = await appBackend.fetchCourseRentalReceipts(rental.id);
+            setViewingRentalReceipts({ rental, receipts: data });
+        } catch (e) {
+            console.error("Erro ao buscar comprovantes:", e);
+        } finally {
+            setIsLoadingReceipts(false);
         }
     };
 
@@ -149,6 +182,12 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                 <div className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 w-fit mx-auto md:mx-0 overflow-x-auto no-scrollbar gap-1">
                     <button onClick={() => setActiveTab('dashboard')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'dashboard' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>Destaques</button>
                     <button onClick={() => setActiveTab('inventory')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'inventory' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>Logística</button>
+                    <button onClick={() => { setActiveTab('alugueis'); if (myRentals.length === 0) fetchMyRentals(); }} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'alugueis' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>
+                        <DollarSign size={14} /> Aluguéis
+                        {myRentals.length > 0 && (
+                            <span className="ml-1 bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px]">{myRentals.length}</span>
+                        )}
+                    </button>
                     <button onClick={() => setActiveTab('contracts')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap relative", activeTab === 'contracts' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>
                         Contratos
                         {pendingContracts.length > 0 && (
@@ -191,12 +230,21 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {classes.map(cls => (
-                                        <div key={cls.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-teal-500 transition-all">
-                                            <div>
-                                                <h4 className="font-bold text-slate-800">{cls.course}</h4>
-                                                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Calendar size={12}/> {new Date(cls.date_mod_1).toLocaleDateString()}</p>
+                                        <div key={cls.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden group hover:border-teal-500 transition-all">
+                                            <div className="p-6 flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800">{cls.course}</h4>
+                                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Calendar size={12}/> {new Date(cls.date_mod_1).toLocaleDateString()}</p>
+                                                </div>
+                                                <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-black uppercase">{cls.status}</span>
                                             </div>
-                                            <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-black uppercase">{cls.status}</span>
+                                            <button
+                                                onClick={() => setRentalFormClass(cls)}
+                                                className="px-6 py-3 flex items-center justify-between w-full text-[10px] font-black uppercase tracking-widest text-teal-600 hover:bg-teal-50 transition-all border-t border-slate-100 group/rental"
+                                            >
+                                                <span className="flex items-center gap-2"><DollarSign size={14} /> Aluguel de Curso</span>
+                                                <ChevronRight size={14} className="group-hover/rental:translate-x-1 transition-transform" />
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
@@ -242,7 +290,86 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                             </div>
                         )}
                     </div>
-                ) : (
+                ) : activeTab === 'alugueis' ? (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center justify-between px-2">
+                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                <DollarSign size={24} className="text-teal-500" /> Meus Aluguéis de Curso
+                            </h2>
+                        </div>
+                        {isLoadingRentals ? (
+                            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
+                        ) : myRentals.length === 0 ? (
+                            <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
+                                <DollarSign size={48} className="mx-auto text-slate-300 mb-4" />
+                                <h3 className="text-lg font-black text-slate-700">Nenhum aluguel enviado</h3>
+                                <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium">
+                                    Quando você enviar uma solicitação de aluguel, ela aparecerá aqui.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {myRentals.map(rental => {
+                                    const statusColors: Record<string, string> = {
+                                        pendente: 'bg-amber-50 text-amber-700 border-amber-200',
+                                        aprovado: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                                        rejeitado: 'bg-red-50 text-red-700 border-red-200',
+                                    };
+                                    const statusLabels: Record<string, string> = {
+                                        pendente: 'Pendente',
+                                        aprovado: 'Aprovado',
+                                        rejeitado: 'Rejeitado',
+                                    };
+                                    const typeLabels: Record<string, string> = {
+                                        aluguel: 'Apenas Aluguel',
+                                        intervalo: 'Apenas Intervalo',
+                                        aluguel_intervalo: 'Aluguel + Intervalo',
+                                    };
+                                    return (
+                                        <div key={rental.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg transition-all">
+                                            <div className="p-6 flex flex-col md:flex-row md:items-center gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-3 mb-2">
+                                                        <h3 className="text-base font-black text-slate-800 truncate">{rental.course_name}</h3>
+                                                        <span className="text-[9px] font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-500">#{rental.class_code}</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 font-medium">
+                                                        <span className="flex items-center gap-1"><MapPin size={12} className="text-teal-500" /> {rental.city}</span>
+                                                        <span className="font-bold text-slate-700">
+                                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(rental.rental_value))}
+                                                        </span>
+                                                        <span>{typeLabels[rental.rental_type] || rental.rental_type}</span>
+                                                        <span className="flex items-center gap-1">
+                                                            <Clock size={12} className="text-slate-400" />
+                                                            Enviado em {rental.created_at ? new Date(rental.created_at).toLocaleDateString('pt-BR') : '--'}
+                                                        </span>
+                                                    </div>
+                                                    {rental.admin_notes && rental.status !== 'pendente' && (
+                                                        <div className="mt-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Observação da Administração</p>
+                                                            <p className="text-xs text-slate-600">{rental.admin_notes}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-3 shrink-0">
+                                                    <span className={clsx("text-[9px] font-black px-3 py-1.5 rounded-full border uppercase", statusColors[rental.status] || 'bg-slate-50 text-slate-500 border-slate-200')}>
+                                                        {statusLabels[rental.status] || rental.status}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleViewRentalReceipts(rental)}
+                                                        className="px-4 py-2 bg-slate-100 hover:bg-teal-100 text-slate-600 hover:text-teal-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                                                    >
+                                                        <ExternalLink size={12} /> Detalhes
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                ) : activeTab === 'contracts' ? (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
                         <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 px-2"><FileSignature className="text-teal-600"/> Contratos Pendentes</h3>
                         {pendingContracts.length === 0 ? (
@@ -266,6 +393,105 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                     </div>
                 )}
             </main>
+
+            {rentalFormClass && (
+                <CourseRentalForm
+                    studio={studio}
+                    classData={rentalFormClass}
+                    onClose={() => setRentalFormClass(null)}
+                    onSuccess={() => { if (myRentals.length > 0) fetchMyRentals(); }}
+                />
+            )}
+
+            {viewingRentalReceipts && (
+                <div className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl my-8 animate-in zoom-in-95 overflow-hidden">
+                        <div className="px-8 py-6 border-b bg-gradient-to-r from-teal-600 to-cyan-700 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-xl font-black text-white">Detalhes do Aluguel</h2>
+                                <p className="text-teal-200 text-xs font-medium mt-1">
+                                    {viewingRentalReceipts.rental.course_name} — #{viewingRentalReceipts.rental.class_code}
+                                </p>
+                            </div>
+                            <button onClick={() => setViewingRentalReceipts(null)} className="p-2 hover:bg-white/20 rounded-full text-white/80 hover:text-white transition-colors">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Cidade</p>
+                                    <p className="text-sm font-bold text-slate-700">{viewingRentalReceipts.rental.city}</p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Turma</p>
+                                    <p className="text-sm font-bold text-slate-700">#{viewingRentalReceipts.rental.class_code}</p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Tipo</p>
+                                    <p className="text-sm font-bold text-slate-700">
+                                        {{ aluguel: 'Apenas Aluguel', intervalo: 'Apenas Intervalo', aluguel_intervalo: 'Aluguel + Intervalo' }[viewingRentalReceipts.rental.rental_type] || viewingRentalReceipts.rental.rental_type}
+                                    </p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Valor</p>
+                                    <p className="text-sm font-bold text-slate-700">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(viewingRentalReceipts.rental.rental_value))}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] flex items-center gap-2 mb-3">
+                                    <FileText size={14} className="text-purple-600" /> Comprovantes Anexados
+                                </h3>
+                                {isLoadingReceipts ? (
+                                    <div className="flex justify-center py-8"><Loader2 className="animate-spin text-teal-600" size={24} /></div>
+                                ) : viewingRentalReceipts.receipts.length === 0 ? (
+                                    <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                        <p className="text-sm font-bold text-slate-400">Nenhum comprovante anexado</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        {viewingRentalReceipts.receipts.map((rc, idx) => (
+                                            <a
+                                                key={rc.id}
+                                                href={rc.receipt_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-xl hover:bg-purple-100 transition-colors"
+                                            >
+                                                <FileText size={20} className="text-purple-600 shrink-0" />
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-bold text-purple-800">Comprovante {idx + 1}</p>
+                                                    <p className="text-[10px] text-purple-500 truncate">{rc.receipt_url.split('/').pop()}</p>
+                                                </div>
+                                                <ExternalLink size={14} className="text-purple-400 shrink-0 ml-auto" />
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {viewingRentalReceipts.rental.admin_notes && viewingRentalReceipts.rental.status !== 'pendente' && (
+                                <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                                    <p className="text-[9px] font-black text-blue-500 uppercase mb-1">Observação da Administração</p>
+                                    <p className="text-sm text-blue-800">{viewingRentalReceipts.rental.admin_notes}</p>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end pt-4 border-t border-slate-100">
+                                <button
+                                    onClick={() => setViewingRentalReceipts(null)}
+                                    className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-xl transition-all"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Assinatura Interno */}
             {signingContract && (

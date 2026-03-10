@@ -104,6 +104,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'landing_pages', label: 'Páginas de Venda' },
       { id: 'cpf_lookup', label: 'Busca por CPF' },
       { id: 'fechamento_curso', label: 'Fechamento de Curso' },
+      { id: 'aluguel_curso', label: 'Aluguel de Curso' },
       { id: 'global_settings', label: 'Configurações' }
   ];
 

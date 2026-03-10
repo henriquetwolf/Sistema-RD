@@ -48,6 +48,8 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
     const [pageThumbnails, setPageThumbnails] = useState<Map<number, string>>(new Map());
     const [isRenderingPdf, setIsRenderingPdf] = useState(false);
     const [goToPageInput, setGoToPageInput] = useState('');
+    const [flipDirection, setFlipDirection] = useState<'next' | 'prev' | null>(null);
+    const [isFlipping, setIsFlipping] = useState(false);
 
     const [undoStack, setUndoStack] = useState<string[]>([]);
     const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -55,7 +57,9 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
     const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
     const fabricCanvasRef = useRef<FabricCanvas | null>(null);
     const fabricCanvasElRef = useRef<HTMLCanvasElement>(null);
+    const fabricWrapperRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const pageContainerRef = useRef<HTMLDivElement>(null);
     const pdfDocRef = useRef<any>(null);
     const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const currentPageRef = useRef(currentPage);
@@ -270,6 +274,18 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
             isDrawingMode: activeTool === 'pen' || activeTool === 'highlighter',
         });
 
+        // Fabric.js v7 wraps the canvas in a container div — position it over the PDF
+        const fabricContainer = el.closest('.canvas-container') || el.parentElement;
+        if (fabricContainer && fabricContainer !== fabricWrapperRef.current) {
+            const htmlEl = fabricContainer as HTMLElement;
+            htmlEl.style.position = 'absolute';
+            htmlEl.style.top = '0';
+            htmlEl.style.left = '0';
+            htmlEl.style.width = `${width}px`;
+            htmlEl.style.height = `${height}px`;
+            htmlEl.style.zIndex = '10';
+        }
+
         fc.on('object:added', () => {
             if (!isLoadingAnnotationRef.current) {
                 pushUndo(fc);
@@ -439,8 +455,16 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
     };
 
     const goToPage = (page: number) => {
-        if (page < 1 || page > totalPages || page === currentPage) return;
-        setCurrentPage(page);
+        if (page < 1 || page > totalPages || page === currentPage || isFlipping) return;
+        const direction = page > currentPage ? 'next' : 'prev';
+        setFlipDirection(direction);
+        setIsFlipping(true);
+
+        setTimeout(() => {
+            setCurrentPage(page);
+            setFlipDirection(null);
+            setTimeout(() => setIsFlipping(false), 400);
+        }, 300);
     };
 
     const handleGoToPageSubmit = () => {
@@ -770,14 +794,30 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                     </div>
 
                     {/* Canvas area */}
-                    <div ref={containerRef} className="flex-1 overflow-auto bg-slate-100 flex items-start justify-center p-6" style={{ scrollbarWidth: 'thin' }}>
-                        <div className="relative shadow-2xl rounded-lg overflow-hidden">
-                            <canvas ref={pdfCanvasRef} className="block" />
-                            <canvas
-                                ref={fabricCanvasElRef}
+                    <div ref={containerRef} className="flex-1 overflow-auto bg-slate-100 flex items-start justify-center p-6" style={{ scrollbarWidth: 'thin', perspective: '1200px' }}>
+                        <div
+                            ref={pageContainerRef}
+                            className="relative shadow-2xl rounded-lg"
+                            style={{
+                                transformStyle: 'preserve-3d',
+                                transition: flipDirection ? 'transform 0.5s ease-in-out, opacity 0.3s ease' : 'none',
+                                transform: flipDirection === 'next'
+                                    ? 'rotateY(-12deg) scale(0.97)'
+                                    : flipDirection === 'prev'
+                                        ? 'rotateY(12deg) scale(0.97)'
+                                        : 'rotateY(0deg) scale(1)',
+                                opacity: flipDirection ? 0.7 : 1,
+                                transformOrigin: flipDirection === 'next' ? 'left center' : 'right center',
+                            }}
+                        >
+                            <canvas ref={pdfCanvasRef} className="block rounded-lg" />
+                            <div
+                                ref={fabricWrapperRef}
                                 className="absolute top-0 left-0"
                                 style={{ cursor: activeTool === 'eraser' ? 'crosshair' : activeTool === 'pen' || activeTool === 'highlighter' ? 'crosshair' : 'default' }}
-                            />
+                            >
+                                <canvas ref={fabricCanvasElRef} />
+                            </div>
                         </div>
                     </div>
 

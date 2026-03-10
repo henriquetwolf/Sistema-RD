@@ -5,7 +5,7 @@ import {
   Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
   ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
   FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft,
-  MonitorPlay, Play, CheckCircle2, Circle, Video, Download, Paperclip
+  MonitorPlay, Play, CheckCircle2, Circle, Video, Download, Paperclip, AlertTriangle, Edit3, Lock
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
@@ -45,6 +45,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [isLoadingClosings, setIsLoadingClosings] = useState(false);
   const [viewingClosingExpenses, setViewingClosingExpenses] = useState<{ closing: CourseClosing; expenses: CourseClosingExpense[] } | null>(null);
   const [isLoadingClosingExpenses, setIsLoadingClosingExpenses] = useState(false);
+  const [editingClosing, setEditingClosing] = useState<{ closing: CourseClosing; expenses: CourseClosingExpense[] } | null>(null);
 
   // Estados para Financeiro
   const [receivables, setReceivables] = useState<any[]>([]);
@@ -118,6 +119,15 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           console.error("Erro ao buscar despesas:", e);
       } finally {
           setIsLoadingClosingExpenses(false);
+      }
+  };
+
+  const handleEditClosing = async (closing: CourseClosing) => {
+      try {
+          const expenses = await appBackend.fetchCourseClosingExpenses(closing.id);
+          setEditingClosing({ closing, expenses });
+      } catch (e) {
+          console.error("Erro ao buscar despesas para edição:", e);
       }
   };
 
@@ -941,8 +951,27 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                 aprovado: 'Aprovado',
                                 rejeitado: 'Rejeitado',
                             };
+                            const isRejected = closing.status === 'rejeitado';
+                            const isApproved = closing.status === 'aprovado';
                             return (
-                                <div key={closing.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg transition-all">
+                                <div key={closing.id} className={clsx(
+                                    "bg-white rounded-[2rem] border shadow-sm overflow-hidden hover:shadow-lg transition-all",
+                                    isRejected ? "border-red-300 ring-2 ring-red-100" : "border-slate-200"
+                                )}>
+                                    {isRejected && (
+                                        <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex gap-3 items-start">
+                                            <div className="shrink-0 w-8 h-8 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                                                <AlertTriangle size={16} className="text-red-600" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-xs font-black text-red-800 uppercase tracking-wide mb-1">Fechamento Rejeitado</h4>
+                                                {closing.admin_notes && (
+                                                    <p className="text-sm text-red-700 leading-relaxed">{closing.admin_notes}</p>
+                                                )}
+                                                <p className="text-[10px] font-bold text-red-400 mt-2">Clique em "Editar" para corrigir e reenviar.</p>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="p-6 flex flex-col md:flex-row md:items-center gap-4">
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-3 mb-2">
@@ -960,10 +989,10 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                                     Enviado em {closing.created_at ? new Date(closing.created_at).toLocaleDateString('pt-BR') : '--'}
                                                 </span>
                                             </div>
-                                            {closing.admin_notes && closing.status !== 'pendente' && (
-                                                <div className="mt-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Observação da Administração</p>
-                                                    <p className="text-xs text-slate-600">{closing.admin_notes}</p>
+                                            {closing.admin_notes && closing.status === 'aprovado' && (
+                                                <div className="mt-3 bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                                                    <p className="text-[9px] font-black text-emerald-400 uppercase mb-1">Observação da Administração</p>
+                                                    <p className="text-xs text-emerald-700">{closing.admin_notes}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -971,6 +1000,19 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                             <span className={clsx("text-[9px] font-black px-3 py-1.5 rounded-full border uppercase", statusColors[closing.status] || 'bg-slate-50 text-slate-500 border-slate-200')}>
                                                 {statusLabels[closing.status] || closing.status}
                                             </span>
+                                            {isRejected && (
+                                                <button
+                                                    onClick={() => handleEditClosing(closing)}
+                                                    className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 hover:text-amber-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                                                >
+                                                    <Edit3 size={12} /> Editar
+                                                </button>
+                                            )}
+                                            {isApproved && (
+                                                <span className="px-4 py-2 bg-slate-50 text-slate-400 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-default" title="Fechamento aprovado não pode ser editado">
+                                                    <Lock size={12} /> Finalizado
+                                                </span>
+                                            )}
                                             <button
                                                 onClick={() => handleViewClosingExpenses(closing)}
                                                 className="px-4 py-2 bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
@@ -1301,6 +1343,22 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
               classData={courseClosingClass}
               onClose={() => setCourseClosingClass(null)}
               onSuccess={() => { if (myClosings.length > 0) fetchMyClosings(); }}
+          />
+      )}
+
+      {editingClosing && (
+          <CourseClosingForm
+              instructor={instructor}
+              classData={{
+                  id: editingClosing.closing.class_id,
+                  class_code: editingClosing.closing.class_code,
+                  course: editingClosing.closing.course_name,
+                  city: editingClosing.closing.city,
+              }}
+              existingClosing={editingClosing.closing}
+              existingExpenses={editingClosing.expenses}
+              onClose={() => setEditingClosing(null)}
+              onSuccess={() => { setEditingClosing(null); fetchMyClosings(); }}
           />
       )}
 

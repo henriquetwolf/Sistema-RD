@@ -2277,4 +2277,35 @@ export const appBackend = {
     }).eq('id', id);
     if (error) throw new Error(`Erro ao atualizar status: ${error.message}`);
   },
+
+  updateCourseClosing: async (
+    id: string,
+    closing: Partial<Omit<CourseClosing, 'id' | 'created_at' | 'expenses'>>,
+    expenses: Omit<CourseClosingExpense, 'id' | 'closing_id' | 'created_at'>[]
+  ): Promise<void> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const { error: cErr } = await supabase.from('crm_course_closings').update({
+      ...closing,
+      status: 'pendente',
+      admin_notes: '',
+      updated_at: new Date().toISOString(),
+    }).eq('id', id);
+    if (cErr) throw new Error(`Erro ao atualizar fechamento: ${cErr.message}`);
+
+    await supabase.from('crm_course_closing_expenses').delete().eq('closing_id', id);
+
+    if (expenses.length > 0) {
+      const rows = expenses.map(e => ({
+        id: crypto.randomUUID(),
+        closing_id: id,
+        category: e.category,
+        amount: e.amount,
+        receipt_url: e.receipt_url,
+        observation: e.observation,
+        created_at: new Date().toISOString(),
+      }));
+      const { error: eErr } = await supabase.from('crm_course_closing_expenses').insert(rows);
+      if (eErr) throw new Error(`Erro ao salvar despesas: ${eErr.message}`);
+    }
+  },
 };

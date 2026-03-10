@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
   X, Loader2, Plus, Trash2, Upload, CheckCircle, DollarSign,
-  User, Mail, Phone, MapPin, Calendar, Landmark, ChevronDown
+  User, Mail, Phone, MapPin, Calendar, Landmark, ChevronDown, AlertTriangle, Edit3
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
+import { CourseClosing, CourseClosingExpense } from '../types';
 import clsx from 'clsx';
 
 interface CourseClosingFormProps {
@@ -12,6 +13,8 @@ interface CourseClosingFormProps {
   classData: any;
   onClose: () => void;
   onSuccess?: () => void;
+  existingClosing?: CourseClosing;
+  existingExpenses?: CourseClosingExpense[];
 }
 
 interface ExpenseItem {
@@ -30,12 +33,16 @@ const EXPENSE_CATEGORIES = [
   'Outros',
 ];
 
-export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor, classData, onClose, onSuccess }) => {
-  const [instructorName, setInstructorName] = useState(instructor.fullName || '');
-  const [instructorEmail, setInstructorEmail] = useState(instructor.email || '');
-  const [instructorPhone, setInstructorPhone] = useState(instructor.phone || '');
+export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor, classData, onClose, onSuccess, existingClosing, existingExpenses }) => {
+  const isEditing = !!existingClosing;
+
+  const [instructorName, setInstructorName] = useState(existingClosing?.instructor_name || instructor.fullName || '');
+  const [instructorEmail, setInstructorEmail] = useState(existingClosing?.instructor_email || instructor.email || '');
+  const [instructorPhone, setInstructorPhone] = useState(existingClosing?.instructor_phone || instructor.phone || '');
   const [cityAndClass, setCityAndClass] = useState(
-    `${classData.city || ''}${classData.class_code ? ` - Turma ${classData.class_code}` : ''}`
+    existingClosing
+      ? `${existingClosing.city || ''}${existingClosing.class_number ? ` - Turma ${existingClosing.class_number}` : ''}`
+      : `${classData.city || ''}${classData.class_code ? ` - Turma ${classData.class_code}` : ''}`
   );
   const extractDate = (val: any): string => {
     if (!val) return '';
@@ -47,20 +54,28 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
       return d.toISOString().split('T')[0];
     } catch { return ''; }
   };
-  const [dateStart, setDateStart] = useState(extractDate(classData.date_mod_1));
-  const [dateEnd, setDateEnd] = useState(extractDate(classData.date_mod_2));
+  const [dateStart, setDateStart] = useState(existingClosing ? extractDate(existingClosing.date_start) : extractDate(classData.date_mod_1));
+  const [dateEnd, setDateEnd] = useState(existingClosing ? extractDate(existingClosing.date_end) : extractDate(classData.date_mod_2));
 
-  const [expenses, setExpenses] = useState<ExpenseItem[]>([
-    { category: '', amount: '', file: null, receiptUrl: '', observation: '' },
-  ]);
-
-  const [pixKey, setPixKey] = useState(instructor.pixKeyPj || instructor.pixKeyPf || '');
-  const [bank, setBank] = useState(instructor.bank || '');
-  const [agency, setAgency] = useState(instructor.agency || '');
-  const [account, setAccount] = useState(
-    `${instructor.accountNumber || ''}${instructor.accountDigit ? '-' + instructor.accountDigit : ''}`
+  const [expenses, setExpenses] = useState<ExpenseItem[]>(
+    existingExpenses && existingExpenses.length > 0
+      ? existingExpenses.map(e => ({
+          category: e.category,
+          amount: String(e.amount).replace('.', ','),
+          file: null,
+          receiptUrl: e.receipt_url || '',
+          observation: e.observation || '',
+        }))
+      : [{ category: '', amount: '', file: null, receiptUrl: '', observation: '' }]
   );
-  const [accountHolder, setAccountHolder] = useState('');
+
+  const [pixKey, setPixKey] = useState(existingClosing?.pix_key || instructor.pixKeyPj || instructor.pixKeyPf || '');
+  const [bank, setBank] = useState(existingClosing?.bank || instructor.bank || '');
+  const [agency, setAgency] = useState(existingClosing?.agency || instructor.agency || '');
+  const [account, setAccount] = useState(
+    existingClosing?.account || `${instructor.accountNumber || ''}${instructor.accountDigit ? '-' + instructor.accountDigit : ''}`
+  );
+  const [accountHolder, setAccountHolder] = useState(existingClosing?.account_holder || '');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -103,7 +118,7 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
     try {
       const uploadedExpenses = await Promise.all(
         validExpenses.map(async (ex) => {
-          let receiptUrl = '';
+          let receiptUrl = ex.receiptUrl || '';
           if (ex.file) {
             receiptUrl = await appBackend.uploadClosingReceipt(ex.file);
           }
@@ -116,33 +131,53 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
         })
       );
 
-      const closingData = {
-        instructor_id: instructor.id,
-        instructor_name: instructorName,
-        instructor_email: instructorEmail,
-        instructor_phone: instructorPhone,
-        class_id: classData.id || '',
-        class_code: classData.class_code || '',
-        course_name: classData.course || '',
-        city: classData.city || '',
-        class_number: classData.class_code || '',
-        date_start: toDateOnly(dateStart),
-        date_end: toDateOnly(dateEnd),
-        pix_key: pixKey,
-        bank,
-        agency,
-        account,
-        account_holder: accountHolder,
-        status: 'pendente' as const,
-        admin_notes: '',
-      };
+      if (isEditing && existingClosing) {
+        const updateData = {
+          instructor_name: instructorName,
+          instructor_email: instructorEmail,
+          instructor_phone: instructorPhone,
+          city: existingClosing.city,
+          class_number: existingClosing.class_number,
+          date_start: toDateOnly(dateStart),
+          date_end: toDateOnly(dateEnd),
+          pix_key: pixKey,
+          bank,
+          agency,
+          account,
+          account_holder: accountHolder,
+        };
 
-      console.log('[CourseClosingForm] Enviando fechamento:', closingData);
-      console.log('[CourseClosingForm] Despesas:', uploadedExpenses);
+        console.log('[CourseClosingForm] Atualizando fechamento:', existingClosing.id, updateData);
+        await appBackend.updateCourseClosing(existingClosing.id, updateData, uploadedExpenses);
+        console.log('[CourseClosingForm] Fechamento atualizado com sucesso');
+      } else {
+        const closingData = {
+          instructor_id: instructor.id,
+          instructor_name: instructorName,
+          instructor_email: instructorEmail,
+          instructor_phone: instructorPhone,
+          class_id: classData.id || '',
+          class_code: classData.class_code || '',
+          course_name: classData.course || '',
+          city: classData.city || '',
+          class_number: classData.class_code || '',
+          date_start: toDateOnly(dateStart),
+          date_end: toDateOnly(dateEnd),
+          pix_key: pixKey,
+          bank,
+          agency,
+          account,
+          account_holder: accountHolder,
+          status: 'pendente' as const,
+          admin_notes: '',
+        };
 
-      const resultId = await appBackend.submitCourseClosing(closingData, uploadedExpenses);
+        console.log('[CourseClosingForm] Enviando fechamento:', closingData);
+        console.log('[CourseClosingForm] Despesas:', uploadedExpenses);
+        const resultId = await appBackend.submitCourseClosing(closingData, uploadedExpenses);
+        console.log('[CourseClosingForm] Fechamento salvo com ID:', resultId);
+      }
 
-      console.log('[CourseClosingForm] Fechamento salvo com ID:', resultId);
       setIsSuccess(true);
       onSuccess?.();
     } catch (err: any) {
@@ -162,9 +197,11 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
           <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} className="text-emerald-600" />
           </div>
-          <h2 className="text-2xl font-black text-slate-800 mb-2">Enviado com Sucesso!</h2>
+          <h2 className="text-2xl font-black text-slate-800 mb-2">{isEditing ? 'Atualizado com Sucesso!' : 'Enviado com Sucesso!'}</h2>
           <p className="text-slate-500 text-sm mb-8">
-            Seu fechamento de curso foi enviado para análise da administração.
+            {isEditing
+              ? 'Seu fechamento foi reenviado para análise da administração.'
+              : 'Seu fechamento de curso foi enviado para análise da administração.'}
           </p>
           <button
             onClick={onClose}
@@ -180,10 +217,18 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl my-8 animate-in zoom-in-95 overflow-hidden">
-        <div className="px-8 py-6 border-b bg-gradient-to-r from-purple-600 to-indigo-700 flex justify-between items-center">
+        <div className={clsx(
+          "px-8 py-6 border-b flex justify-between items-center",
+          isEditing ? "bg-gradient-to-r from-amber-500 to-orange-600" : "bg-gradient-to-r from-purple-600 to-indigo-700"
+        )}>
           <div>
-            <h2 className="text-xl font-black text-white">Fechamento de Curso</h2>
-            <p className="text-purple-200 text-xs font-medium mt-1">{classData.course} — #{classData.class_code}</p>
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              {isEditing && <Edit3 size={20} />}
+              {isEditing ? 'Editar Fechamento de Curso' : 'Fechamento de Curso'}
+            </h2>
+            <p className={clsx("text-xs font-medium mt-1", isEditing ? "text-amber-100" : "text-purple-200")}>
+              {existingClosing?.course_name || classData.course} — #{existingClosing?.class_code || classData.class_code}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full text-white/80 hover:text-white transition-colors">
             <X size={24} />
@@ -191,6 +236,19 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-8">
+          {isEditing && existingClosing?.admin_notes && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-5 flex gap-4 items-start animate-in fade-in slide-in-from-top-2">
+              <div className="shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-red-800 mb-1">Fechamento Rejeitado pela Administração</h4>
+                <p className="text-sm text-red-700 leading-relaxed">{existingClosing.admin_notes}</p>
+                <p className="text-[10px] font-bold text-red-400 uppercase mt-2">Corrija os pontos indicados e reenvie o fechamento.</p>
+              </div>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 font-medium">
               {errorMsg}
@@ -342,11 +400,11 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Anexar NF ou Comprovante</label>
                     <label className={clsx(
                       "flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                      expense.file ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/50"
+                      (expense.file || expense.receiptUrl) ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/50"
                     )}>
-                      <Upload size={16} className={expense.file ? "text-emerald-600" : "text-slate-400"} />
-                      <span className={clsx("text-xs font-medium truncate", expense.file ? "text-emerald-700" : "text-slate-500")}>
-                        {expense.file ? expense.file.name : 'Clique para selecionar arquivo'}
+                      <Upload size={16} className={(expense.file || expense.receiptUrl) ? "text-emerald-600" : "text-slate-400"} />
+                      <span className={clsx("text-xs font-medium truncate", (expense.file || expense.receiptUrl) ? "text-emerald-700" : "text-slate-500")}>
+                        {expense.file ? expense.file.name : expense.receiptUrl ? 'Comprovante anexado (clique para substituir)' : 'Clique para selecionar arquivo'}
                       </span>
                       <input
                         type="file"
@@ -441,10 +499,15 @@ export const CourseClosingForm: React.FC<CourseClosingFormProps> = ({ instructor
             <button
               type="submit"
               disabled={isSubmitting}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-purple-200 transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95"
+              className={clsx(
+                "text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95",
+                isEditing
+                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-200"
+                  : "bg-purple-600 hover:bg-purple-700 shadow-purple-200"
+              )}
             >
               {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle size={18} />}
-              {isSubmitting ? 'Enviando...' : 'Enviar Fechamento'}
+              {isSubmitting ? 'Enviando...' : isEditing ? 'Reenviar Fechamento' : 'Enviar Fechamento'}
             </button>
           </div>
         </form>

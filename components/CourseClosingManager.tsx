@@ -166,8 +166,8 @@ CREATE TABLE IF NOT EXISTS crm_course_closings (
 );
 
 ALTER TABLE crm_course_closings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "anon_read_course_closings" ON crm_course_closings FOR SELECT TO anon USING (true);
-CREATE POLICY "anon_all_course_closings"  ON crm_course_closings FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "course_closings_select" ON crm_course_closings FOR SELECT USING (true);
+CREATE POLICY "course_closings_all" ON crm_course_closings FOR ALL USING (true) WITH CHECK (true);
 
 CREATE TABLE IF NOT EXISTS crm_course_closing_expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -181,14 +181,14 @@ CREATE TABLE IF NOT EXISTS crm_course_closing_expenses (
 
 CREATE INDEX IF NOT EXISTS idx_closing_expenses ON crm_course_closing_expenses(closing_id);
 ALTER TABLE crm_course_closing_expenses ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "anon_read_closing_expenses" ON crm_course_closing_expenses FOR SELECT TO anon USING (true);
-CREATE POLICY "anon_all_closing_expenses"  ON crm_course_closing_expenses FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "closing_expenses_select" ON crm_course_closing_expenses FOR SELECT USING (true);
+CREATE POLICY "closing_expenses_all" ON crm_course_closing_expenses FOR ALL USING (true) WITH CHECK (true);
 
 INSERT INTO storage.buckets (id, name, public) VALUES ('course-closings', 'course-closings', true) ON CONFLICT (id) DO NOTHING;
-CREATE POLICY "course_closings_public_read" ON storage.objects FOR SELECT TO anon USING (bucket_id = 'course-closings');
-CREATE POLICY "course_closings_anon_insert" ON storage.objects FOR INSERT TO anon WITH CHECK (bucket_id = 'course-closings');
-CREATE POLICY "course_closings_anon_update" ON storage.objects FOR UPDATE TO anon USING (bucket_id = 'course-closings');
-CREATE POLICY "course_closings_anon_delete" ON storage.objects FOR DELETE TO anon USING (bucket_id = 'course-closings');`;
+CREATE POLICY "course_closings_select_storage" ON storage.objects FOR SELECT USING (bucket_id = 'course-closings');
+CREATE POLICY "course_closings_insert_storage" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'course-closings');
+CREATE POLICY "course_closings_update_storage" ON storage.objects FOR UPDATE USING (bucket_id = 'course-closings');
+CREATE POLICY "course_closings_delete_storage" ON storage.objects FOR DELETE USING (bucket_id = 'course-closings');`;
 
   if (diagStatus === 'table_missing') {
     return (

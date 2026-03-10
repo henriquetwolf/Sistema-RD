@@ -1356,16 +1356,27 @@ export const appBackend = {
       if (clean.length >= 11) allDocs.add(clean);
     });
 
+    const formatVariants = (doc: string): string[] => {
+      const variants = [doc];
+      if (doc.length === 11) {
+        variants.push(`${doc.slice(0,3)}.${doc.slice(3,6)}.${doc.slice(6,9)}-${doc.slice(9)}`);
+      } else if (doc.length === 14) {
+        variants.push(`${doc.slice(0,2)}.${doc.slice(2,5)}.${doc.slice(5,8)}/${doc.slice(8,12)}-${doc.slice(12)}`);
+      }
+      return variants;
+    };
+
     const queries: Promise<any>[] = [];
 
     if (allDocs.size > 0) {
-      const docsArray = Array.from(allDocs);
+      const allVariants: string[] = [];
+      allDocs.forEach(d => allVariants.push(...formatVariants(d)));
       queries.push(
         supabase.from('conta_azul_contas_receber')
-          .select('*').in('contato_cpf', docsArray)
+          .select('*').in('contato_cpf', allVariants)
           .order('data_vencimento', { ascending: false }),
         supabase.from('conta_azul_contas_pagar')
-          .select('*').in('contato_cpf', docsArray)
+          .select('*').in('contato_cpf', allVariants)
           .order('data_vencimento', { ascending: false }),
       );
     } else {
@@ -1373,12 +1384,13 @@ export const appBackend = {
     }
 
     if (validNames.length > 0) {
+      const lowerNames = validNames.map(n => n.trim());
       queries.push(
         supabase.from('conta_azul_contas_receber')
-          .select('*').in('contato_nome', validNames)
+          .select('*').in('contato_nome', lowerNames)
           .order('data_vencimento', { ascending: false }),
         supabase.from('conta_azul_contas_pagar')
-          .select('*').in('fornecedor_nome', validNames)
+          .select('*').in('fornecedor_nome', lowerNames)
           .order('data_vencimento', { ascending: false }),
       );
     } else {

@@ -7,7 +7,7 @@ import { Apostila, ApostilaAnnotation } from '../types';
 import {
     Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Pen, Type, Highlighter,
     StickyNote, Eraser, Square, CircleIcon, Minus, Undo2, Redo2, Save, Bookmark,
-    BookOpen, Eye, Palette, LayoutList
+    BookOpen, Eye, Palette, LayoutList, Maximize, Minimize, X
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -50,6 +50,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
     const [goToPageInput, setGoToPageInput] = useState('');
     const [flipDirection, setFlipDirection] = useState<'next' | 'prev' | null>(null);
     const [isFlipping, setIsFlipping] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     const [undoStack, setUndoStack] = useState<string[]>([]);
     const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -210,6 +211,8 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                 if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
                     deleteSelectedObjects();
                 }
+            } else if (e.key === 'Escape') {
+                setIsFullscreen(false);
             }
         };
         window.addEventListener('keydown', handler);
@@ -633,15 +636,27 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
 
     // ── Main workbook view ───────────────────────────────────
     return (
-        <div className="flex flex-col h-[calc(100vh-220px)] bg-slate-50 rounded-3xl overflow-hidden border border-slate-200 shadow-sm">
+        <div className={clsx(
+            "flex flex-col bg-slate-50 overflow-hidden shadow-sm",
+            isFullscreen
+                ? "fixed inset-0 z-[999] rounded-none border-none"
+                : "h-[calc(100vh-220px)] rounded-3xl border border-slate-200"
+        )}>
             {/* Top bar */}
-            <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 shrink-0">
+            <div className={clsx("flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0", isFullscreen ? "bg-slate-900 border-slate-700" : "bg-white")}>
                 <div className="flex items-center gap-3">
-                    <button onClick={() => { saveCurrentAnnotations(); setSelectedApostila(null); }} className="text-slate-400 hover:text-slate-700 transition-colors">
-                        <ChevronLeft size={20} />
-                    </button>
-                    <h2 className="font-black text-slate-800 text-sm truncate max-w-[200px]">{selectedApostila.title}</h2>
-                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+                    {isFullscreen ? (
+                        <button onClick={() => setIsFullscreen(false)} className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors" title="Sair da tela cheia">
+                            <X size={20} />
+                            <span className="text-xs font-bold hidden sm:inline">Voltar</span>
+                        </button>
+                    ) : (
+                        <button onClick={() => { saveCurrentAnnotations(); setSelectedApostila(null); }} className="text-slate-400 hover:text-slate-700 transition-colors">
+                            <ChevronLeft size={20} />
+                        </button>
+                    )}
+                    <h2 className={clsx("font-black text-sm truncate max-w-[200px]", isFullscreen ? "text-white" : "text-slate-800")}>{selectedApostila.title}</h2>
+                    <span className={clsx("text-[10px] font-bold px-2 py-1 rounded-full", isFullscreen ? "text-slate-400 bg-slate-800" : "text-slate-400 bg-slate-100")}>
                         {currentPage} / {totalPages}
                     </span>
                 </div>
@@ -649,33 +664,38 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                 <div className="flex items-center gap-2">
                     {/* Progress */}
                     <div className="hidden md:flex items-center gap-2 mr-4">
-                        <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div className={clsx("w-24 h-1.5 rounded-full overflow-hidden", isFullscreen ? "bg-slate-700" : "bg-slate-200")}>
                             <div className="h-full bg-rose-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
                         </div>
-                        <span className="text-[10px] font-black text-slate-500">{progressPercent}%</span>
+                        <span className={clsx("text-[10px] font-black", isFullscreen ? "text-slate-400" : "text-slate-500")}>{progressPercent}%</span>
                     </div>
 
                     {/* Zoom */}
-                    <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500" title="Diminuir zoom"><ZoomOut size={16} /></button>
-                    <span className="text-[10px] font-black text-slate-500 w-10 text-center">{Math.round(scale * 100)}%</span>
-                    <button onClick={() => setScale(s => Math.min(2.5, s + 0.2))} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500" title="Aumentar zoom"><ZoomIn size={16} /></button>
+                    <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className={clsx("p-2 rounded-xl transition-colors", isFullscreen ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100")} title="Diminuir zoom"><ZoomOut size={16} /></button>
+                    <span className={clsx("text-[10px] font-black w-10 text-center", isFullscreen ? "text-slate-400" : "text-slate-500")}>{Math.round(scale * 100)}%</span>
+                    <button onClick={() => setScale(s => Math.min(2.5, s + 0.2))} className={clsx("p-2 rounded-xl transition-colors", isFullscreen ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100")} title="Aumentar zoom"><ZoomIn size={16} /></button>
 
-                    <div className="w-px h-6 bg-slate-200 mx-1" />
+                    <div className={clsx("w-px h-6 mx-1", isFullscreen ? "bg-slate-700" : "bg-slate-200")} />
 
                     {/* Bookmark */}
-                    <button onClick={toggleBookmark} className={clsx("p-2 rounded-xl transition-colors", bookmarkedPages.has(currentPage) ? "bg-amber-50 text-amber-500" : "text-slate-400 hover:bg-slate-100")} title="Favoritar pagina">
+                    <button onClick={toggleBookmark} className={clsx("p-2 rounded-xl transition-colors", bookmarkedPages.has(currentPage) ? "bg-amber-50 text-amber-500" : isFullscreen ? "text-slate-400 hover:bg-slate-800" : "text-slate-400 hover:bg-slate-100")} title="Favoritar pagina">
                         <Bookmark size={16} fill={bookmarkedPages.has(currentPage) ? 'currentColor' : 'none'} />
                     </button>
 
                     {/* Sidebar toggle */}
-                    <button onClick={() => setShowSidebar(!showSidebar)} className={clsx("p-2 rounded-xl transition-colors", showSidebar ? "bg-slate-100 text-slate-700" : "text-slate-400 hover:bg-slate-100")} title="Painel lateral">
+                    <button onClick={() => setShowSidebar(!showSidebar)} className={clsx("p-2 rounded-xl transition-colors", showSidebar ? (isFullscreen ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700") : (isFullscreen ? "text-slate-400 hover:bg-slate-800" : "text-slate-400 hover:bg-slate-100"))} title="Painel lateral">
                         <LayoutList size={16} />
                     </button>
 
-                    <div className="w-px h-6 bg-slate-200 mx-1" />
+                    {/* Fullscreen toggle */}
+                    <button onClick={() => setIsFullscreen(!isFullscreen)} className={clsx("p-2 rounded-xl transition-colors", isFullscreen ? "text-slate-400 hover:bg-slate-800" : "text-slate-400 hover:bg-slate-100")} title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}>
+                        {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+                    </button>
+
+                    <div className={clsx("w-px h-6 mx-1", isFullscreen ? "bg-slate-700" : "bg-slate-200")} />
 
                     {/* Save */}
-                    <button onClick={saveCurrentAnnotations} disabled={isSaving} className={clsx("flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all", hasUnsavedChanges ? "bg-rose-600 text-white hover:bg-rose-700 shadow-sm" : "bg-slate-100 text-slate-500")}>
+                    <button onClick={saveCurrentAnnotations} disabled={isSaving} className={clsx("flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all", hasUnsavedChanges ? "bg-rose-600 text-white hover:bg-rose-700 shadow-sm" : isFullscreen ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500")}>
                         {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                         Salvar
                     </button>
@@ -685,7 +705,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar */}
                 {showSidebar && (
-                    <div className="w-52 bg-white border-r border-slate-200 flex flex-col shrink-0">
+                    <div className={clsx("w-52 flex flex-col shrink-0", isFullscreen ? "bg-slate-900 border-r border-slate-700" : "bg-white border-r border-slate-200")}>
                         <div className="flex border-b border-slate-100">
                             <button onClick={() => setSidebarTab('pages')} className={clsx("flex-1 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors", sidebarTab === 'pages' ? "text-rose-600 border-b-2 border-rose-600" : "text-slate-400")}>
                                 Paginas
@@ -736,7 +756,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                 {/* Main PDF + Canvas area */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                     {/* Toolbar */}
-                    <div className="flex items-center gap-1 px-4 py-2 bg-white border-b border-slate-100 overflow-x-auto shrink-0">
+                    <div className={clsx("flex items-center gap-1 px-4 py-2 border-b overflow-x-auto shrink-0", isFullscreen ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100")}>
                         <ToolButton icon={<Eye size={16} />} label="Selecionar" active={activeTool === 'select'} onClick={() => setActiveTool('select')} />
                         <div className="w-px h-6 bg-slate-200 mx-1" />
 
@@ -794,7 +814,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                     </div>
 
                     {/* Canvas area */}
-                    <div ref={containerRef} className="flex-1 overflow-auto bg-slate-100 flex items-start justify-center p-6" style={{ scrollbarWidth: 'thin', perspective: '1200px' }}>
+                    <div ref={containerRef} className={clsx("flex-1 overflow-auto flex items-start justify-center p-6", isFullscreen ? "bg-slate-950" : "bg-slate-100")} style={{ scrollbarWidth: 'thin', perspective: '1200px' }}>
                         <div
                             ref={pageContainerRef}
                             className="relative shadow-2xl rounded-lg"
@@ -822,7 +842,7 @@ export const DigitalWorkbook: React.FC<DigitalWorkbookProps> = ({ studentCpf }) 
                     </div>
 
                     {/* Bottom navigation */}
-                    <div className="flex items-center justify-center gap-3 px-4 py-3 bg-white border-t border-slate-200 shrink-0">
+                    <div className={clsx("flex items-center justify-center gap-3 px-4 py-3 border-t shrink-0", isFullscreen ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200")}>
                         <button onClick={() => goToPage(1)} disabled={currentPage <= 1} className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors">
                             Inicio
                         </button>

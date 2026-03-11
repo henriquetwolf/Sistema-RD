@@ -238,72 +238,32 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const fetchFinanceiro = async () => {
       setIsLoadingFinanceiro(true);
       try {
-          const rawCpf = (instructor.cpf || '').trim();
-          const cleanCpf = rawCpf.replace(/\D/g, '');
-          const rawCnpj = (instructor.cnpj || '').trim();
-          const cleanCnpj = rawCnpj.replace(/\D/g, '');
+          const docs: string[] = [];
+          if (instructor.cpf?.trim()) docs.push(instructor.cpf.trim());
+          if (instructor.cnpj?.trim()) docs.push(instructor.cnpj.trim());
 
-          const docSearches: string[] = [];
-          if (cleanCpf.length >= 11) {
-              docSearches.push(cleanCpf);
-              if (rawCpf !== cleanCpf) docSearches.push(rawCpf);
-          }
-          if (cleanCnpj.length >= 14) {
-              docSearches.push(cleanCnpj);
-              if (rawCnpj !== cleanCnpj) docSearches.push(rawCnpj);
-          }
+          const names = [...new Set([instructor.fullName?.trim(), instructor.companyName?.trim()].filter(Boolean))] as string[];
 
-          const nameVariants = [...new Set([instructor.fullName?.trim(), instructor.companyName?.trim()].filter(Boolean))] as string[];
+          console.log('[Financeiro] Buscando via RPC:', { id: instructor.id, docs, names });
 
-          console.log('[Financeiro] Buscando para instrutor:', { id: instructor.id, nome: instructor.fullName, cpf: rawCpf, cnpj: rawCnpj, companyName: instructor.companyName, docSearches, nameVariants });
+          const { data, error } = await appBackend.client.rpc('lookup_financeiro_by_docs', {
+              p_docs: docs.length > 0 ? docs : null,
+              p_names: names.length > 0 ? names : null,
+          });
 
-          const allReceber: any[] = [];
-          const allPagar: any[] = [];
-
-          for (const doc of docSearches) {
-              const [recDoc, pagDoc] = await Promise.all([
-                  appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
-                  appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
-              ]);
-              if (recDoc.error) console.error(`[Financeiro] Erro receber por doc "${doc}":`, recDoc.error);
-              if (pagDoc.error) console.error(`[Financeiro] Erro pagar por doc "${doc}":`, pagDoc.error);
-              allReceber.push(...(recDoc.data || []));
-              allPagar.push(...(pagDoc.data || []));
-              console.log(`[Financeiro] Por doc "${doc}":`, { receber: recDoc.data?.length || 0, pagar: pagDoc.data?.length || 0 });
+          if (error) {
+              console.error('[Financeiro] Erro RPC:', error);
+              setReceivables([]);
+              setPayables([]);
+              return;
           }
 
-          for (const name of nameVariants) {
-              const [recName, pagName] = await Promise.all([
-                  appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
-                  appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
-              ]);
-              if (recName.error) console.error(`[Financeiro] Erro receber por nome "${name}":`, recName.error);
-              if (pagName.error) console.error(`[Financeiro] Erro pagar por nome "${name}":`, pagName.error);
-              allReceber.push(...(recName.data || []));
-              allPagar.push(...(pagName.data || []));
-              console.log(`[Financeiro] Por nome "${name}":`, { receber: recName.data?.length || 0, pagar: pagName.data?.length || 0 });
-          }
+          const receber = data?.receber || [];
+          const pagar = data?.pagar || [];
+          console.log('[Financeiro] Resultado RPC:', { receber: receber.length, pagar: pagar.length });
 
-          console.log('[Financeiro] Total bruto:', { receber: allReceber.length, pagar: allPagar.length });
-
-          const dedup = (arr: any[]) => {
-              const seen = new Map<string, any>();
-              for (const item of arr) {
-                  const key = item.id_conta_azul || item.id;
-                  const existing = seen.get(key);
-                  if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
-                      seen.set(key, item);
-                  }
-              }
-              return Array.from(seen.values());
-          };
-
-          const dedupedReceber = dedup(allReceber);
-          const dedupedPagar = dedup(allPagar);
-          console.log('[Financeiro] Após dedup:', { receber: dedupedReceber.length, pagar: dedupedPagar.length });
-
-          setReceivables(dedupedReceber);
-          setPayables(dedupedPagar);
+          setReceivables(receber);
+          setPayables(pagar);
       } catch (e) {
           console.error("[Financeiro] Erro geral ao buscar dados financeiros:", e);
       } finally {

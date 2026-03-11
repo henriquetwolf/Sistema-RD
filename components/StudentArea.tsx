@@ -202,45 +202,25 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const fetchFinanceiro = async () => {
         setIsLoadingFinanceiro(true);
         try {
-            const rawCpf = (student.cpf || '').trim();
-            const cleanCpf = rawCpf.replace(/\D/g, '');
-            const docSearches: string[] = [];
-            if (cleanCpf.length >= 11) {
-                docSearches.push(cleanCpf);
-                if (rawCpf !== cleanCpf) docSearches.push(rawCpf);
+            const docs: string[] = [];
+            if (student.cpf?.trim()) docs.push(student.cpf.trim());
+
+            const names = [student.name?.trim()].filter(Boolean) as string[];
+
+            const { data, error } = await appBackend.client.rpc('lookup_financeiro_by_docs', {
+                p_docs: docs.length > 0 ? docs : null,
+                p_names: names.length > 0 ? names : null,
+            });
+
+            if (error) {
+                console.error('[Financeiro Aluno] Erro RPC:', error);
+                setFinReceivables([]);
+                setFinPayables([]);
+                return;
             }
-            const allReceber: any[] = [];
-            const allPagar: any[] = [];
-            for (const doc of docSearches) {
-                const [recDoc, pagDoc] = await Promise.all([
-                    appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
-                    appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
-                ]);
-                allReceber.push(...(recDoc.data || []));
-                allPagar.push(...(pagDoc.data || []));
-            }
-            const fullName = student.name?.trim();
-            if (fullName) {
-                const [recName, pagName] = await Promise.all([
-                    appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${fullName}%`).order('data_vencimento', { ascending: false }),
-                    appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${fullName}%`).order('data_vencimento', { ascending: false }),
-                ]);
-                allReceber.push(...(recName.data || []));
-                allPagar.push(...(pagName.data || []));
-            }
-            const dedup = (arr: any[]) => {
-                const seen = new Map<string, any>();
-                for (const item of arr) {
-                    const key = item.id_conta_azul || item.id;
-                    const existing = seen.get(key);
-                    if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
-                        seen.set(key, item);
-                    }
-                }
-                return Array.from(seen.values());
-            };
-            setFinReceivables(dedup(allReceber));
-            setFinPayables(dedup(allPagar));
+
+            setFinReceivables(data?.receber || []);
+            setFinPayables(data?.pagar || []);
         } catch (e) {
             console.error("Erro ao buscar dados financeiros:", e);
         } finally {

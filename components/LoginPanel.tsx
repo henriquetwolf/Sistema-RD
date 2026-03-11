@@ -35,14 +35,16 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
   const detectRolesByCpf = async (cpf: string): Promise<UserRole[]> => {
     const clean = cpf.replace(/\D/g, '');
     if (clean.length < 11) return [];
+    const formatted = `${clean.slice(0,3)}.${clean.slice(3,6)}.${clean.slice(6,9)}-${clean.slice(9,11)}`;
+    const cpfOr = `cpf.eq.${clean},cpf.eq.${formatted}`;
     const roles: UserRole[] = [];
 
     const [instrRes, alunoRes, collabRes, studioRes, franchiseRes] = await Promise.all([
-      appBackend.client.from('crm_teachers').select('id').ilike('cpf', `%${clean}%`).eq('is_active', true).limit(1),
-      appBackend.client.from('crm_alunos').select('id').eq('cpf', clean).limit(1),
-      appBackend.client.from('crm_collaborators').select('id').ilike('cpf', `%${clean}%`).eq('status', 'active').limit(1),
-      appBackend.client.from('crm_partner_studios').select('id').ilike('cpf', `%${clean}%`).in('status', ['active', 'Ativo']).limit(1),
-      appBackend.client.from('crm_franchises').select('id').ilike('cpf', `%${clean}%`).limit(1),
+      appBackend.client.from('crm_teachers').select('id').or(cpfOr).eq('is_active', true).limit(1),
+      appBackend.client.from('crm_alunos').select('id').or(cpfOr).limit(1),
+      appBackend.client.from('crm_collaborators').select('id').or(cpfOr).eq('status', 'active').limit(1),
+      appBackend.client.from('crm_partner_studios').select('id').or(cpfOr).in('status', ['active', 'Ativo']).limit(1),
+      appBackend.client.from('crm_franchises').select('id').or(cpfOr).limit(1),
     ]);
 
     if (instrRes.data && instrRes.data.length > 0) roles.push('instructor');

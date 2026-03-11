@@ -1333,6 +1333,9 @@ export const appBackend = {
   getEntityDataByCpf: async (role: string, cpf: string) => {
     if (!isConfigured) return null;
     const clean = cpf.replace(/\D/g, '');
+    const formatted = clean.length === 11
+      ? `${clean.slice(0,3)}.${clean.slice(3,6)}.${clean.slice(6,9)}-${clean.slice(9,11)}`
+      : clean;
     let table = '';
     let cpfField = 'cpf';
 
@@ -1348,14 +1351,14 @@ export const appBackend = {
     const { data } = await supabase
       .from(table)
       .select('*')
-      .eq(cpfField, clean)
+      .or(`${cpfField}.eq.${clean},${cpfField}.eq.${formatted}`)
       .maybeSingle();
 
     if (!data) {
       const { data: fuzzy } = await supabase
         .from(table)
         .select('*')
-        .ilike(cpfField, `%${clean}%`)
+        .or(`${cpfField}.ilike.%${clean}%,${cpfField}.ilike.%${formatted}%`)
         .limit(1)
         .maybeSingle();
       return fuzzy;

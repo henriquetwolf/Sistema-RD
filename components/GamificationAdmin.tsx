@@ -644,15 +644,51 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
                   <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" value={badgeModal.sort_order ?? 0} onChange={e => setBadgeModal(p => ({ ...p!, sort_order: parseInt(e.target.value) || 0 }))} />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Configuração de Critério (JSON)</label>
-                <textarea
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono"
-                  rows={3}
-                  value={typeof badgeModal.criteria_config === 'string' ? badgeModal.criteria_config : JSON.stringify(badgeModal.criteria_config || {}, null, 2)}
-                  onChange={e => setBadgeModal(p => ({ ...p!, criteria_config: e.target.value as any }))}
-                />
-              </div>
+              {badgeModal.criteria_type === 'auto' && (
+                <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
+                  <label className="block text-xs font-semibold text-slate-700">Critério Automático</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">Ação necessária</label>
+                      <select
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                        value={(badgeModal.criteria_config as any)?.action || ''}
+                        onChange={e => setBadgeModal(p => ({ ...p!, criteria_config: { ...(p!.criteria_config as any || {}), action: e.target.value } }))}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="lesson_completed">Aulas completadas</option>
+                        <option value="course_completed">Cursos completados</option>
+                        <option value="apostila_completed">Apostilas completadas</option>
+                        <option value="apostila_page_read">Páginas lidas</option>
+                        <option value="ai_chat">Mensagens ao Tutor IA</option>
+                        <option value="event_registration">Inscrições em eventos</option>
+                        <option value="certificate_earned">Certificados obtidos</option>
+                        <option value="profile_completed">Perfil completo</option>
+                        <option value="reward_claimed">Recompensas resgatadas</option>
+                        <option value="streak">Dias de sequência (streak)</option>
+                        <option value="total_volls">Total de VOLLs acumulados</option>
+                        <option value="perfect_attendance">Presença perfeita</option>
+                        <option value="daily_login">Logins diários</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">Quantidade necessária</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                        value={(badgeModal.criteria_config as any)?.count || ''}
+                        onChange={e => setBadgeModal(p => ({ ...p!, criteria_config: { ...(p!.criteria_config as any || {}), count: parseInt(e.target.value) || 0 } }))}
+                        placeholder="Ex: 10"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Ex: "Aulas completadas" + "10" = Badge concedido ao completar 10 aulas.</p>
+                </div>
+              )}
+              {badgeModal.criteria_type === 'manual' && (
+                <p className="text-xs text-slate-500 italic bg-slate-50 p-3 rounded-lg border border-slate-200">Este badge será concedido manualmente pelo administrador via botão "Conceder".</p>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-700">Ativo</span>
                 <Toggle value={!!badgeModal.is_active} onChange={v => setBadgeModal(p => ({ ...p!, is_active: v }))} />
@@ -817,14 +853,40 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
                   <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" value={challengeModal.end_date?.split('T')[0] || ''} onChange={e => setChallengeModal(p => ({ ...p!, end_date: e.target.value || null }))} />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Configuração de Critério (JSON)</label>
-                <textarea
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono"
-                  rows={3}
-                  value={typeof challengeModal.criteria_config === 'string' ? challengeModal.criteria_config : JSON.stringify(challengeModal.criteria_config || {}, null, 2)}
-                  onChange={e => setChallengeModal(p => ({ ...p!, criteria_config: e.target.value as any }))}
-                />
+              <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
+                <label className="block text-xs font-semibold text-slate-700">Meta do Desafio</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1">Ação que o aluno deve fazer</label>
+                    <select
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={(challengeModal.criteria_config as any)?.action || ''}
+                      onChange={e => setChallengeModal(p => ({ ...p!, criteria_config: { ...(p!.criteria_config as any || {}), action: e.target.value } }))}
+                    >
+                      <option value="">Selecione...</option>
+                      <option value="lesson_completed">Completar aulas</option>
+                      <option value="course_completed">Completar cursos</option>
+                      <option value="apostila_page_read">Ler páginas da apostila</option>
+                      <option value="ai_chat">Conversar com Tutor IA</option>
+                      <option value="daily_login">Fazer login diário</option>
+                      <option value="event_registration">Inscrever em eventos</option>
+                      <option value="certificate_earned">Obter certificados</option>
+                      <option value="reward_claimed">Resgatar recompensas</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1">Quantidade necessária</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={(challengeModal.criteria_config as any)?.count || ''}
+                      onChange={e => setChallengeModal(p => ({ ...p!, criteria_config: { ...(p!.criteria_config as any || {}), count: parseInt(e.target.value) || 0 } }))}
+                      placeholder="Ex: 3"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400">Ex: "Completar aulas" + "3" = Desafio completado ao fazer 3 aulas.</p>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-700">Ativo</span>
@@ -981,14 +1043,100 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
                   <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" value={rewardModal.stock ?? ''} onChange={e => setRewardModal(p => ({ ...p!, stock: e.target.value ? parseInt(e.target.value) : null }))} placeholder="Vazio = ilimitado" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Configuração da Recompensa (JSON)</label>
-                <textarea
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono"
-                  rows={3}
-                  value={typeof rewardModal.reward_config === 'string' ? rewardModal.reward_config : JSON.stringify(rewardModal.reward_config || {}, null, 2)}
-                  onChange={e => setRewardModal(p => ({ ...p!, reward_config: e.target.value as any }))}
-                />
+              <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
+                <label className="block text-xs font-semibold text-slate-700">Configuração da Recompensa</label>
+
+                {rewardModal.reward_type === 'discount' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">Percentual de desconto (%)</label>
+                      <input
+                        type="number" min={1} max={100}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                        value={(rewardModal.reward_config as any)?.discount_percent || ''}
+                        onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), discount_percent: parseInt(e.target.value) || 0 } }))}
+                        placeholder="Ex: 10"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">Aplicável a</label>
+                      <select
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                        value={(rewardModal.reward_config as any)?.applicable_to || 'online_courses'}
+                        onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), applicable_to: e.target.value } }))}
+                      >
+                        <option value="online_courses">Cursos online</option>
+                        <option value="presencial_courses">Cursos presenciais</option>
+                        <option value="all">Tudo</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {rewardModal.reward_type === 'content_unlock' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">Tipo de conteúdo</label>
+                      <select
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                        value={(rewardModal.reward_config as any)?.content_type || ''}
+                        onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), content_type: e.target.value } }))}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="online_course">Curso online</option>
+                        <option value="studio_digital_premium">Studio Digital Premium</option>
+                        <option value="apostila">Apostila Digital</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">ID do conteúdo (opcional)</label>
+                      <input
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                        value={(rewardModal.reward_config as any)?.content_id || ''}
+                        onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), content_id: e.target.value } }))}
+                        placeholder="UUID ou deixe vazio para acesso geral"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {rewardModal.reward_type === 'certificate' && (
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1">Título do certificado</label>
+                    <input
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={(rewardModal.reward_config as any)?.certificate_title || ''}
+                      onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), certificate_title: e.target.value } }))}
+                      placeholder="Ex: Aluno Destaque VOLL"
+                    />
+                  </div>
+                )}
+
+                {rewardModal.reward_type === 'badge' && (
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1">Badge a conceder</label>
+                    <select
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={(rewardModal.reward_config as any)?.badge_id || ''}
+                      onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), badge_id: e.target.value } }))}
+                    >
+                      <option value="">Selecione um badge...</option>
+                      {badges.map(b => <option key={b.id} value={b.id}>{b.icon_emoji} {b.name}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {rewardModal.reward_type === 'custom' && (
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1">Descrição do benefício customizado</label>
+                    <input
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      value={(rewardModal.reward_config as any)?.custom_description || ''}
+                      onChange={e => setRewardModal(p => ({ ...p!, reward_config: { ...(p!.reward_config as any || {}), custom_description: e.target.value } }))}
+                      placeholder="Descreva o benefício que será entregue manualmente"
+                    />
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

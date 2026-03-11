@@ -92,7 +92,7 @@ export const ContaAzulManager: React.FC = () => {
   const [pendingRecSession, setPendingRecSession] = useState<{ sessionId: string; pending: number; total: number; completed: number } | null>(null);
   const [pendingPaySession, setPendingPaySession] = useState<{ sessionId: string; pending: number; total: number; completed: number } | null>(null);
   const [syncTimestamps, setSyncTimestamps] = useState<SyncTimestamps>({});
-  const [syncingAccountType, setSyncingAccountType] = useState<string | null>(null);
+  const [syncingAccountType, setSyncingAccountType] = useState<{ key: string; full: boolean } | null>(null);
 
   // Loading states
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -858,7 +858,7 @@ export const ContaAzulManager: React.FC = () => {
     const accName = caAccounts.find(a => a.id === accountId)?.nome || '';
     const typeLabel = type === 'receivables' ? 'Contas a Receber' : 'Contas a Pagar';
     const key = `${accountId}-${type}`;
-    setSyncingAccountType(key);
+    setSyncingAccountType({ key, full: fullSync });
     setIsSyncing(true);
     setSyncProgress(0);
 
@@ -1035,7 +1035,7 @@ export const ContaAzulManager: React.FC = () => {
                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-l-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center gap-2"
                 title="Sync rápido de TUDO (categorias, contas, receber e pagar)"
               >
-                {isSyncing && !syncingAccountType ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {isSyncing && !syncingAccountType?.key ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                 Sync Tudo
               </button>
               <button
@@ -1109,8 +1109,10 @@ export const ContaAzulManager: React.FC = () => {
               const ts = syncTimestamps[acc.id] || {};
               const recKey = `${acc.id}-receivables`;
               const payKey = `${acc.id}-payables`;
-              const isSyncingRec = syncingAccountType === recKey;
-              const isSyncingPay = syncingAccountType === payKey;
+              const isSyncingRecFast = syncingAccountType?.key === recKey && !syncingAccountType.full;
+              const isSyncingRecFull = syncingAccountType?.key === recKey && syncingAccountType.full;
+              const isSyncingPayFast = syncingAccountType?.key === payKey && !syncingAccountType.full;
+              const isSyncingPayFull = syncingAccountType?.key === payKey && syncingAccountType.full;
               return (
                 <div key={acc.id} className="px-5 py-3">
                   <div className="flex items-center gap-2 mb-2.5">
@@ -1140,7 +1142,7 @@ export const ContaAzulManager: React.FC = () => {
                           className="bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
                           title="Sync rápido (incremental)"
                         >
-                          {isSyncingRec ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                          {isSyncingRecFast ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
                           Rápido
                         </button>
                         <button
@@ -1149,7 +1151,7 @@ export const ContaAzulManager: React.FC = () => {
                           className="bg-slate-500 hover:bg-slate-600 disabled:opacity-40 text-white px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
                           title="Sync completa (todos os registros)"
                         >
-                          <Database size={11} />
+                          {isSyncingRecFull ? <Loader2 size={11} className="animate-spin" /> : <Database size={11} />}
                         </button>
                       </div>
                     </div>
@@ -1174,7 +1176,7 @@ export const ContaAzulManager: React.FC = () => {
                           className="bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
                           title="Sync rápido (incremental)"
                         >
-                          {isSyncingPay ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                          {isSyncingPayFast ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
                           Rápido
                         </button>
                         <button
@@ -1183,7 +1185,7 @@ export const ContaAzulManager: React.FC = () => {
                           className="bg-slate-500 hover:bg-slate-600 disabled:opacity-40 text-white px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
                           title="Sync completa (todos os registros)"
                         >
-                          <Database size={11} />
+                          {isSyncingPayFull ? <Loader2 size={11} className="animate-spin" /> : <Database size={11} />}
                         </button>
                       </div>
                     </div>

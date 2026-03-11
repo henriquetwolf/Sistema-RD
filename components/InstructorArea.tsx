@@ -238,12 +238,28 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           const [receberByCpf, pagarByCpf, receberByName, pagarByName] = await Promise.all(queries);
 
           const dedup = (arr: any[]) => {
-              const seen = new Set<string>();
-              return arr.filter(item => {
-                  if (seen.has(item.id)) return false;
-                  seen.add(item.id);
-                  return true;
-              });
+              const byContaAzul = new Map<string, any>();
+              for (const item of arr) {
+                  const key = item.id_conta_azul || item.id;
+                  const existing = byContaAzul.get(key);
+                  if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
+                      byContaAzul.set(key, item);
+                  }
+              }
+              const byBizKey = new Map<string, any>();
+              for (const item of byContaAzul.values()) {
+                  const bizKey = [
+                      (item.descricao || '').trim().toLowerCase(),
+                      String(item.valor || 0),
+                      item.data_vencimento || '',
+                      (item.contato_nome || item.fornecedor_nome || '').trim().toLowerCase(),
+                  ].join('|');
+                  const existing = byBizKey.get(bizKey);
+                  if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
+                      byBizKey.set(bizKey, item);
+                  }
+              }
+              return Array.from(byBizKey.values());
           };
 
           setReceivables(dedup([...(receberByCpf.data || []), ...(receberByName.data || [])]));

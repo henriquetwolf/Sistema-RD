@@ -217,13 +217,17 @@ function mapReceivableToRow(item: any, accountId: string, contactMaps?: ContactM
   const resolvedCpf = resolveContactCpf(item.cliente, contactMaps)
     || resolveContactCpf(item.contato, contactMaps)
     || null;
+  const valor = safeFloat(item.valor ?? item.total ?? item.valor_original);
+  const naoPago = safeFloat(item.nao_pago);
+  const valorPago = safeFloat(item.valor_pago ?? item.pago ?? item.valor_recebido ?? item.valor_liquidado);
+  const computedPago = valorPago > 0 ? valorPago : (naoPago > 0 && valor > 0 ? valor - naoPago : 0);
   return {
     account_id: accountId,
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: safeFloat(item.valor ?? item.total ?? item.valor_original),
-    valor_pago: safeFloat(item.valor_pago ?? item.pago ?? item.valor_recebido),
+    valor,
+    valor_pago: computedPago,
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -253,13 +257,17 @@ function mapPayableToRow(item: any, accountId: string, contactMaps?: ContactMaps
   const resolvedCpf = resolveContactCpf(item.fornecedor, contactMaps)
     || resolveContactCpf(item.contato, contactMaps)
     || null;
+  const valor = safeFloat(item.valor ?? item.total ?? item.valor_original);
+  const naoPago = safeFloat(item.nao_pago);
+  const valorPago = safeFloat(item.valor_pago ?? item.pago ?? item.valor_liquidado);
+  const computedPago = valorPago > 0 ? valorPago : (naoPago > 0 && valor > 0 ? valor - naoPago : 0);
   return {
     account_id: accountId,
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: safeFloat(item.valor ?? item.total ?? item.valor_original),
-    valor_pago: safeFloat(item.valor_pago ?? item.pago),
+    valor,
+    valor_pago: computedPago,
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -351,9 +359,28 @@ async function syncReceivables(req: Request): Promise<Response> {
         count += batch.length;
       }
     }
-    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} individual row errors for account ${accountId}`);
+    let staleRemoved = 0;
+    if (!isIncremental && rows.length > 0) {
+      const syncedIds = new Set(rows.map(r => r.id_conta_azul));
+      const { data: existing } = await db
+        .from("conta_azul_contas_receber")
+        .select("id, id_conta_azul")
+        .eq("account_id", accountId)
+        .gte("data_vencimento", params.data_vencimento_de)
+        .lte("data_vencimento", params.data_vencimento_ate);
+      const staleIds = (existing || []).filter((r: any) => !syncedIds.has(r.id_conta_azul)).map((r: any) => r.id);
+      if (staleIds.length > 0) {
+        for (let i = 0; i < staleIds.length; i += 200) {
+          await db.from("conta_azul_contas_receber").delete().in("id", staleIds.slice(i, i + 200));
+        }
+        staleRemoved = staleIds.length;
+        console.log(`[syncReceivables] Cleaned up ${staleRemoved} stale records for range ${params.data_vencimento_de} → ${params.data_vencimento_ate}`);
+      }
+    }
+
+    console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} row errors, ${staleRemoved} stale removed for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental, staleRemoved });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
@@ -425,9 +452,28 @@ async function syncPayables(req: Request): Promise<Response> {
         count += batch.length;
       }
     }
-    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} individual row errors for account ${accountId}`);
+    let staleRemoved = 0;
+    if (!isIncremental && rows.length > 0) {
+      const syncedIds = new Set(rows.map(r => r.id_conta_azul));
+      const { data: existing } = await db
+        .from("conta_azul_contas_pagar")
+        .select("id, id_conta_azul")
+        .eq("account_id", accountId)
+        .gte("data_vencimento", params.data_vencimento_de)
+        .lte("data_vencimento", params.data_vencimento_ate);
+      const staleIds = (existing || []).filter((r: any) => !syncedIds.has(r.id_conta_azul)).map((r: any) => r.id);
+      if (staleIds.length > 0) {
+        for (let i = 0; i < staleIds.length; i += 200) {
+          await db.from("conta_azul_contas_pagar").delete().in("id", staleIds.slice(i, i + 200));
+        }
+        staleRemoved = staleIds.length;
+        console.log(`[syncPayables] Cleaned up ${staleRemoved} stale records for range ${params.data_vencimento_de} → ${params.data_vencimento_ate}`);
+      }
+    }
+
+    console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} row errors, ${staleRemoved} stale removed for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental, staleRemoved });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 

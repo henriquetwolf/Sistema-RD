@@ -500,26 +500,32 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
-      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%,status.ilike.%Recebido%,status.ilike.%Settled%');
+      query = query
+        .or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%,status.ilike.%Recebido%,status.ilike.%Settled%')
+        .not('status', 'ilike', '%Parcial%');
     } else if (filters.status === 'Pendente') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
-        .not('status', 'ilike', '%Pago%')
         .not('status', 'ilike', '%Paid%')
-        .not('status', 'ilike', '%Recebido%')
         .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
+        .not('status', 'ilike', '%Desconsiderado%')
+        .not('status', 'ilike', '%Renegociado%')
+        .or('status.not.ilike.%Recebido%,status.ilike.%Parcial%')
+        .or('status.not.ilike.%Pago%,status.ilike.%Parcial%')
         .gte('data_vencimento', today);
     } else if (filters.status === 'Atrasado') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
-        .not('status', 'ilike', '%Pago%')
         .not('status', 'ilike', '%Paid%')
-        .not('status', 'ilike', '%Recebido%')
         .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
+        .not('status', 'ilike', '%Desconsiderado%')
+        .not('status', 'ilike', '%Renegociado%')
+        .or('status.not.ilike.%Recebido%,status.ilike.%Parcial%')
+        .or('status.not.ilike.%Pago%,status.ilike.%Parcial%')
         .lt('data_vencimento', today);
     } else {
       query = query.ilike('status', `%${filters.status}%`);
@@ -569,26 +575,32 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
-      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%,status.ilike.%Recebido%,status.ilike.%Settled%');
+      query = query
+        .or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%,status.ilike.%Recebido%,status.ilike.%Settled%')
+        .not('status', 'ilike', '%Parcial%');
     } else if (filters.status === 'Pendente') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
-        .not('status', 'ilike', '%Pago%')
         .not('status', 'ilike', '%Paid%')
-        .not('status', 'ilike', '%Recebido%')
         .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
+        .not('status', 'ilike', '%Desconsiderado%')
+        .not('status', 'ilike', '%Renegociado%')
+        .or('status.not.ilike.%Recebido%,status.ilike.%Parcial%')
+        .or('status.not.ilike.%Pago%,status.ilike.%Parcial%')
         .gte('data_vencimento', today);
     } else if (filters.status === 'Atrasado') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
-        .not('status', 'ilike', '%Pago%')
         .not('status', 'ilike', '%Paid%')
-        .not('status', 'ilike', '%Recebido%')
         .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
+        .not('status', 'ilike', '%Desconsiderado%')
+        .not('status', 'ilike', '%Renegociado%')
+        .or('status.not.ilike.%Recebido%,status.ilike.%Parcial%')
+        .or('status.not.ilike.%Pago%,status.ilike.%Parcial%')
         .lt('data_vencimento', today);
     } else {
       query = query.ilike('status', `%${filters.status}%`);
@@ -727,11 +739,25 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
+    const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
     const dueDate = normalizeDate(r.data_vencimento);
+
+    if (isExcludedStatus(st)) continue;
+
     total_periodo += valor;
     if (isPaidStatus(st)) {
       recebidos += valor;
+    } else if (isPartiallyPaidStatus(st)) {
+      recebidos += valorPago;
+      const remaining = Math.max(0, valor - valorPago);
+      if (dueDate && dueDate < today) {
+        vencidos += remaining;
+      } else if (dueDate === today) {
+        vencem_hoje += remaining;
+      } else {
+        a_vencer += remaining;
+      }
     } else if (dueDate && dueDate < today) {
       vencidos += valor;
     } else if (dueDate === today) {
@@ -746,9 +772,18 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
 type PayableSummary = ReceivableSummary;
 
 function isPaidStatus(st: string): boolean {
+  if (isPartiallyPaidStatus(st)) return false;
   return st.includes('liquidado') || st.includes('quitado')
     || st.includes('pago') || st.includes('paid')
     || st.includes('recebido') || st.includes('settled');
+}
+
+function isPartiallyPaidStatus(st: string): boolean {
+  return st.includes('parcial');
+}
+
+function isExcludedStatus(st: string): boolean {
+  return st.includes('perdido') || st.includes('desconsiderado') || st.includes('renegociado');
 }
 
 function normalizeDate(d: string | null | undefined): string {
@@ -794,11 +829,25 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
+    const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
     const dueDate = normalizeDate(r.data_vencimento);
+
+    if (isExcludedStatus(st)) continue;
+
     total_periodo += valor;
     if (isPaidStatus(st)) {
       recebidos += valor;
+    } else if (isPartiallyPaidStatus(st)) {
+      recebidos += valorPago;
+      const remaining = Math.max(0, valor - valorPago);
+      if (dueDate && dueDate < today) {
+        vencidos += remaining;
+      } else if (dueDate === today) {
+        vencem_hoje += remaining;
+      } else {
+        a_vencer += remaining;
+      }
     } else if (dueDate && dueDate < today) {
       vencidos += valor;
     } else if (dueDate === today) {
@@ -839,6 +888,7 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
 
   for (const r of records) {
     const st = (r.status || '').toLowerCase();
+    if (isExcludedStatus(st)) continue;
     const valor = Number(r.valor || 0);
     const valorPago = Number(r.valor_pago || 0);
     const dueDate = normalizeDate(r.data_vencimento);
@@ -897,22 +947,41 @@ async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
     fetchAll('conta_azul_contas_financeiras', 'saldo_atual', (q: any) => q.eq('ativo', true)),
   ]);
 
-  const totalReceber = receberData.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-  const totalReceberPago = receberData.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
-  const totalPagar = pagarData.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-  const totalPagarPago = pagarData.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+  function computeTotals(records: any[]) {
+    let total = 0, pago = 0, pendente = 0, count = 0;
+    for (const r of records) {
+      const st = (r.status || '').toLowerCase();
+      if (isExcludedStatus(st)) continue;
+      const valor = Number(r.valor || 0);
+      const valorPago = Number(r.valor_pago || 0);
+      count++;
+      total += valor;
+      if (isPaidStatus(st)) {
+        pago += valor;
+      } else if (isPartiallyPaidStatus(st)) {
+        pago += valorPago;
+        pendente += Math.max(0, valor - valorPago);
+      } else {
+        pendente += valor;
+      }
+    }
+    return { total, pago, pendente, count };
+  }
+
+  const receber = computeTotals(receberData);
+  const pagar = computeTotals(pagarData);
   const saldoContas = contasData.reduce((s: number, c: any) => s + Number(c.saldo_atual || 0), 0);
 
   return {
-    totalReceber,
-    totalReceberPago,
-    totalReceberPendente: totalReceber - totalReceberPago,
-    totalPagar,
-    totalPagarPago,
-    totalPagarPendente: totalPagar - totalPagarPago,
+    totalReceber: receber.total,
+    totalReceberPago: receber.pago,
+    totalReceberPendente: receber.pendente,
+    totalPagar: pagar.total,
+    totalPagarPago: pagar.pago,
+    totalPagarPendente: pagar.pendente,
     saldoContas,
-    countReceber: receberData.length,
-    countPagar: pagarData.length,
+    countReceber: receber.count,
+    countPagar: pagar.count,
   };
 }
 
@@ -969,6 +1038,42 @@ async function updateSaleCostCenter(saleId: string, centroCustoNome: string, acc
   });
 }
 
+// ── Per-account per-type sync timestamps ────────────────────
+
+export interface SyncTimestamps {
+  [accountId: string]: {
+    receivables?: string;
+    payables?: string;
+    categories?: string;
+  };
+}
+
+async function getLastSyncTimestamps(accountIds: string[]): Promise<SyncTimestamps> {
+  if (accountIds.length === 0) return {};
+  const result: SyncTimestamps = {};
+  const { data, error } = await supabase
+    .from('conta_azul_sync_log')
+    .select('account_id, tipo_sync, finished_at')
+    .in('account_id', accountIds)
+    .eq('status', 'success')
+    .not('finished_at', 'is', null)
+    .order('finished_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+
+  for (const log of (data || [])) {
+    if (!log.account_id) continue;
+    if (!result[log.account_id]) result[log.account_id] = {};
+    const tipo = log.tipo_sync.replace('-incremental', '');
+    const entry = result[log.account_id];
+    if (tipo === 'receivables' && !entry.receivables) entry.receivables = log.finished_at;
+    if (tipo === 'payables' && !entry.payables) entry.payables = log.finished_at;
+    if (tipo === 'categories' && !entry.categories) entry.categories = log.finished_at;
+  }
+  return result;
+}
+
 // ── Export ───────────────────────────────────────────────────
 
 export const contaAzulService = {
@@ -989,6 +1094,7 @@ export const contaAzulService = {
   triggerSyncIncremental,
   getSyncLogs,
   getPendingSession,
+  getLastSyncTimestamps,
   // Read
   getReceivables,
   getReceivableStats,

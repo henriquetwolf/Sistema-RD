@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, Package, Building2, 
-  ChevronRight, Inbox, Truck, Clock, CheckCircle2, User, Info,
+  ChevronRight, Inbox, Truck, Clock, CheckCircle2, CheckCircle, User, Info, RefreshCw,
   CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle, LifeBuoy, FileSignature, ChevronLeft,
   DollarSign, ExternalLink, FileText
 } from 'lucide-react';
@@ -18,7 +18,7 @@ interface PartnerStudioAreaProps {
 }
 
 export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'classes' | 'contracts' | 'alugueis'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'classes' | 'contracts' | 'alugueis' | 'financeiro'>('dashboard');
     const [movements, setMovements] = useState<InventoryRecord[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
@@ -33,6 +33,14 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     const [isLoadingRentals, setIsLoadingRentals] = useState(false);
     const [viewingRentalReceipts, setViewingRentalReceipts] = useState<{ rental: CourseRental; receipts: CourseRentalReceipt[] } | null>(null);
     const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
+
+    const [finReceivables, setFinReceivables] = useState<any[]>([]);
+    const [finPayables, setFinPayables] = useState<any[]>([]);
+    const [isLoadingFinanceiro, setIsLoadingFinanceiro] = useState(false);
+    const [finFilterStatus, setFinFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
+    const [finFilterDateFrom, setFinFilterDateFrom] = useState('');
+    const [finFilterDateTo, setFinFilterDateTo] = useState('');
+    const [finFilterSearch, setFinFilterSearch] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -123,6 +131,97 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
         }), { nova: 0, classico: 0, sacochila: 0, lapis: 0 });
     }, [movements]);
 
+    const fetchFinanceiro = async () => {
+        setIsLoadingFinanceiro(true);
+        try {
+            const rawCnpj = (studio.cnpj || '').trim();
+            const cleanCnpj = rawCnpj.replace(/\D/g, '');
+            const docVariants = new Set<string>();
+            if (cleanCnpj.length >= 14) {
+                docVariants.add(cleanCnpj);
+                docVariants.add(rawCnpj);
+                docVariants.add(cleanCnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5'));
+            }
+            const queries: Promise<any>[] = [];
+            if (docVariants.size > 0) {
+                const variants = [...docVariants];
+                queries.push(
+                    appBackend.client.from('conta_azul_contas_receber').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
+                    appBackend.client.from('conta_azul_contas_pagar').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
+                );
+            } else {
+                queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+            }
+            const nameVariants = [...new Set([studio.fantasyName?.trim(), studio.responsibleName?.trim()].filter(Boolean))] as string[];
+            if (nameVariants.length > 0) {
+                for (const name of nameVariants) {
+                    queries.push(
+                        appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
+                        appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
+                    );
+                }
+            }
+            const results = await Promise.all(queries);
+            const allReceber: any[] = [];
+            const allPagar: any[] = [];
+            allReceber.push(...(results[0]?.data || []));
+            allPagar.push(...(results[1]?.data || []));
+            for (let i = 2; i < results.length; i += 2) {
+                allReceber.push(...(results[i]?.data || []));
+                if (results[i + 1]) allPagar.push(...(results[i + 1]?.data || []));
+            }
+            const dedup = (arr: any[]) => {
+                const seen = new Map<string, any>();
+                for (const item of arr) {
+                    const key = item.id_conta_azul || item.id;
+                    const existing = seen.get(key);
+                    if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
+                        seen.set(key, item);
+                    }
+                }
+                return Array.from(seen.values());
+            };
+            setFinReceivables(dedup(allReceber));
+            setFinPayables(dedup(allPagar));
+        } catch (e) {
+            console.error("Erro ao buscar dados financeiros:", e);
+        } finally {
+            setIsLoadingFinanceiro(false);
+        }
+    };
+
+    const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+    const applyFinFilter = (arr: any[]) => {
+        const today = new Date().toISOString().slice(0, 10);
+        return arr.filter(item => {
+            if (finFilterStatus === 'paid') {
+                const s = (item.status || '').toUpperCase();
+                if (s !== 'RECEBIDO' && s !== 'LIQUIDADO' && s !== 'PAGO') return false;
+            } else if (finFilterStatus === 'pending') {
+                const s = (item.status || '').toUpperCase();
+                if (s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO') return false;
+                if (item.data_vencimento && item.data_vencimento < today) return false;
+            } else if (finFilterStatus === 'overdue') {
+                const s = (item.status || '').toUpperCase();
+                if (s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO') return false;
+                if (!item.data_vencimento || item.data_vencimento >= today) return false;
+            }
+            if (finFilterDateFrom && item.data_vencimento && item.data_vencimento < finFilterDateFrom) return false;
+            if (finFilterDateTo && item.data_vencimento && item.data_vencimento > finFilterDateTo) return false;
+            if (finFilterSearch) {
+                const q = finFilterSearch.toLowerCase();
+                if (!(item.descricao || '').toLowerCase().includes(q) && !(item.categoria_nome || '').toLowerCase().includes(q)) return false;
+            }
+            return true;
+        });
+    };
+
+    const filteredFinReceivables = useMemo(() => applyFinFilter(finReceivables), [finReceivables, finFilterStatus, finFilterDateFrom, finFilterDateTo, finFilterSearch]);
+    const filteredFinPayables = useMemo(() => applyFinFilter(finPayables), [finPayables, finFilterStatus, finFilterDateFrom, finFilterDateTo, finFilterSearch]);
+
+    useEffect(() => { if (activeTab === 'financeiro' && finReceivables.length === 0 && finPayables.length === 0) fetchFinanceiro(); }, [activeTab]);
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
             <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
@@ -187,6 +286,9 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                         {myRentals.length > 0 && (
                             <span className="ml-1 bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px]">{myRentals.length}</span>
                         )}
+                    </button>
+                    <button onClick={() => setActiveTab('financeiro')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'financeiro' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>
+                        <DollarSign size={14} /> Financeiro
                     </button>
                     <button onClick={() => setActiveTab('contracts')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap relative", activeTab === 'contracts' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>
                         Contratos
@@ -367,6 +469,184 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                                     );
                                 })}
                             </div>
+                        )}
+                    </div>
+                ) : activeTab === 'financeiro' ? (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center justify-between px-2">
+                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                <DollarSign size={24} className="text-emerald-500" /> Meu Financeiro
+                            </h2>
+                            <button
+                                onClick={fetchFinanceiro}
+                                disabled={isLoadingFinanceiro}
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                {isLoadingFinanceiro ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Atualizar
+                            </button>
+                        </div>
+                        {isLoadingFinanceiro ? (
+                            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-emerald-600" size={32} /></div>
+                        ) : !(studio.cnpj || '').replace(/\D/g, '') ? (
+                            <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
+                                <AlertCircle size={48} className="mx-auto text-amber-400 mb-4" />
+                                <h3 className="text-lg font-black text-slate-700">CNPJ não cadastrado</h3>
+                                <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium">
+                                    Não é possível buscar dados financeiros sem um CNPJ vinculado.
+                                </p>
+                            </div>
+                        ) : finReceivables.length === 0 && finPayables.length === 0 ? (
+                            <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
+                                <DollarSign size={48} className="mx-auto text-slate-300 mb-4" />
+                                <h3 className="text-lg font-black text-slate-700">Nenhum registro financeiro</h3>
+                                <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium">
+                                    Não foram encontrados dados de contas a pagar ou receber para este studio.
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">A Receber Total</p>
+                                        <h3 className="text-2xl font-black text-emerald-600">{formatCurrency(finPayables.reduce((s, i) => s + (Number(i.valor) || 0), 0))}</h3>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Já Recebido</p>
+                                        <h3 className="text-2xl font-black text-teal-600">{formatCurrency(finPayables.filter(i => { const s = (i.status || '').toUpperCase(); return s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO'; }).reduce((s, i) => s + (Number(i.valor_pago || i.valor) || 0), 0))}</h3>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">A Pagar Total</p>
+                                        <h3 className="text-2xl font-black text-red-600">{formatCurrency(finReceivables.reduce((s, i) => s + (Number(i.valor) || 0), 0))}</h3>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Em Aberto (Pagar)</p>
+                                        <h3 className="text-2xl font-black text-amber-600">{formatCurrency(finReceivables.filter(i => { const s = (i.status || '').toUpperCase(); return s !== 'RECEBIDO' && s !== 'LIQUIDADO' && s !== 'PAGO'; }).reduce((s, i) => s + (Number(i.valor) || 0), 0))}</h3>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-end">
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Status</label>
+                                        <select value={finFilterStatus} onChange={e => setFinFilterStatus(e.target.value as any)} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none">
+                                            <option value="all">Todos</option>
+                                            <option value="pending">Pendentes</option>
+                                            <option value="paid">Pagos/Recebidos</option>
+                                            <option value="overdue">Vencidos</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">De</label>
+                                        <input type="date" value={finFilterDateFrom} onChange={e => setFinFilterDateFrom(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Até</label>
+                                        <input type="date" value={finFilterDateTo} onChange={e => setFinFilterDateTo(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" />
+                                    </div>
+                                    <div className="flex-1 min-w-[180px]">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Buscar</label>
+                                        <input type="text" placeholder="Descrição ou categoria..." value={finFilterSearch} onChange={e => setFinFilterSearch(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" />
+                                    </div>
+                                    <button onClick={() => { setFinFilterStatus('all'); setFinFilterDateFrom(''); setFinFilterDateTo(''); setFinFilterSearch(''); }} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">Limpar</button>
+                                </div>
+
+                                <section className="space-y-3">
+                                    <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2 px-2">
+                                        <CheckCircle size={14} /> Contas a Receber ({filteredFinPayables.length})
+                                    </h3>
+                                    {filteredFinPayables.length === 0 ? (
+                                        <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-200 text-slate-400 text-sm font-medium">Nenhum registro encontrado.</div>
+                                    ) : (
+                                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+                                            <table className="w-full text-xs">
+                                                <thead>
+                                                    <tr className="border-b border-slate-100 bg-slate-50/80">
+                                                        <th className="text-left px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Descrição</th>
+                                                        <th className="text-left px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Categoria</th>
+                                                        <th className="text-center px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Parcela</th>
+                                                        <th className="text-center px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Vencimento</th>
+                                                        <th className="text-right px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Valor</th>
+                                                        <th className="text-right px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Recebido</th>
+                                                        <th className="text-center px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredFinPayables.map((item, idx) => {
+                                                        const s = (item.status || '').toUpperCase();
+                                                        const isPaid = s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO';
+                                                        const today = new Date().toISOString().slice(0, 10);
+                                                        const isOverdue = !isPaid && item.data_vencimento && item.data_vencimento < today;
+                                                        return (
+                                                            <tr key={item.id_conta_azul || item.id || idx} className={clsx("border-b border-slate-50 hover:bg-slate-50/50 transition-colors", isOverdue && "bg-red-50/40")}>
+                                                                <td className="px-4 py-3 font-medium text-slate-700 max-w-[200px] truncate">{item.descricao || '--'}</td>
+                                                                <td className="px-4 py-3 text-slate-500">{item.categoria_nome || '--'}</td>
+                                                                <td className="px-4 py-3 text-center text-slate-500">{item.parcela || '--'}</td>
+                                                                <td className="px-4 py-3 text-center text-slate-500">{item.data_vencimento ? new Date(item.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</td>
+                                                                <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(Number(item.valor) || 0)}</td>
+                                                                <td className="px-4 py-3 text-right font-bold text-emerald-600">{item.valor_pago ? formatCurrency(Number(item.valor_pago)) : '--'}</td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <span className={clsx("inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-black uppercase", isPaid ? "bg-emerald-100 text-emerald-700" : isOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700")}>
+                                                                        {isPaid ? <CheckCircle size={10} /> : isOverdue ? <AlertCircle size={10} /> : <Clock size={10} />}
+                                                                        {item.status || 'Pendente'}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </section>
+
+                                <section className="space-y-3">
+                                    <h3 className="text-xs font-black text-red-600 uppercase tracking-widest flex items-center gap-2 px-2">
+                                        <AlertCircle size={14} /> Contas a Pagar ({filteredFinReceivables.length})
+                                    </h3>
+                                    {filteredFinReceivables.length === 0 ? (
+                                        <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-200 text-slate-400 text-sm font-medium">Nenhum registro encontrado.</div>
+                                    ) : (
+                                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+                                            <table className="w-full text-xs">
+                                                <thead>
+                                                    <tr className="border-b border-slate-100 bg-slate-50/80">
+                                                        <th className="text-left px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Descrição</th>
+                                                        <th className="text-left px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Categoria</th>
+                                                        <th className="text-center px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Parcela</th>
+                                                        <th className="text-center px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Vencimento</th>
+                                                        <th className="text-right px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Valor</th>
+                                                        <th className="text-right px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Pago</th>
+                                                        <th className="text-center px-4 py-3 font-black text-slate-400 uppercase text-[9px] tracking-widest">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredFinReceivables.map((item, idx) => {
+                                                        const s = (item.status || '').toUpperCase();
+                                                        const isPaid = s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO';
+                                                        const today = new Date().toISOString().slice(0, 10);
+                                                        const isOverdue = !isPaid && item.data_vencimento && item.data_vencimento < today;
+                                                        return (
+                                                            <tr key={item.id_conta_azul || item.id || idx} className={clsx("border-b border-slate-50 hover:bg-slate-50/50 transition-colors", isOverdue && "bg-red-50/40")}>
+                                                                <td className="px-4 py-3 font-medium text-slate-700 max-w-[200px] truncate">{item.descricao || '--'}</td>
+                                                                <td className="px-4 py-3 text-slate-500">{item.categoria_nome || '--'}</td>
+                                                                <td className="px-4 py-3 text-center text-slate-500">{item.parcela || '--'}</td>
+                                                                <td className="px-4 py-3 text-center text-slate-500">{item.data_vencimento ? new Date(item.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}</td>
+                                                                <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(Number(item.valor) || 0)}</td>
+                                                                <td className="px-4 py-3 text-right font-bold text-emerald-600">{item.valor_pago ? formatCurrency(Number(item.valor_pago)) : '--'}</td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <span className={clsx("inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-black uppercase", isPaid ? "bg-emerald-100 text-emerald-700" : isOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700")}>
+                                                                        {isPaid ? <CheckCircle size={10} /> : isOverdue ? <AlertCircle size={10} /> : <Clock size={10} />}
+                                                                        {item.status || 'Pendente'}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </section>
+                            </>
                         )}
                     </div>
                 ) : (

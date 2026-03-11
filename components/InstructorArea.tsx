@@ -54,6 +54,10 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [receivables, setReceivables] = useState<any[]>([]);
   const [payables, setPayables] = useState<any[]>([]);
   const [isLoadingFinanceiro, setIsLoadingFinanceiro] = useState(false);
+  const [finFilterStatus, setFinFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
+  const [finFilterDateFrom, setFinFilterDateFrom] = useState('');
+  const [finFilterDateTo, setFinFilterDateTo] = useState('');
+  const [finFilterSearch, setFinFilterSearch] = useState('');
 
   // Estados para Treinamentos (Produtos Digitais)
   const [trainings, setTrainings] = useState<any[]>([]);
@@ -203,67 +207,100 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+  const applyFinFilter = (arr: any[]) => {
+      const today = new Date().toISOString().slice(0, 10);
+      return arr.filter(item => {
+          if (finFilterStatus === 'paid') {
+              const s = (item.status || '').toUpperCase();
+              if (s !== 'RECEBIDO' && s !== 'LIQUIDADO' && s !== 'PAGO') return false;
+          } else if (finFilterStatus === 'pending') {
+              const s = (item.status || '').toUpperCase();
+              if (s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO') return false;
+              if (item.data_vencimento && item.data_vencimento < today) return false;
+          } else if (finFilterStatus === 'overdue') {
+              const s = (item.status || '').toUpperCase();
+              if (s === 'RECEBIDO' || s === 'LIQUIDADO' || s === 'PAGO') return false;
+              if (!item.data_vencimento || item.data_vencimento >= today) return false;
+          }
+          if (finFilterDateFrom && item.data_vencimento && item.data_vencimento < finFilterDateFrom) return false;
+          if (finFilterDateTo && item.data_vencimento && item.data_vencimento > finFilterDateTo) return false;
+          if (finFilterSearch) {
+              const q = finFilterSearch.toLowerCase();
+              if (!(item.descricao || '').toLowerCase().includes(q) && !(item.categoria_nome || '').toLowerCase().includes(q)) return false;
+          }
+          return true;
+      });
+  };
+
+  const filteredReceivables = useMemo(() => applyFinFilter(receivables), [receivables, finFilterStatus, finFilterDateFrom, finFilterDateTo, finFilterSearch]);
+  const filteredPayables = useMemo(() => applyFinFilter(payables), [payables, finFilterStatus, finFilterDateFrom, finFilterDateTo, finFilterSearch]);
+
   const fetchFinanceiro = async () => {
       setIsLoadingFinanceiro(true);
       try {
           const rawCpf = (instructor.cpf || '').trim();
           const cleanCpf = rawCpf.replace(/\D/g, '');
-          const formattedCpf = cleanCpf.length === 11
-              ? cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
-              : '';
+          const rawCnpj = (instructor.cnpj || '').trim();
+          const cleanCnpj = rawCnpj.replace(/\D/g, '');
 
-          const cpfVariants = [...new Set([cleanCpf, formattedCpf, rawCpf].filter(v => v.length >= 11))];
+          const docVariants = new Set<string>();
+          if (cleanCpf.length >= 11) {
+              docVariants.add(cleanCpf);
+              docVariants.add(rawCpf);
+              if (cleanCpf.length === 11) docVariants.add(cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'));
+          }
+          if (cleanCnpj.length >= 14) {
+              docVariants.add(cleanCnpj);
+              docVariants.add(rawCnpj);
+              docVariants.add(cleanCnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5'));
+          }
 
           const queries: Promise<any>[] = [];
 
-          if (cpfVariants.length > 0) {
+          if (docVariants.size > 0) {
+              const variants = [...docVariants];
               queries.push(
-                  appBackend.client.from('conta_azul_contas_receber').select('*').in('contato_cpf', cpfVariants).order('data_vencimento', { ascending: false }),
-                  appBackend.client.from('conta_azul_contas_pagar').select('*').in('contato_cpf', cpfVariants).order('data_vencimento', { ascending: false }),
+                  appBackend.client.from('conta_azul_contas_receber').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
+                  appBackend.client.from('conta_azul_contas_pagar').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
               );
           } else {
               queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
           }
 
-          const fullName = instructor.fullName?.trim();
-          if (fullName) {
-              queries.push(
-                  appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${fullName}%`).order('data_vencimento', { ascending: false }),
-                  appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${fullName}%`).order('data_vencimento', { ascending: false }),
-              );
-          } else {
-              queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+          const nameVariants = [...new Set([instructor.fullName?.trim(), instructor.companyName?.trim()].filter(Boolean))] as string[];
+          if (nameVariants.length > 0) {
+              for (const name of nameVariants) {
+                  queries.push(
+                      appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
+                      appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
+                  );
+              }
           }
 
-          const [receberByCpf, pagarByCpf, receberByName, pagarByName] = await Promise.all(queries);
+          const results = await Promise.all(queries);
+          const allReceber: any[] = [];
+          const allPagar: any[] = [];
+          allReceber.push(...(results[0]?.data || []));
+          allPagar.push(...(results[1]?.data || []));
+          for (let i = 2; i < results.length; i += 2) {
+              allReceber.push(...(results[i]?.data || []));
+              if (results[i + 1]) allPagar.push(...(results[i + 1]?.data || []));
+          }
 
           const dedup = (arr: any[]) => {
-              const byContaAzul = new Map<string, any>();
+              const seen = new Map<string, any>();
               for (const item of arr) {
                   const key = item.id_conta_azul || item.id;
-                  const existing = byContaAzul.get(key);
+                  const existing = seen.get(key);
                   if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
-                      byContaAzul.set(key, item);
+                      seen.set(key, item);
                   }
               }
-              const byBizKey = new Map<string, any>();
-              for (const item of byContaAzul.values()) {
-                  const bizKey = [
-                      (item.descricao || '').trim().toLowerCase(),
-                      String(item.valor || 0),
-                      item.data_vencimento || '',
-                      (item.contato_nome || item.fornecedor_nome || '').trim().toLowerCase(),
-                  ].join('|');
-                  const existing = byBizKey.get(bizKey);
-                  if (!existing || (item.synced_at && (!existing.synced_at || item.synced_at > existing.synced_at))) {
-                      byBizKey.set(bizKey, item);
-                  }
-              }
-              return Array.from(byBizKey.values());
+              return Array.from(seen.values());
           };
 
-          setReceivables(dedup([...(receberByCpf.data || []), ...(receberByName.data || [])]));
-          setPayables(dedup([...(pagarByCpf.data || []), ...(pagarByName.data || [])]));
+          setReceivables(dedup(allReceber));
+          setPayables(dedup(allPagar));
       } catch (e) {
           console.error("Erro ao buscar dados financeiros:", e);
       } finally {
@@ -773,12 +810,12 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                         <Loader2 size={32} className="animate-spin text-orange-500 mb-4" />
                         <p className="text-sm font-bold text-slate-400">Carregando dados financeiros...</p>
                     </div>
-                ) : !instructor.cpf?.replace(/\D/g, '') && receivables.length === 0 && payables.length === 0 ? (
+                ) : !instructor.cpf?.replace(/\D/g, '') && !instructor.cnpj?.replace(/\D/g, '') && receivables.length === 0 && payables.length === 0 ? (
                     <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
                         <DollarSign size={48} className="mx-auto text-slate-200 mb-4" />
-                        <h3 className="text-lg font-black text-slate-700">CPF não cadastrado</h3>
+                        <h3 className="text-lg font-black text-slate-700">CPF/CNPJ não cadastrado</h3>
                         <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium">
-                            Seu CPF não está vinculado ao seu cadastro. Entre em contato com a administração para atualizar seus dados.
+                            Seu CPF ou CNPJ não está vinculado ao seu cadastro. Entre em contato com a administração para atualizar seus dados.
                         </p>
                     </div>
                 ) : receivables.length === 0 && payables.length === 0 ? (
@@ -786,7 +823,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                         <CheckCircle size={48} className="mx-auto text-emerald-300 mb-4" />
                         <h3 className="text-lg font-black text-slate-700">Nenhum registro financeiro</h3>
                         <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium">
-                            Não foram encontradas contas a receber ou a pagar vinculadas ao seu CPF.
+                            Não foram encontradas contas a receber ou a pagar vinculadas ao seu cadastro.
                         </p>
                     </div>
                 ) : (
@@ -795,33 +832,131 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100">
                                     <p className="text-[10px] font-black text-emerald-600 uppercase">A Receber (Total)</p>
-                                    <p className="text-xl font-black text-emerald-700 mt-1">{formatCurrency(receivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</p>
+                                    <p className="text-xl font-black text-emerald-700 mt-1">{formatCurrency(payables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</p>
                                 </div>
                                 <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
                                     <p className="text-[10px] font-black text-blue-600 uppercase">Já Recebido</p>
-                                    <p className="text-xl font-black text-blue-700 mt-1">{formatCurrency(receivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</p>
+                                    <p className="text-xl font-black text-blue-700 mt-1">{formatCurrency(payables.reduce((s: number, p: any) => s + (Number(p.valor_pago) || 0), 0))}</p>
                                 </div>
                                 <div className="bg-red-50 rounded-2xl p-5 border border-red-100">
                                     <p className="text-[10px] font-black text-red-600 uppercase">A Pagar (Total)</p>
-                                    <p className="text-xl font-black text-red-700 mt-1">{formatCurrency(payables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</p>
+                                    <p className="text-xl font-black text-red-700 mt-1">{formatCurrency(receivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</p>
                                 </div>
                                 <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100">
-                                    <p className="text-[10px] font-black text-amber-600 uppercase">Em Aberto (Receber)</p>
+                                    <p className="text-[10px] font-black text-amber-600 uppercase">Em Aberto (Pagar)</p>
                                     <p className="text-xl font-black text-amber-700 mt-1">{formatCurrency(receivables.reduce((s: number, r: any) => s + ((Number(r.valor) || 0) - (Number(r.valor_pago) || 0)), 0))}</p>
                                 </div>
                             </div>
                         )}
 
-                        {/* Contas a Receber */}
+                        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+                            <div className="flex-1 min-w-[140px]">
+                                <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Status</label>
+                                <select value={finFilterStatus} onChange={e => setFinFilterStatus(e.target.value as any)} className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none">
+                                    <option value="all">Todos</option>
+                                    <option value="pending">Pendente</option>
+                                    <option value="paid">Pago / Recebido</option>
+                                    <option value="overdue">Vencido</option>
+                                </select>
+                            </div>
+                            <div className="flex-1 min-w-[130px]">
+                                <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">De</label>
+                                <input type="date" value={finFilterDateFrom} onChange={e => setFinFilterDateFrom(e.target.value)} className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none" />
+                            </div>
+                            <div className="flex-1 min-w-[130px]">
+                                <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Até</label>
+                                <input type="date" value={finFilterDateTo} onChange={e => setFinFilterDateTo(e.target.value)} className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none" />
+                            </div>
+                            <div className="flex-[2] min-w-[180px]">
+                                <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Buscar</label>
+                                <input type="text" placeholder="Descrição ou categoria..." value={finFilterSearch} onChange={e => setFinFilterSearch(e.target.value)} className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none" />
+                            </div>
+                            {(finFilterStatus !== 'all' || finFilterDateFrom || finFilterDateTo || finFilterSearch) && (
+                                <button onClick={() => { setFinFilterStatus('all'); setFinFilterDateFrom(''); setFinFilterDateTo(''); setFinFilterSearch(''); }} className="text-[10px] font-black text-red-500 hover:text-red-700 uppercase px-3 py-2">Limpar</button>
+                            )}
+                        </div>
+
+                        {/* Contas a Receber (dados de contas_pagar da empresa = o que o instrutor recebe) */}
                         <div>
                             <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
                                 <DollarSign size={16} className="text-emerald-600"/> Contas a Receber
-                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200">{receivables.length}</span>
+                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200">{filteredPayables.length}</span>
                             </h3>
-                            {receivables.length === 0 ? (
+                            {filteredPayables.length === 0 ? (
                                 <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
                                     <DollarSign size={40} className="mx-auto opacity-20 mb-3"/>
                                     <p className="font-bold text-sm">Nenhuma conta a receber encontrada</p>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left">Descrição</th>
+                                                    <th className="px-4 py-3 text-left">Categoria</th>
+                                                    <th className="px-4 py-3 text-center">Parcela</th>
+                                                    <th className="px-4 py-3 text-left">Vencimento</th>
+                                                    <th className="px-4 py-3 text-right">Valor</th>
+                                                    <th className="px-4 py-3 text-right">Recebido</th>
+                                                    <th className="px-4 py-3 text-center">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {filteredPayables.map((p: any) => {
+                                                    const isPaid = p.status?.toUpperCase() === 'PAGO' || p.status?.toUpperCase() === 'LIQUIDADO';
+                                                    const isOverdue = !isPaid && p.data_vencimento && new Date(p.data_vencimento) < new Date();
+                                                    return (
+                                                        <tr key={p.id} className="hover:bg-slate-50">
+                                                            <td className="px-4 py-3">
+                                                                <p className="font-bold text-slate-700 truncate max-w-[250px]">{p.descricao || '--'}</p>
+                                                                {p.numero_documento && <p className="text-[10px] text-slate-400 mt-0.5">Doc: {p.numero_documento}</p>}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-slate-500 text-xs">{p.categoria_nome || '--'}</td>
+                                                            <td className="px-4 py-3 text-center text-xs font-bold text-slate-600">
+                                                                {p.parcela_numero && p.total_parcelas ? `${p.parcela_numero}/${p.total_parcelas}` : '--'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs">
+                                                                <span className={clsx("font-bold", isOverdue ? "text-red-600" : "text-slate-600")}>
+                                                                    {p.data_vencimento ? new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(Number(p.valor) || 0)}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatCurrency(Number(p.valor_pago) || 0)}</td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <span className={clsx("text-[9px] font-black px-2.5 py-1 rounded-full border uppercase",
+                                                                    isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                                                    isOverdue ? "bg-red-50 text-red-700 border-red-200" :
+                                                                    "bg-amber-50 text-amber-700 border-amber-200"
+                                                                )}>{isPaid ? 'RECEBIDO' : isOverdue ? 'VENCIDO' : 'PENDENTE'}</span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="px-4 py-3 bg-slate-50 border-t flex items-center justify-between text-xs font-bold text-slate-500">
+                                        <span>Total: {filteredPayables.length} registro(s)</span>
+                                        <div className="flex gap-4">
+                                            <span>Valor total: <span className="text-slate-800">{formatCurrency(filteredPayables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</span></span>
+                                            <span>Total recebido: <span className="text-emerald-600">{formatCurrency(filteredPayables.reduce((s: number, p: any) => s + (Number(p.valor_pago) || 0), 0))}</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Contas a Pagar (dados de contas_receber da empresa = o que o instrutor deve) */}
+                        <div>
+                            <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <DollarSign size={16} className="text-red-500"/> Contas a Pagar
+                                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-200">{filteredReceivables.length}</span>
+                            </h3>
+                            {filteredReceivables.length === 0 ? (
+                                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
+                                    <DollarSign size={40} className="mx-auto opacity-20 mb-3"/>
+                                    <p className="font-bold text-sm">Nenhuma conta a pagar encontrada</p>
                                 </div>
                             ) : (
                                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -839,7 +974,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
-                                                {receivables.map((r: any) => {
+                                                {filteredReceivables.map((r: any) => {
                                                     const isPaid = r.status?.toUpperCase() === 'RECEBIDO' || r.status?.toUpperCase() === 'LIQUIDADO';
                                                     const isOverdue = !isPaid && r.data_vencimento && new Date(r.data_vencimento) < new Date();
                                                     return (
@@ -864,7 +999,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                                                     isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
                                                                     isOverdue ? "bg-red-50 text-red-700 border-red-200" :
                                                                     "bg-amber-50 text-amber-700 border-amber-200"
-                                                                )}>{r.status || 'PENDENTE'}</span>
+                                                                )}>{isPaid ? 'PAGO' : isOverdue ? 'VENCIDO' : 'PENDENTE'}</span>
                                                             </td>
                                                         </tr>
                                                     );
@@ -873,83 +1008,10 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                         </table>
                                     </div>
                                     <div className="px-4 py-3 bg-slate-50 border-t flex items-center justify-between text-xs font-bold text-slate-500">
-                                        <span>Total: {receivables.length} registro(s)</span>
+                                        <span>Total: {filteredReceivables.length} registro(s)</span>
                                         <div className="flex gap-4">
-                                            <span>Valor total: <span className="text-slate-800">{formatCurrency(receivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</span></span>
-                                            <span>Total pago: <span className="text-emerald-600">{formatCurrency(receivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</span></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Contas a Pagar */}
-                        <div>
-                            <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <DollarSign size={16} className="text-red-500"/> Contas a Pagar
-                                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-200">{payables.length}</span>
-                            </h3>
-                            {payables.length === 0 ? (
-                                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
-                                    <DollarSign size={40} className="mx-auto opacity-20 mb-3"/>
-                                    <p className="font-bold text-sm">Nenhuma conta a pagar encontrada</p>
-                                </div>
-                            ) : (
-                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left">Descrição</th>
-                                                    <th className="px-4 py-3 text-left">Fornecedor</th>
-                                                    <th className="px-4 py-3 text-left">Categoria</th>
-                                                    <th className="px-4 py-3 text-center">Parcela</th>
-                                                    <th className="px-4 py-3 text-left">Vencimento</th>
-                                                    <th className="px-4 py-3 text-right">Valor</th>
-                                                    <th className="px-4 py-3 text-right">Pago</th>
-                                                    <th className="px-4 py-3 text-center">Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {payables.map((p: any) => {
-                                                    const isPaid = p.status?.toUpperCase() === 'PAGO' || p.status?.toUpperCase() === 'LIQUIDADO';
-                                                    const isOverdue = !isPaid && p.data_vencimento && new Date(p.data_vencimento) < new Date();
-                                                    return (
-                                                        <tr key={p.id} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-3">
-                                                                <p className="font-bold text-slate-700 truncate max-w-[200px]">{p.descricao || '--'}</p>
-                                                                {p.numero_documento && <p className="text-[10px] text-slate-400 mt-0.5">Doc: {p.numero_documento}</p>}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-xs text-slate-600 font-medium">{p.fornecedor_nome || '--'}</td>
-                                                            <td className="px-4 py-3 text-xs text-slate-500">{p.categoria_nome || '--'}</td>
-                                                            <td className="px-4 py-3 text-center text-xs font-bold text-slate-600">
-                                                                {p.parcela_numero && p.total_parcelas ? `${p.parcela_numero}/${p.total_parcelas}` : '--'}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-xs">
-                                                                <span className={clsx("font-bold", isOverdue ? "text-red-600" : "text-slate-600")}>
-                                                                    {p.data_vencimento ? new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '--'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(Number(p.valor) || 0)}</td>
-                                                            <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatCurrency(Number(p.valor_pago) || 0)}</td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                <span className={clsx("text-[9px] font-black px-2.5 py-1 rounded-full border uppercase",
-                                                                    isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                                                    isOverdue ? "bg-red-50 text-red-700 border-red-200" :
-                                                                    "bg-amber-50 text-amber-700 border-amber-200"
-                                                                )}>{p.status || 'PENDENTE'}</span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="px-4 py-3 bg-slate-50 border-t flex items-center justify-between text-xs font-bold text-slate-500">
-                                        <span>Total: {payables.length} registro(s)</span>
-                                        <div className="flex gap-4">
-                                            <span>Valor total: <span className="text-slate-800">{formatCurrency(payables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</span></span>
-                                            <span>Total pago: <span className="text-emerald-600">{formatCurrency(payables.reduce((s: number, p: any) => s + (Number(p.valor_pago) || 0), 0))}</span></span>
+                                            <span>Valor total: <span className="text-slate-800">{formatCurrency(filteredReceivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</span></span>
+                                            <span>Total pago: <span className="text-emerald-600">{formatCurrency(filteredReceivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</span></span>
                                         </div>
                                     </div>
                                 </div>

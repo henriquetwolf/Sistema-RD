@@ -1170,16 +1170,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                 {/* CONTA AZUL TAB */}
                                 {profileTab === 'conta_azul' && (
                                     <div className="space-y-8">
-                                        {/* Contas a Receber */}
+                                        {/* Contas a Pagar do Aluno (dados de contas_receber da empresa) */}
                                         <div>
                                             <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                                <DollarSign size={16} className="text-emerald-600"/> Contas a Receber
-                                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200">{profileReceivables.length}</span>
+                                                <DollarSign size={16} className="text-red-500"/> Contas a Pagar do Aluno
+                                                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-200">{profileReceivables.length}</span>
                                             </h3>
                                             {profileReceivables.length === 0 ? (
                                                 <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
                                                     <Landmark size={40} className="mx-auto opacity-20 mb-3"/>
-                                                    <p className="font-bold text-sm">Nenhuma conta a receber encontrada</p>
+                                                    <p className="font-bold text-sm">Nenhuma conta a pagar encontrada</p>
                                                     <p className="text-xs mt-1">Os registros do Conta Azul vinculados ao nome deste aluno aparecerão aqui.</p>
                                                 </div>
                                             ) : (
@@ -1242,16 +1242,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                             )}
                                         </div>
 
-                                        {/* Contas a Pagar */}
+                                        {/* Contas a Receber do Aluno (dados de contas_pagar da empresa) */}
                                         <div>
                                             <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                                <CreditCard size={16} className="text-red-500"/> Contas a Pagar
-                                                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-200">{profilePayables.length}</span>
+                                                <CreditCard size={16} className="text-emerald-600"/> Contas a Receber do Aluno
+                                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200">{profilePayables.length}</span>
                                             </h3>
                                             {profilePayables.length === 0 ? (
                                                 <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
                                                     <Landmark size={40} className="mx-auto opacity-20 mb-3"/>
-                                                    <p className="font-bold text-sm">Nenhuma conta a pagar encontrada</p>
+                                                    <p className="font-bold text-sm">Nenhuma conta a receber encontrada</p>
                                                 </div>
                                             ) : (
                                                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -1318,20 +1318,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         {/* Resumo */}
                                         {(profileReceivables.length > 0 || profilePayables.length > 0) && (
                                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                                <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100">
-                                                    <p className="text-[10px] font-black text-emerald-600 uppercase">A Receber (Total)</p>
-                                                    <p className="text-xl font-black text-emerald-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</p>
-                                                </div>
-                                                <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
-                                                    <p className="text-[10px] font-black text-blue-600 uppercase">Já Recebido</p>
-                                                    <p className="text-xl font-black text-blue-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</p>
-                                                </div>
                                                 <div className="bg-red-50 rounded-2xl p-5 border border-red-100">
                                                     <p className="text-[10px] font-black text-red-600 uppercase">A Pagar (Total)</p>
-                                                    <p className="text-xl font-black text-red-700 mt-1">{formatCurrency(profilePayables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</p>
+                                                    <p className="text-xl font-black text-red-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor) || 0), 0))}</p>
+                                                </div>
+                                                <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase">Já Pago</p>
+                                                    <p className="text-xl font-black text-blue-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + (Number(r.valor_pago) || 0), 0))}</p>
+                                                </div>
+                                                <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100">
+                                                    <p className="text-[10px] font-black text-emerald-600 uppercase">A Receber (Total)</p>
+                                                    <p className="text-xl font-black text-emerald-700 mt-1">{formatCurrency(profilePayables.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0))}</p>
                                                 </div>
                                                 <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100">
-                                                    <p className="text-[10px] font-black text-amber-600 uppercase">Em Aberto (Receber)</p>
+                                                    <p className="text-[10px] font-black text-amber-600 uppercase">Em Aberto (Pagar)</p>
                                                     <p className="text-xl font-black text-amber-700 mt-1">{formatCurrency(profileReceivables.reduce((s: number, r: any) => s + ((Number(r.valor) || 0) - (Number(r.valor_pago) || 0)), 0))}</p>
                                                 </div>
                                             </div>

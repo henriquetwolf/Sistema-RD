@@ -204,37 +204,29 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         try {
             const rawCpf = (student.cpf || '').trim();
             const cleanCpf = rawCpf.replace(/\D/g, '');
-            const docVariants = new Set<string>();
+            const docSearches: string[] = [];
             if (cleanCpf.length >= 11) {
-                docVariants.add(cleanCpf);
-                docVariants.add(rawCpf);
-                if (cleanCpf.length === 11) docVariants.add(cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'));
+                docSearches.push(cleanCpf);
+                if (rawCpf !== cleanCpf) docSearches.push(rawCpf);
             }
-            const queries: Promise<any>[] = [];
-            if (docVariants.size > 0) {
-                const variants = [...docVariants];
-                queries.push(
-                    appBackend.client.from('conta_azul_contas_receber').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
-                    appBackend.client.from('conta_azul_contas_pagar').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
-                );
-            } else {
-                queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+            const allReceber: any[] = [];
+            const allPagar: any[] = [];
+            for (const doc of docSearches) {
+                const [recDoc, pagDoc] = await Promise.all([
+                    appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
+                    appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
+                ]);
+                allReceber.push(...(recDoc.data || []));
+                allPagar.push(...(pagDoc.data || []));
             }
             const fullName = student.name?.trim();
             if (fullName) {
-                queries.push(
+                const [recName, pagName] = await Promise.all([
                     appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${fullName}%`).order('data_vencimento', { ascending: false }),
                     appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${fullName}%`).order('data_vencimento', { ascending: false }),
-                );
-            }
-            const results = await Promise.all(queries);
-            const allReceber: any[] = [];
-            const allPagar: any[] = [];
-            allReceber.push(...(results[0]?.data || []));
-            allPagar.push(...(results[1]?.data || []));
-            for (let i = 2; i < results.length; i += 2) {
-                allReceber.push(...(results[i]?.data || []));
-                if (results[i + 1]) allPagar.push(...(results[i + 1]?.data || []));
+                ]);
+                allReceber.push(...(recName.data || []));
+                allPagar.push(...(pagName.data || []));
             }
             const dedup = (arr: any[]) => {
                 const seen = new Map<string, any>();

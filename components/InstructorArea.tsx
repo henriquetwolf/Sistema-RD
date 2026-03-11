@@ -243,49 +243,48 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           const rawCnpj = (instructor.cnpj || '').trim();
           const cleanCnpj = rawCnpj.replace(/\D/g, '');
 
-          const docVariants = new Set<string>();
+          const docSearches: string[] = [];
           if (cleanCpf.length >= 11) {
-              docVariants.add(cleanCpf);
-              docVariants.add(rawCpf);
-              if (cleanCpf.length === 11) docVariants.add(cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'));
+              docSearches.push(cleanCpf);
+              if (rawCpf !== cleanCpf) docSearches.push(rawCpf);
           }
           if (cleanCnpj.length >= 14) {
-              docVariants.add(cleanCnpj);
-              docVariants.add(rawCnpj);
-              docVariants.add(cleanCnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5'));
-          }
-
-          const queries: Promise<any>[] = [];
-
-          if (docVariants.size > 0) {
-              const variants = [...docVariants];
-              queries.push(
-                  appBackend.client.from('conta_azul_contas_receber').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
-                  appBackend.client.from('conta_azul_contas_pagar').select('*').in('contato_cpf', variants).order('data_vencimento', { ascending: false }),
-              );
-          } else {
-              queries.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+              docSearches.push(cleanCnpj);
+              if (rawCnpj !== cleanCnpj) docSearches.push(rawCnpj);
           }
 
           const nameVariants = [...new Set([instructor.fullName?.trim(), instructor.companyName?.trim()].filter(Boolean))] as string[];
-          if (nameVariants.length > 0) {
-              for (const name of nameVariants) {
-                  queries.push(
-                      appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
-                      appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
-                  );
-              }
-          }
 
-          const results = await Promise.all(queries);
+          console.log('[Financeiro] Buscando para instrutor:', { id: instructor.id, nome: instructor.fullName, cpf: rawCpf, cnpj: rawCnpj, companyName: instructor.companyName, docSearches, nameVariants });
+
           const allReceber: any[] = [];
           const allPagar: any[] = [];
-          allReceber.push(...(results[0]?.data || []));
-          allPagar.push(...(results[1]?.data || []));
-          for (let i = 2; i < results.length; i += 2) {
-              allReceber.push(...(results[i]?.data || []));
-              if (results[i + 1]) allPagar.push(...(results[i + 1]?.data || []));
+
+          for (const doc of docSearches) {
+              const [recDoc, pagDoc] = await Promise.all([
+                  appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
+                  appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('contato_cpf', `%${doc}%`).order('data_vencimento', { ascending: false }),
+              ]);
+              if (recDoc.error) console.error(`[Financeiro] Erro receber por doc "${doc}":`, recDoc.error);
+              if (pagDoc.error) console.error(`[Financeiro] Erro pagar por doc "${doc}":`, pagDoc.error);
+              allReceber.push(...(recDoc.data || []));
+              allPagar.push(...(pagDoc.data || []));
+              console.log(`[Financeiro] Por doc "${doc}":`, { receber: recDoc.data?.length || 0, pagar: pagDoc.data?.length || 0 });
           }
+
+          for (const name of nameVariants) {
+              const [recName, pagName] = await Promise.all([
+                  appBackend.client.from('conta_azul_contas_receber').select('*').ilike('contato_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
+                  appBackend.client.from('conta_azul_contas_pagar').select('*').ilike('fornecedor_nome', `%${name}%`).order('data_vencimento', { ascending: false }),
+              ]);
+              if (recName.error) console.error(`[Financeiro] Erro receber por nome "${name}":`, recName.error);
+              if (pagName.error) console.error(`[Financeiro] Erro pagar por nome "${name}":`, pagName.error);
+              allReceber.push(...(recName.data || []));
+              allPagar.push(...(pagName.data || []));
+              console.log(`[Financeiro] Por nome "${name}":`, { receber: recName.data?.length || 0, pagar: pagName.data?.length || 0 });
+          }
+
+          console.log('[Financeiro] Total bruto:', { receber: allReceber.length, pagar: allPagar.length });
 
           const dedup = (arr: any[]) => {
               const seen = new Map<string, any>();
@@ -299,10 +298,14 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
               return Array.from(seen.values());
           };
 
-          setReceivables(dedup(allReceber));
-          setPayables(dedup(allPagar));
+          const dedupedReceber = dedup(allReceber);
+          const dedupedPagar = dedup(allPagar);
+          console.log('[Financeiro] Após dedup:', { receber: dedupedReceber.length, pagar: dedupedPagar.length });
+
+          setReceivables(dedupedReceber);
+          setPayables(dedupedPagar);
       } catch (e) {
-          console.error("Erro ao buscar dados financeiros:", e);
+          console.error("[Financeiro] Erro geral ao buscar dados financeiros:", e);
       } finally {
           setIsLoadingFinanceiro(false);
       }

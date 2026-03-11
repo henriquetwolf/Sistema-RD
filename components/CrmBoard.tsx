@@ -882,6 +882,10 @@ export const CrmBoard: React.FC = () => {
               dispatchNegotiationWebhook(data);
               triggerDigitalSupportTicket(data);
               triggerWhatsAppAutomation(data);
+              appBackend.executeMarketingCrmAutomations('deal_stage_changed', data);
+              if (data.stage === 'closed' || isLastStage(data.pipeline, data.stage)) {
+                  appBackend.executeMarketingCrmAutomations('deal_won', data);
+              }
           }
           const deal = deals.find(d => d.id === moveInfo.dealId);
           await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal?.title || ''}" para a etapa final após venda confirmada no Conta Azul`, recordId: moveInfo.dealId });
@@ -921,6 +925,7 @@ export const CrmBoard: React.FC = () => {
             dispatchNegotiationWebhook(data);
             triggerDigitalSupportTicket(data);
             triggerWhatsAppAutomation(data);
+            appBackend.executeMarketingCrmAutomations('deal_stage_changed', data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
@@ -961,6 +966,7 @@ export const CrmBoard: React.FC = () => {
             dispatchNegotiationWebhook(data);
             triggerDigitalSupportTicket(data);
             triggerWhatsAppAutomation(data);
+            appBackend.executeMarketingCrmAutomations('deal_stage_changed', data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
@@ -1300,6 +1306,9 @@ export const CrmBoard: React.FC = () => {
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
                   triggerWhatsAppAutomation(data);
+                  if (originalDeal && originalDeal.stage !== data.stage) {
+                      appBackend.executeMarketingCrmAutomations('deal_stage_changed', data);
+                  }
               }
 
               const oldClassMod1 = (originalDeal?.classMod1 || '').trim();
@@ -1333,6 +1342,7 @@ export const CrmBoard: React.FC = () => {
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
                   triggerWhatsAppAutomation(data);
+                  appBackend.executeMarketingCrmAutomations('deal_created', data);
               }
           }
           upsertAlunoCadastro(payload.cpf || '', payload);

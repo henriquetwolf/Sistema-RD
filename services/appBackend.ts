@@ -508,7 +508,8 @@ export const appBackend = {
                     }
                 }
                 dealPayload.owner_id = finalOwnerId;
-                await supabase.from('crm_deals').insert([dealPayload]);
+                const { data: formDeal } = await supabase.from('crm_deals').insert([dealPayload]).select().single();
+                appBackend.executeMarketingCrmAutomations('deal_created', formDeal || dealPayload);
             }
         } catch (crmErr) { console.error(crmErr); }
     }
@@ -1944,10 +1945,11 @@ export const appBackend = {
       owner: config.fixed_owner_id || '',
       tasks: [],
     };
-    const { error } = await supabase.from('crm_deals').insert(dealPayload);
+    const { error, data: insertedDeal } = await supabase.from('crm_deals').insert(dealPayload).select().single();
     if (error) { console.error('[Marketing] Erro ao criar deal:', error); return false; }
     await supabase.from('marketing_leads').update({ crm_deal_id: dealPayload.id, lifecycle_stage: 'opportunity' }).eq('id', leadId);
     await supabase.from('marketing_crm_sync_log').insert({ direction: 'marketing_to_crm', lead_id: leadId, deal_id: dealPayload.id, action: 'create_deal', details: dealPayload });
+    appBackend.executeMarketingCrmAutomations('deal_created', insertedDeal || dealPayload);
     return true;
   },
 
@@ -1968,6 +1970,179 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('marketing_lead_events').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(100);
     return data || [];
+  },
+
+  /**
+   * Executa automações de marketing que possuem gatilho de evento CRM.
+   * Chamado ao criar/atualizar deals no CRM.
+   */
+  executeMarketingCrmAutomations: async (crmEventType: string, deal: any): Promise<void> => {
+    if (!isConfigured) return;
+    try {
+      const { data: automations } = await supabase
+        .from('marketing_automations')
+        .select('*')
+        .eq('trigger_type', 'crm_event')
+        .eq('status', 'active');
+
+      if (!automations || automations.length === 0) return;
+
+      for (const auto of automations) {
+        const triggerConfig = auto.trigger_config || {};
+        if (triggerConfig.crm_event_type && triggerConfig.crm_event_type !== crmEventType) continue;
+
+        console.log(`[MKT-AUTO] Disparando automação "${auto.name}" para evento "${crmEventType}"`);
+
+        const { data: steps } = await supabase
+          .from('marketing_automation_steps')
+          .select('*')
+          .eq('automation_id', auto.id)
+          .order('sort_order');
+
+        if (!steps || steps.length === 0) continue;
+
+        let leadId: string | null = null;
+        const { data: linkedLeads } = await supabase.from('marketing_leads').select('id').eq('crm_deal_id', deal.id).limit(1);
+        if (linkedLeads && linkedLeads.length > 0) {
+          leadId = linkedLeads[0].id;
+        } else {
+          const newLeadId = crypto.randomUUID();
+          const { error: leadErr } = await supabase.from('marketing_leads').insert({
+            id: newLeadId,
+            email: deal.email || `crm-${deal.id}@placeholder.local`,
+            name: deal.company_name || deal.contact_name || deal.title || 'Lead CRM',
+            phone: deal.phone || '',
+            crm_deal_id: deal.id,
+            source: 'crm_automation',
+            lifecycle_stage: 'lead',
+          });
+          if (!leadErr) leadId = newLeadId;
+        }
+
+        const executionId = crypto.randomUUID();
+        if (leadId) {
+          await supabase.from('marketing_automation_executions').insert({
+            id: executionId,
+            automation_id: auto.id,
+            lead_id: leadId,
+            current_step_id: steps[0].id,
+            status: 'running',
+          });
+        }
+
+        const clientName = deal.company_name || deal.contact_name || deal.title || 'Cliente';
+        const clientEmail = deal.email || '';
+        const clientPhone = (deal.phone || deal.contact_phone || deal.cellphone || '').replace(/\D/g, '');
+        const productName = deal.product_name || '';
+
+        const replaceVars = (str: string) => {
+          if (!str) return '';
+          return str
+            .replace(/\{\{nome\}\}/gi, () => clientName)
+            .replace(/\{\{nome_cliente\}\}/gi, () => clientName)
+            .replace(/\{\{email\}\}/gi, () => clientEmail)
+            .replace(/\{\{telefone\}\}/gi, () => clientPhone)
+            .replace(/\{\{curso\}\}/gi, () => productName)
+            .replace(/\{\{produto\}\}/gi, () => productName);
+        };
+
+        let completedAll = true;
+
+        for (const step of steps) {
+          if (step.step_type === 'trigger') continue;
+
+          try {
+            switch (step.action_type) {
+              case 'send_whatsapp': {
+                if (!clientPhone) {
+                  console.warn(`[MKT-AUTO] Sem telefone para enviar WhatsApp na automação "${auto.name}"`);
+                  break;
+                }
+                const message = replaceVars(step.config?.message || '');
+                if (!message) break;
+                await whatsappService.sendTextMessage(
+                  { wa_id: clientPhone, contact_phone: clientPhone },
+                  message
+                );
+                await appBackend.logWAAutomation({
+                  ruleName: `MKT: ${auto.name}`,
+                  studentName: clientName,
+                  phone: clientPhone,
+                  message,
+                });
+                console.log(`[MKT-AUTO] WhatsApp enviado para ${clientName} (${clientPhone})`);
+                break;
+              }
+              case 'send_email': {
+                if (!clientEmail) break;
+                const subject = replaceVars(step.config?.subject || step.config?.template_name || '');
+                const body = replaceVars(step.config?.body || step.config?.content || '');
+                if (subject && body) {
+                  await appBackend.sendEmailViaSendGrid(clientEmail, subject, body);
+                  console.log(`[MKT-AUTO] Email enviado para ${clientEmail}`);
+                }
+                break;
+              }
+              case 'wait_time': {
+                const d = parseInt(step.config?.days) || 0;
+                const h = parseInt(step.config?.hours) || 0;
+                const m = parseInt(step.config?.minutes) || 0;
+                const ms = ((d * 1440) + (h * 60) + m) * 60000;
+                if (ms > 0) {
+                  console.log(`[MKT-AUTO] Aguardando ${m}min ${h}h ${d}d...`);
+                  await new Promise(resolve => setTimeout(resolve, ms));
+                }
+                break;
+              }
+              case 'add_tag':
+              case 'remove_tag':
+              case 'update_field':
+              case 'send_notification':
+                console.log(`[MKT-AUTO] Ação "${step.action_type}" registrada (sem efeito colateral direto no deal).`);
+                break;
+              default:
+                console.log(`[MKT-AUTO] Tipo de ação desconhecido: "${step.action_type}"`);
+            }
+
+            if (leadId) {
+              await supabase.from('marketing_automation_logs').insert({
+                execution_id: executionId,
+                step_id: step.id,
+                action: step.action_type,
+                details: { deal_id: deal.id, client: clientName },
+                status: 'success',
+              });
+            }
+          } catch (stepErr: any) {
+            console.error(`[MKT-AUTO] Erro no passo "${step.action_type}":`, stepErr);
+            completedAll = false;
+            if (leadId) {
+              await supabase.from('marketing_automation_logs').insert({
+                execution_id: executionId,
+                step_id: step.id,
+                action: step.action_type,
+                details: { error: stepErr.message, deal_id: deal.id },
+                status: 'error',
+              });
+            }
+          }
+        }
+
+        if (leadId) {
+          await supabase.from('marketing_automation_executions').update({
+            status: completedAll ? 'completed' : 'failed',
+            completed_at: new Date().toISOString(),
+          }).eq('id', executionId);
+        }
+
+        await supabase.from('marketing_automations').update({
+          stats_entered: (auto.stats_entered || 0) + 1,
+          stats_completed: completedAll ? (auto.stats_completed || 0) + 1 : (auto.stats_completed || 0),
+        }).eq('id', auto.id);
+      }
+    } catch (err) {
+      console.error('[MKT-AUTO] Erro fatal ao executar automações de marketing CRM:', err);
+    }
   },
 
   // ── Franchise Meeting Scheduling ────────────────────────────

@@ -19,14 +19,26 @@ interface ProxyResult {
   status: number;
 }
 
+function sanitizeBaseUrl(raw: string): string {
+  let url = raw.trim();
+  if (!url.includes("://")) url = `https://${url}`;
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return url.replace(/\/manager\/.*$/i, "").replace(/\/+$/, "");
+  }
+}
+
 async function callProxy(params: ProxyRequest): Promise<ProxyResult> {
+  const cleanParams = { ...params, baseUrl: sanitizeBaseUrl(params.baseUrl) };
   const response = await fetch(PROXY_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(APP_KEY ? { "apikey": APP_KEY } : {}),
     },
-    body: JSON.stringify(params),
+    body: JSON.stringify(cleanParams),
   });
 
   const text = await response.text();

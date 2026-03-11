@@ -1092,6 +1092,249 @@ async function getLastSyncTimestamps(accountIds: string[]): Promise<SyncTimestam
   return result;
 }
 
+// ── XLS Import ──────────────────────────────────────────────
+
+function parseXlsDate(dateStr: string | null | undefined): string | null {
+  if (!dateStr || dateStr === '-' || dateStr === '') return null;
+  const str = String(dateStr).trim();
+  const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (match) {
+    const y = parseInt(match[3]);
+    if (y > 2100) return null;
+    return `${match[3]}-${match[2]}-${match[1]}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+  return null;
+}
+
+function xlsSafeFloat(val: any): number {
+  if (val === null || val === undefined || val === '' || val === '-') return 0;
+  const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^\d.,-]/g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+}
+
+const XLS_STATUS_MAP: Record<string, string> = {
+  'Quitado': 'RECEBIDO',
+  'Em aberto': 'EM_ABERTO',
+  'Atrasado': 'ATRASADO',
+  'Parcialmente quitado': 'RECEBIDO_PARCIAL',
+  'Perdido': 'PERDIDO',
+  'Renegociado': 'RENEGOCIADO',
+};
+
+function xlsMapStatus(situacao: string | null | undefined): string {
+  if (!situacao) return 'PENDENTE';
+  return XLS_STATUS_MAP[situacao] || String(situacao).toUpperCase().replace(/\s+/g, '_');
+}
+
+function xlsParseParcela(qtd: any): { numero: number | null; total: number | null } {
+  if (!qtd) return { numero: null, total: null };
+  const match = String(qtd).trim().match(/^(\d+)\/(\d+)$/);
+  return match ? { numero: parseInt(match[1]), total: parseInt(match[2]) } : { numero: null, total: null };
+}
+
+function xlsGenerateId(row: any[]): string {
+  const key = [
+    String(row[1] || '').trim(),
+    String(row[8] || '').trim(),
+    String(row[4] || ''),
+    String(row[12] || ''),
+    String(row[3] || ''),
+    String(row[7] || ''),
+    String(row[0] || ''),
+  ].join('|');
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    const ch = key.charCodeAt(i);
+    hash = ((hash << 5) - hash) + ch;
+    hash |= 0;
+  }
+  const h1 = Math.abs(hash).toString(36);
+  let hash2 = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    hash2 ^= key.charCodeAt(i);
+    hash2 = Math.imul(hash2, 0x01000193);
+  }
+  const h2 = Math.abs(hash2 >>> 0).toString(36);
+  return `xls-${h1}${h2}${key.length.toString(36)}`;
+}
+
+export type XlsTipo = 'pagar' | 'receber';
+
+export interface XlsParseResult {
+  tipo: XlsTipo;
+  rows: Record<string, any>[];
+  totalXls: number;
+  duplicatesRemoved: number;
+  sheetName: string;
+}
+
+function detectXlsTipo(sheetName: string, headers: string[]): XlsTipo {
+  const sn = (sheetName || '').toLowerCase();
+  if (sn.includes('pagar')) return 'pagar';
+  if (sn.includes('receber')) return 'receber';
+  const h0 = (headers[0] || '').toLowerCase();
+  const h1 = (headers[1] || '').toLowerCase();
+  if (h1.includes('fornecedor')) return 'pagar';
+  if (h1.includes('cliente')) return 'receber';
+  if (h0.includes('fornecedor')) return 'pagar';
+  return 'receber';
+}
+
+function mapXlsPayableRow(row: any[]): Record<string, any> {
+  const parcela = xlsParseParcela(row[7]);
+  const rawCpf = row[0] ? String(row[0]).replace(/[^\d]/g, '') : '';
+  return {
+    id_conta_azul: xlsGenerateId(row),
+    descricao: row[8] || null,
+    valor: xlsSafeFloat(row[12]),
+    valor_pago: xlsSafeFloat(row[18]) > 0 ? xlsSafeFloat(row[18]) : xlsSafeFloat(row[14]),
+    data_vencimento: parseXlsDate(row[4]),
+    data_competencia: parseXlsDate(row[3]),
+    data_pagamento: parseXlsDate(row[25]),
+    status: xlsMapStatus(row[10]),
+    categoria_nome: row[28] || null,
+    centro_custo_nome: row[30] || null,
+    conta_financeira_nome: row[24] || null,
+    parcela_numero: parcela.numero,
+    total_parcelas: parcela.total,
+    fornecedor_nome: row[1] || null,
+    contato_cpf: rawCpf.length >= 11 ? rawCpf : null,
+    observacoes: row[27] || null,
+    numero_documento: row[26] ? String(row[26]) : null,
+  };
+}
+
+function mapXlsReceivableRow(row: any[]): Record<string, any> {
+  const parcela = xlsParseParcela(row[7]);
+  const rawCpf = row[0] ? String(row[0]).replace(/[^\d]/g, '') : '';
+  return {
+    id_conta_azul: xlsGenerateId(row),
+    descricao: row[8] || null,
+    valor: xlsSafeFloat(row[12]),
+    valor_pago: xlsSafeFloat(row[18]) > 0 ? xlsSafeFloat(row[18]) : xlsSafeFloat(row[14]),
+    data_vencimento: parseXlsDate(row[4]),
+    data_competencia: parseXlsDate(row[3]),
+    data_pagamento: parseXlsDate(row[25]),
+    status: xlsMapStatus(row[10]),
+    categoria_nome: row[28] || null,
+    centro_custo_nome: row[30] || null,
+    conta_financeira_nome: row[24] || null,
+    parcela_numero: parcela.numero,
+    total_parcelas: parcela.total,
+    contato_nome: row[1] || null,
+    contato_id: row[0] ? String(row[0]) : null,
+    contato_cpf: rawCpf.length >= 11 ? rawCpf : null,
+    observacoes: row[27] || null,
+    numero_documento: row[26] ? String(row[26]) : null,
+  };
+}
+
+async function parseXlsFile(file: File): Promise<XlsParseResult> {
+  const XLSX = await import('xlsx');
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, range: 0 });
+
+  const headers = (data[0] || []).map((h: any) => String(h || ''));
+  const tipo = detectXlsTipo(sheetName, headers);
+  const mapFn = tipo === 'pagar' ? mapXlsPayableRow : mapXlsReceivableRow;
+
+  const rawRows = data.slice(1).filter((r: any[]) => r && r.length > 1 && (r[1] || r[8]));
+  const mapped = rawRows.map(mapFn);
+
+  const deduped = new Map<string, Record<string, any>>();
+  for (const row of mapped) {
+    deduped.set(row.id_conta_azul, row);
+  }
+  const uniqueRows = Array.from(deduped.values());
+
+  return {
+    tipo,
+    rows: uniqueRows,
+    totalXls: rawRows.length,
+    duplicatesRemoved: mapped.length - uniqueRows.length,
+    sheetName,
+  };
+}
+
+async function importXlsBatch(
+  accountId: string,
+  tipo: XlsTipo,
+  rows: Record<string, any>[],
+  isLastBatch: boolean,
+  totalImported: number,
+  startedAt: string,
+): Promise<{ upserted: number; errors: number }> {
+  return edgeFetch('conta-azul-sync', 'import-xls-batch', {
+    method: 'POST',
+    body: JSON.stringify({
+      account_id: accountId,
+      tipo,
+      rows,
+      is_last_batch: isLastBatch,
+      total_imported: totalImported,
+      started_at: startedAt,
+    }),
+  });
+}
+
+export interface XlsImportProgress {
+  phase: 'parsing' | 'importing' | 'done' | 'error';
+  current: number;
+  total: number;
+  message: string;
+}
+
+async function importXlsFile(
+  file: File,
+  accountId: string,
+  onProgress?: (p: XlsImportProgress) => void,
+): Promise<{ tipo: XlsTipo; imported: number; total: number; duplicatesRemoved: number }> {
+  onProgress?.({ phase: 'parsing', current: 0, total: 0, message: 'Lendo arquivo XLS...' });
+
+  const parsed = await parseXlsFile(file);
+  const tipoLabel = parsed.tipo === 'pagar' ? 'Contas a Pagar' : 'Contas a Receber';
+
+  onProgress?.({
+    phase: 'parsing',
+    current: 0,
+    total: parsed.rows.length,
+    message: `${tipoLabel}: ${parsed.rows.length.toLocaleString()} registros (${parsed.duplicatesRemoved} duplicatas removidas)`,
+  });
+
+  const BATCH = 500;
+  let imported = 0;
+  const startedAt = new Date().toISOString();
+
+  for (let i = 0; i < parsed.rows.length; i += BATCH) {
+    const batch = parsed.rows.slice(i, i + BATCH);
+    const isLast = i + BATCH >= parsed.rows.length;
+
+    const result = await importXlsBatch(accountId, parsed.tipo, batch, isLast, imported + batch.length, startedAt);
+    imported += result.upserted;
+
+    const pct = Math.round((imported / parsed.rows.length) * 100);
+    onProgress?.({
+      phase: 'importing',
+      current: imported,
+      total: parsed.rows.length,
+      message: `${tipoLabel}: ${imported.toLocaleString()} / ${parsed.rows.length.toLocaleString()} (${pct}%)`,
+    });
+  }
+
+  onProgress?.({
+    phase: 'done',
+    current: imported,
+    total: parsed.rows.length,
+    message: `${tipoLabel}: ${imported.toLocaleString()} registros importados com sucesso!`,
+  });
+
+  return { tipo: parsed.tipo, imported, total: parsed.rows.length, duplicatesRemoved: parsed.duplicatesRemoved };
+}
+
 // ── Export ───────────────────────────────────────────────────
 
 export const contaAzulService = {
@@ -1132,4 +1375,7 @@ export const contaAzulService = {
   getProducts,
   createSale,
   updateSaleCostCenter,
+  // XLS Import
+  parseXlsFile,
+  importXlsFile,
 };

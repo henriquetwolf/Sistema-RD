@@ -7,13 +7,13 @@ import {
   PieChart as PieIcon, TrendingUp, Monitor, BarChart, Wallet, ArrowDownToLine,
   ArrowUpRight, ArrowDownRight, Plus, Save, X, Link2, Unlink,
   CreditCard, Layers, Building2, Tag, FileText, List, Trash2, Pencil,
-  Download, Calendar, XCircle, Database, Fingerprint, Hash, Copy, Check, Package, User
+  Download, Calendar, XCircle, Database, Fingerprint, Hash, Copy, Check, Package, User, Upload
 } from 'lucide-react';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
-import { contaAzulService, type SyncTimestamps } from '../services/contaAzulService';
+import { contaAzulService, type SyncTimestamps, type XlsImportProgress } from '../services/contaAzulService';
 import { appBackend } from '../services/appBackend';
 import type {
   ContaAzulAuthStatus, ContaAzulReceivable, ContaAzulPayable,
@@ -902,6 +902,32 @@ export const ContaAzulManager: React.FC = () => {
     await handleSync(syncType, true, session.sessionId);
   };
 
+  const handleXlsUpload = async (file: File, accountId: string) => {
+    const accName = caAccounts.find(a => a.id === accountId)?.nome || '';
+    setIsSyncing(true);
+    setSyncProgress(0);
+    setSyncingAccountType({ key: `${accountId}-xls`, full: true });
+    try {
+      const result = await contaAzulService.importXlsFile(file, accountId, (p: XlsImportProgress) => {
+        setSyncMessage(`[${accName}] ${p.message}`);
+        if (p.total > 0) setSyncProgress(Math.round((p.current / p.total) * 100));
+      });
+      const tipoLabel = result.tipo === 'pagar' ? 'Contas a Pagar' : 'Contas a Receber';
+      setSyncMessage(`[${accName}] ${tipoLabel}: ${result.imported.toLocaleString()} importados (${result.duplicatesRemoved} duplicatas removidas)`);
+      setSyncProgress(100);
+      await loadOverview();
+      loadSyncTimestamps();
+      loadReceivables(); loadReceivableSummary();
+      loadPayables(); loadPayableSummary();
+    } catch (e: any) {
+      setSyncMessage(`[${accName}] Erro importação XLS: ${e.message}`);
+    } finally {
+      setIsSyncing(false);
+      setSyncingAccountType(null);
+      setTimeout(() => { setSyncMessage(''); setSyncProgress(0); }, 15000);
+    }
+  };
+
   // ── Create ──────────────────────────────────────────────
 
   const handleCreate = async () => {
@@ -1122,17 +1148,18 @@ export const ContaAzulManager: React.FC = () => {
                     <button
                       onClick={async () => {
                         try {
-                          setSyncMessage(`[${acc.nome}] Diagnosticando...`);
+                          setSyncMessage(`[${acc.nome}] Diagnosticando (3 ranges de datas)...`);
                           const result = await contaAzulService.diagnose(acc.id);
                           const d = result.diagnose;
-                          const msg = [
-                            `DB: ${d.database?.contas_pagar ?? '?'} pagar, ${d.database?.contas_receber ?? '?'} receber`,
-                            d['contas-a-pagar']?.computed_total != null ? `API Pagar: ${d['contas-a-pagar'].computed_total} total (itens_totais: ${d['contas-a-pagar'].itens_totais})` : '',
-                            d['contas-a-receber']?.computed_total != null ? `API Receber: ${d['contas-a-receber'].computed_total} total` : '',
-                          ].filter(Boolean).join(' | ');
+                          const dbInfo = `DB: ${d.database?.contas_pagar ?? '?'} pagar, ${d.database?.contas_receber ?? '?'} receber`;
+                          const payRanges = d['contas-a-pagar'] || {};
+                          const payParts = Object.entries(payRanges).map(([label, val]: [string, any]) =>
+                            val?.itens_totais != null ? `${label}: ${val.itens_totais}` : `${label}: ${val?.error || '?'}`
+                          );
+                          const msg = `${dbInfo} | API Pagar → ${payParts.join(', ')}`;
                           setSyncMessage(`[${acc.nome}] ${msg}`);
-                          console.log('[Diagnose]', acc.nome, result);
-                          setTimeout(() => setSyncMessage(''), 30000);
+                          console.log('[Diagnose]', acc.nome, JSON.stringify(result, null, 2));
+                          setTimeout(() => setSyncMessage(''), 60000);
                         } catch (e: any) {
                           setSyncMessage(`[${acc.nome}] Erro diagnóstico: ${e.message}`);
                         }
@@ -1214,6 +1241,30 @@ export const ContaAzulManager: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                  </div>
+                  {/* Upload XLS */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept=".xls,.xlsx"
+                      id={`xls-upload-${acc.id}`}
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleXlsUpload(f, acc.id);
+                        e.target.value = '';
+                      }}
+                      disabled={isSyncing}
+                    />
+                    <button
+                      onClick={() => document.getElementById(`xls-upload-${acc.id}`)?.click()}
+                      disabled={isSyncing}
+                      className="flex-1 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 text-amber-700 border border-amber-200 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all"
+                      title="Importar XLS exportado do Conta Azul (Visão Contas a Pagar ou a Receber). Auto-detecta o tipo pelo conteúdo."
+                    >
+                      {syncingAccountType?.key === `${acc.id}-xls` ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      Importar XLS (Pagar ou Receber)
+                    </button>
                   </div>
                 </div>
               );

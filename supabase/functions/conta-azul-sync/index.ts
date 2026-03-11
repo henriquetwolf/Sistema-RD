@@ -705,43 +705,99 @@ async function diagnose(req: Request): Promise<Response> {
   const body = await req.json().catch(() => ({}));
   const accountId = extractAccountId(body);
   const db = getSupabaseServiceClient();
-  const dateRange = defaultDateRange();
   const results: Record<string, any> = {};
 
   const { count: dbPayCount } = await db.from("conta_azul_contas_pagar").select("*", { count: "exact", head: true }).eq("account_id", accountId);
   const { count: dbRecCount } = await db.from("conta_azul_contas_receber").select("*", { count: "exact", head: true }).eq("account_id", accountId);
   results.database = { contas_pagar: dbPayCount, contas_receber: dbRecCount };
 
+  const dateRanges = [
+    { label: "default (10yr-5yr)", de: defaultDateRange().data_vencimento_de, ate: defaultDateRange().data_vencimento_ate },
+    { label: "ultra-wide (50yr-20yr)", de: "1976-01-01", ate: "2046-12-31" },
+    { label: "all-past (50yr-today)", de: "1976-01-01", ate: new Date().toISOString().split("T")[0] },
+  ];
+
   for (const tipo of ["contas-a-pagar", "contas-a-receber"] as const) {
-    const params = new URLSearchParams({
-      data_vencimento_de: dateRange.data_vencimento_de,
-      data_vencimento_ate: dateRange.data_vencimento_ate,
-      tamanho_pagina: "10",
-      pagina: "1",
-    });
-    try {
-      const res = await contaAzulFetch(accountId, `/v1/financeiro/eventos-financeiros/${tipo}/buscar?${params.toString()}`);
-      if (!res.ok) {
-        results[tipo] = { error: `HTTP ${res.status}: ${await res.text()}` };
-      } else {
-        const apiBody = await res.json();
-        const total = readExpectedTotal(apiBody);
-        const itemsOnPage = extractItems(apiBody).length;
-        results[tipo] = {
-          itens_totais: apiBody.itens_totais ?? null,
-          totais: apiBody.totais ?? null,
-          items_on_page_1: itemsOnPage,
-          computed_total: total,
-          response_keys: Object.keys(apiBody),
-          date_range: `${dateRange.data_vencimento_de} → ${dateRange.data_vencimento_ate}`,
-        };
+    const tipoResults: Record<string, any> = {};
+    for (const range of dateRanges) {
+      const params = new URLSearchParams({
+        data_vencimento_de: range.de,
+        data_vencimento_ate: range.ate,
+        tamanho_pagina: "10",
+        pagina: "1",
+      });
+      try {
+        const res = await contaAzulFetch(accountId, `/v1/financeiro/eventos-financeiros/${tipo}/buscar?${params.toString()}`);
+        if (!res.ok) {
+          tipoResults[range.label] = { error: `HTTP ${res.status}` };
+        } else {
+          const apiBody = await res.json();
+          tipoResults[range.label] = {
+            itens_totais: apiBody.itens_totais ?? null,
+            totais: apiBody.totais ?? null,
+            range: `${range.de} → ${range.ate}`,
+          };
+        }
+      } catch (e: any) {
+        tipoResults[range.label] = { error: e.message };
       }
-    } catch (e: any) {
-      results[tipo] = { error: e.message };
     }
+    results[tipo] = tipoResults;
   }
 
   return jsonResponse({ success: true, account_id: accountId, diagnose: results });
+}
+
+async function importXlsBatch(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const tipo = body.tipo;
+  if (tipo !== "pagar" && tipo !== "receber") {
+    return errorResponse("Campo 'tipo' deve ser 'pagar' ou 'receber'.", 400);
+  }
+  const rows = body.rows;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return errorResponse("Campo 'rows' deve ser um array não vazio.", 400);
+  }
+
+  const table = tipo === "pagar" ? "conta_azul_contas_pagar" : "conta_azul_contas_receber";
+  const db = getSupabaseServiceClient();
+  let upserted = 0;
+  let errors = 0;
+
+  const stamped = rows.map((r: any) => ({ ...r, account_id: accountId, synced_at: new Date().toISOString() }));
+
+  for (let i = 0; i < stamped.length; i += 200) {
+    const batch = stamped.slice(i, i + 200);
+    const { error } = await db.from(table).upsert(batch, { onConflict: "account_id,id_conta_azul" });
+    if (error) {
+      errors++;
+      console.error(`[importXlsBatch] Batch error at ${i}: ${error.message}`);
+      for (const row of batch) {
+        const { error: rowErr } = await db.from(table).upsert(row, { onConflict: "account_id,id_conta_azul" });
+        if (rowErr) {
+          console.error(`[importXlsBatch] Row error ${row.id_conta_azul}: ${rowErr.message}`);
+        } else {
+          upserted++;
+        }
+      }
+    } else {
+      upserted += batch.length;
+    }
+  }
+
+  if (body.is_last_batch) {
+    await db.from("conta_azul_sync_log").insert({
+      account_id: accountId,
+      tipo_sync: `${tipo === "pagar" ? "payables" : "receivables"}-xls-import`,
+      status: "success",
+      registros_sincronizados: body.total_imported || upserted,
+      started_at: body.started_at || new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+    });
+  }
+
+  return jsonResponse({ success: true, upserted, errors, batch_size: rows.length });
 }
 
 Deno.serve(async (req) => {
@@ -761,6 +817,7 @@ Deno.serve(async (req) => {
       case "all-accounts": return await syncAllAccounts(req);
       case "auto-sync-all": return await autoSyncAll(req);
       case "diagnose": return await diagnose(req);
+      case "import-xls-batch": return await importXlsBatch(req);
       default: return errorResponse("Sync type desconhecido: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-sync error:", err); return errorResponse(err.message || "Erro interno", 500); }

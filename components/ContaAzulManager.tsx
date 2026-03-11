@@ -30,6 +30,15 @@ const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 const formatDate = (d?: string) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '--';
 
+function resolvePago(valor: number, valorPago: number, status: string): number {
+  if (valorPago > 0) return valorPago;
+  const st = (status || '').toLowerCase();
+  if (st.includes('parcial')) return 0;
+  if (st.includes('liquidado') || st.includes('quitado') || st.includes('pago')
+    || st.includes('paid') || st.includes('recebido') || st.includes('settled')) return valor;
+  return 0;
+}
+
 type TabId = 'overview' | 'receivables' | 'payables' | 'accounts' | 'categories' | 'create' | 'contas' | 'powerbi' | 'cpf_search';
 
 export const ContaAzulManager: React.FC = () => {
@@ -487,8 +496,8 @@ export const ContaAzulManager: React.FC = () => {
         'Vencimento': r.data_vencimento ? new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '',
         'Competência': r.data_competencia ? new Date(r.data_competencia + 'T00:00:00').toLocaleDateString('pt-BR') : '',
         'Valor (R$)': r.valor,
-        'Recebido (R$)': r.valor_pago,
-        'A Receber (R$)': r.valor - r.valor_pago,
+        'Recebido (R$)': resolvePago(r.valor, r.valor_pago, r.status),
+        'A Receber (R$)': Math.max(0, r.valor - resolvePago(r.valor, r.valor_pago, r.status)),
         'Categoria': r.categoria_nome || '',
         'Centro de Custo': r.centro_custo_nome || '',
         'Conta Financeira': r.conta_financeira_nome || '',
@@ -560,8 +569,8 @@ export const ContaAzulManager: React.FC = () => {
         'Vencimento': p.data_vencimento ? new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '',
         'Competência': p.data_competencia ? new Date(p.data_competencia + 'T00:00:00').toLocaleDateString('pt-BR') : '',
         'Valor (R$)': p.valor,
-        'Pago (R$)': p.valor_pago,
-        'A Pagar (R$)': p.valor - p.valor_pago,
+        'Pago (R$)': resolvePago(p.valor, p.valor_pago, p.status),
+        'A Pagar (R$)': Math.max(0, p.valor - resolvePago(p.valor, p.valor_pago, p.status)),
         'Categoria': p.categoria_nome || '',
         'Centro de Custo': p.centro_custo_nome || '',
         'Conta Financeira': p.conta_financeira_nome || '',
@@ -1603,8 +1612,8 @@ export const ContaAzulManager: React.FC = () => {
                           <td className="px-6 py-3 text-xs text-slate-600 max-w-[200px] truncate">{r.descricao || '--'}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700">{formatDate(r.data_vencimento)}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700 text-right">{formatCurrency(r.valor)}</td>
-                          <td className="px-6 py-3 text-xs font-black text-emerald-600 text-right">{formatCurrency(r.valor_pago)}</td>
-                          <td className="px-6 py-3 text-xs font-bold text-amber-600 text-right">{formatCurrency(r.valor - r.valor_pago)}</td>
+                          <td className="px-6 py-3 text-xs font-black text-emerald-600 text-right">{formatCurrency(resolvePago(r.valor, r.valor_pago, r.status))}</td>
+                          <td className="px-6 py-3 text-xs font-bold text-amber-600 text-right">{formatCurrency(Math.max(0, r.valor - resolvePago(r.valor, r.valor_pago, r.status)))}</td>
                           <td className="px-6 py-3 text-[10px] text-slate-500">{r.categoria_nome || '--'}</td>
                           <td className="px-6 py-3 text-center">
                             <StatusBadge status={r.status} />
@@ -1698,7 +1707,10 @@ export const ContaAzulManager: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {payables.map(p => (
+                      {payables.map(p => {
+                        const pago = resolvePago(p.valor, p.valor_pago, p.status);
+                        const aPagar = Math.max(0, p.valor - pago);
+                        return (
                         <tr key={p.id} className="hover:bg-red-50/40 transition-colors">
                           <td className="px-6 py-3">
                             <span className="font-bold text-slate-800 text-xs">{p.fornecedor_nome || '--'}</span>
@@ -1707,14 +1719,15 @@ export const ContaAzulManager: React.FC = () => {
                           <td className="px-6 py-3 text-xs text-slate-600 max-w-[200px] truncate">{p.descricao || '--'}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700">{formatDate(p.data_vencimento)}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700 text-right">{formatCurrency(p.valor)}</td>
-                          <td className="px-6 py-3 text-xs font-black text-emerald-600 text-right">{formatCurrency(p.valor_pago)}</td>
-                          <td className="px-6 py-3 text-xs font-black text-red-600 text-right">{formatCurrency(p.valor - p.valor_pago)}</td>
+                          <td className="px-6 py-3 text-xs font-black text-emerald-600 text-right">{formatCurrency(pago)}</td>
+                          <td className="px-6 py-3 text-xs font-black text-red-600 text-right">{formatCurrency(aPagar)}</td>
                           <td className="px-6 py-3 text-[10px] text-slate-500">{p.categoria_nome || '--'}</td>
                           <td className="px-6 py-3 text-center">
                             <StatusBadge status={p.status} />
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

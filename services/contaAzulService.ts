@@ -739,9 +739,9 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
-    const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
     const dueDate = normalizeDate(r.data_vencimento);
+    const valorPago = resolveValorPago(valor, Number(r.valor_pago || 0), st);
 
     if (isExcludedStatus(st)) continue;
 
@@ -784,6 +784,17 @@ function isPartiallyPaidStatus(st: string): boolean {
 
 function isExcludedStatus(st: string): boolean {
   return st.includes('perdido') || st.includes('desconsiderado') || st.includes('renegociado');
+}
+
+/**
+ * Resolves the actual paid amount. The Conta Azul "buscar" endpoint often
+ * stores valor_pago as 0 in the DB even for fully paid items. We infer
+ * the real paid amount from the status when the stored value is 0.
+ */
+function resolveValorPago(valor: number, valorPagoDB: number, st: string): number {
+  if (valorPagoDB > 0) return valorPagoDB;
+  if (isPaidStatus(st)) return valor;
+  return 0;
 }
 
 function normalizeDate(d: string | null | undefined): string {
@@ -829,9 +840,9 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
   for (const r of allRecords) {
     const valor = Number(r.valor || 0);
-    const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
     const dueDate = normalizeDate(r.data_vencimento);
+    const valorPago = resolveValorPago(valor, Number(r.valor_pago || 0), st);
 
     if (isExcludedStatus(st)) continue;
 
@@ -890,7 +901,7 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
     const st = (r.status || '').toLowerCase();
     if (isExcludedStatus(st)) continue;
     const valor = Number(r.valor || 0);
-    const valorPago = Number(r.valor_pago || 0);
+    const valorPago = resolveValorPago(valor, Number(r.valor_pago || 0), st);
     const dueDate = normalizeDate(r.data_vencimento);
     totalOriginal += valor;
     totalRecebido += valorPago;
@@ -953,7 +964,7 @@ async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
       const st = (r.status || '').toLowerCase();
       if (isExcludedStatus(st)) continue;
       const valor = Number(r.valor || 0);
-      const valorPago = Number(r.valor_pago || 0);
+      const valorPago = resolveValorPago(valor, Number(r.valor_pago || 0), st);
       count++;
       total += valor;
       if (isPaidStatus(st)) {

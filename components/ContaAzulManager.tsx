@@ -1119,6 +1119,31 @@ export const ContaAzulManager: React.FC = () => {
                     <Building2 size={13} className="text-blue-500" />
                     <span className="text-xs font-black text-slate-700">{acc.nome}</span>
                     {acc.cnpj && <span className="text-[10px] text-slate-400 font-mono">{acc.cnpj}</span>}
+                    <button
+                      onClick={async () => {
+                        try {
+                          setSyncMessage(`[${acc.nome}] Diagnosticando...`);
+                          const result = await contaAzulService.diagnose(acc.id);
+                          const d = result.diagnose;
+                          const msg = [
+                            `DB: ${d.database?.contas_pagar ?? '?'} pagar, ${d.database?.contas_receber ?? '?'} receber`,
+                            d['contas-a-pagar']?.computed_total != null ? `API Pagar: ${d['contas-a-pagar'].computed_total} total (itens_totais: ${d['contas-a-pagar'].itens_totais})` : '',
+                            d['contas-a-receber']?.computed_total != null ? `API Receber: ${d['contas-a-receber'].computed_total} total` : '',
+                          ].filter(Boolean).join(' | ');
+                          setSyncMessage(`[${acc.nome}] ${msg}`);
+                          console.log('[Diagnose]', acc.nome, result);
+                          setTimeout(() => setSyncMessage(''), 30000);
+                        } catch (e: any) {
+                          setSyncMessage(`[${acc.nome}] Erro diagnóstico: ${e.message}`);
+                        }
+                      }}
+                      disabled={isSyncing}
+                      className="ml-auto bg-violet-100 hover:bg-violet-200 disabled:opacity-40 text-violet-700 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
+                      title="Diagnosticar: compara total no DB vs total na API"
+                    >
+                      <Search size={10} />
+                      Diagnosticar
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     {/* Receber */}

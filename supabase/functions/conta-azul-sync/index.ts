@@ -701,6 +701,49 @@ async function autoSyncAll(_req: Request): Promise<Response> {
   return jsonResponse({ success: true, auto_sync: true, results: allResults });
 }
 
+async function diagnose(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const db = getSupabaseServiceClient();
+  const dateRange = defaultDateRange();
+  const results: Record<string, any> = {};
+
+  const { count: dbPayCount } = await db.from("conta_azul_contas_pagar").select("*", { count: "exact", head: true }).eq("account_id", accountId);
+  const { count: dbRecCount } = await db.from("conta_azul_contas_receber").select("*", { count: "exact", head: true }).eq("account_id", accountId);
+  results.database = { contas_pagar: dbPayCount, contas_receber: dbRecCount };
+
+  for (const tipo of ["contas-a-pagar", "contas-a-receber"] as const) {
+    const params = new URLSearchParams({
+      data_vencimento_de: dateRange.data_vencimento_de,
+      data_vencimento_ate: dateRange.data_vencimento_ate,
+      tamanho_pagina: "10",
+      pagina: "1",
+    });
+    try {
+      const res = await contaAzulFetch(accountId, `/v1/financeiro/eventos-financeiros/${tipo}/buscar?${params.toString()}`);
+      if (!res.ok) {
+        results[tipo] = { error: `HTTP ${res.status}: ${await res.text()}` };
+      } else {
+        const apiBody = await res.json();
+        const total = readExpectedTotal(apiBody);
+        const itemsOnPage = extractItems(apiBody).length;
+        results[tipo] = {
+          itens_totais: apiBody.itens_totais ?? null,
+          totais: apiBody.totais ?? null,
+          items_on_page_1: itemsOnPage,
+          computed_total: total,
+          response_keys: Object.keys(apiBody),
+          date_range: `${dateRange.data_vencimento_de} → ${dateRange.data_vencimento_ate}`,
+        };
+      }
+    } catch (e: any) {
+      results[tipo] = { error: e.message };
+    }
+  }
+
+  return jsonResponse({ success: true, account_id: accountId, diagnose: results });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
   if (req.method !== "POST") return errorResponse("Metodo nao permitido. Use POST.", 405);
@@ -717,6 +760,7 @@ Deno.serve(async (req) => {
       case "all": return await syncAll(req);
       case "all-accounts": return await syncAllAccounts(req);
       case "auto-sync-all": return await autoSyncAll(req);
+      case "diagnose": return await diagnose(req);
       default: return errorResponse("Sync type desconhecido: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-sync error:", err); return errorResponse(err.message || "Erro interno", 500); }

@@ -452,6 +452,13 @@ async function triggerSyncIncremental(
   return triggerSync(type, accountId, { incremental: true });
 }
 
+async function diagnose(accountId: string): Promise<any> {
+  return edgeFetch('conta-azul-sync', 'diagnose', {
+    method: 'POST',
+    body: withAccountId({}, accountId),
+  });
+}
+
 async function getSyncLogs(accountId?: string, limit = 20): Promise<ContaAzulSyncLog[]> {
   let query = supabase
     .from('conta_azul_sync_log')
@@ -1103,6 +1110,7 @@ export const contaAzulService = {
   triggerSync,
   triggerSyncChunked,
   triggerSyncIncremental,
+  diagnose,
   getSyncLogs,
   getPendingSession,
   getLastSyncTimestamps,

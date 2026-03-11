@@ -72,26 +72,33 @@ interface PaginatedResult<T> { items: T[]; expectedTotal: number | null; }
 async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 500): Promise<PaginatedResult<T>> {
   const all: T[] = [];
   let page = 1;
-  const size = 1000;
+  const size = 200;
   let expectedTotal: number | null = null;
+  let consecutiveEmpty = 0;
   for (let i = 0; i < maxPages; i++) {
     const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
     const res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
     if (expectedTotal === null) {
-      expectedTotal = body.itens_totais ?? body.total_itens ?? null;
+      expectedTotal = body.itens_totais ?? body.total_itens ?? body.total ?? null;
     }
     const items: T[] = extractItems<T>(body);
     if (items.length === 0) {
+      consecutiveEmpty++;
       if (page === 1) {
         console.warn(`[contaAzulFetchPaginated] 0 items on first page for ${basePath}. Response keys:`, Object.keys(body || {}));
       }
-      break;
+      if (consecutiveEmpty >= 2 || expectedTotal === null || all.length >= expectedTotal) break;
+      page++;
+      await new Promise(r => setTimeout(r, 100));
+      continue;
     }
+    consecutiveEmpty = 0;
     all.push(...items);
     console.log(`[contaAzulFetchPaginated] ${basePath} page ${page}: ${items.length} items (total: ${all.length}${expectedTotal ? `/${expectedTotal}` : ''})`);
-    if (items.length < size) break;
+    if (expectedTotal !== null && all.length >= expectedTotal) break;
+    if (items.length < size && (expectedTotal === null || all.length >= expectedTotal)) break;
     page++;
     if (page > maxPages) {
       console.warn(`[contaAzulFetchPaginated] TRUNCATED at ${maxPages} pages (${all.length} items) for ${basePath}. There may be more data.`);
@@ -290,6 +297,49 @@ function mapPayableToRow(item: any, accountId: string, contactMaps?: ContactMaps
   };
 }
 
+function generateDateChunks(fromDate: string, toDate: string, monthsPerChunk = 6): Array<{ from: string; to: string }> {
+  const chunks: Array<{ from: string; to: string }> = [];
+  const end = new Date(toDate + "T00:00:00Z");
+  let current = new Date(fromDate + "T00:00:00Z");
+  while (current < end) {
+    const chunkEnd = new Date(current);
+    chunkEnd.setUTCMonth(chunkEnd.getUTCMonth() + monthsPerChunk);
+    const actualEnd = chunkEnd > end ? end : chunkEnd;
+    chunks.push({
+      from: current.toISOString().split("T")[0],
+      to: actualEnd.toISOString().split("T")[0],
+    });
+    current = new Date(actualEnd);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return chunks;
+}
+
+async function fetchAllChunked<T>(
+  accountId: string,
+  basePath: string,
+  fromDate: string,
+  toDate: string,
+  extraParams: Record<string, string> = {},
+  onChunkProgress?: (chunkIdx: number, totalChunks: number, itemsSoFar: number) => void,
+): Promise<{ items: T[]; expectedTotal: number | null }> {
+  const chunks = generateDateChunks(fromDate, toDate, 6);
+  console.log(`[fetchAllChunked] ${basePath}: ${chunks.length} date chunks from ${fromDate} to ${toDate}`);
+  const allItems: T[] = [];
+  let lastExpectedTotal: number | null = null;
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const chunk = chunks[ci];
+    const params = { ...extraParams, data_vencimento_de: chunk.from, data_vencimento_ate: chunk.to };
+    const { items, expectedTotal } = await contaAzulFetchPaginated<T>(accountId, basePath, params);
+    if (expectedTotal !== null) lastExpectedTotal = (lastExpectedTotal ?? 0) + expectedTotal;
+    allItems.push(...items);
+    console.log(`[fetchAllChunked] Chunk ${ci + 1}/${chunks.length} (${chunk.from} → ${chunk.to}): ${items.length} items (running total: ${allItems.length})`);
+    onChunkProgress?.(ci, chunks.length, allItems.length);
+  }
+  console.log(`[fetchAllChunked] ${basePath}: TOTAL ${allItems.length} items from ${chunks.length} chunks`);
+  return { items: allItems, expectedTotal: lastExpectedTotal };
+}
+
 function extractAccountId(body: any): string {
   const id = body?.account_id;
   if (!id) throw new Error("Campo 'account_id' é obrigatório no body da requisição.");
@@ -326,12 +376,19 @@ async function syncReceivables(req: Request): Promise<Response> {
     }
 
     console.log(`[syncReceivables] Params: ${JSON.stringify(params)} for account ${accountId}`);
-    const [paginated, contactMaps] = await Promise.all([
-      contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params),
-      fetchContactsCpfMap(accountId),
-    ]);
-    const items = paginated.items;
-    const expectedTotal = paginated.expectedTotal;
+    let items: any[];
+    let expectedTotal: number | null;
+    const contactMapsPromise = fetchContactsCpfMap(accountId);
+    if (isIncremental) {
+      const paginated = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
+      items = paginated.items;
+      expectedTotal = paginated.expectedTotal;
+    } else {
+      const chunked = await fetchAllChunked<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params.data_vencimento_de, params.data_vencimento_ate);
+      items = chunked.items;
+      expectedTotal = chunked.expectedTotal;
+    }
+    const contactMaps = await contactMapsPromise;
     console.log(`[syncReceivables] Fetched: ${items.length} items${expectedTotal ? ` (API total: ${expectedTotal})` : ''} for account ${accountId} (incremental=${isIncremental})`);
 
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
@@ -380,7 +437,7 @@ async function syncReceivables(req: Request): Promise<Response> {
 
     console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} row errors, ${staleRemoved} stale removed for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental, staleRemoved });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental, staleRemoved, fetchedFromApi: items.length });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
@@ -414,12 +471,19 @@ async function syncPayables(req: Request): Promise<Response> {
     }
 
     console.log(`[syncPayables] Params: ${JSON.stringify(params)} for account ${accountId}`);
-    const [paginated, contactMaps] = await Promise.all([
-      contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params),
-      fetchContactsCpfMap(accountId),
-    ]);
-    const items = paginated.items;
-    const expectedTotal = paginated.expectedTotal;
+    let items: any[];
+    let expectedTotal: number | null;
+    const contactMapsPromise = fetchContactsCpfMap(accountId);
+    if (isIncremental) {
+      const paginated = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
+      items = paginated.items;
+      expectedTotal = paginated.expectedTotal;
+    } else {
+      const chunked = await fetchAllChunked<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params.data_vencimento_de, params.data_vencimento_ate);
+      items = chunked.items;
+      expectedTotal = chunked.expectedTotal;
+    }
+    const contactMaps = await contactMapsPromise;
     console.log(`[syncPayables] Fetched: ${items.length} items${expectedTotal ? ` (API total: ${expectedTotal})` : ''} for account ${accountId} (incremental=${isIncremental})`);
 
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
@@ -473,7 +537,7 @@ async function syncPayables(req: Request): Promise<Response> {
 
     console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} row errors, ${staleRemoved} stale removed for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental, staleRemoved });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental, staleRemoved, fetchedFromApi: items.length });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 

@@ -649,16 +649,13 @@ export const ContaAzulManager: React.FC = () => {
   ];
 
   const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts', fullSync = false) => {
-    if (!selectedAccountId) {
-      alert('Selecione uma conta (FILIAL ou MATRIZ) antes de sincronizar.');
+    const connectedIds = accountStatuses
+      .filter(s => s.connected)
+      .map(s => s.account_id);
+    if (connectedIds.length === 0) {
+      alert('Nenhuma conta está conectada ao Conta Azul.');
       return;
     }
-    const isConnected = accountStatuses.find(s => s.account_id === selectedAccountId)?.connected;
-    if (!isConnected) {
-      alert('A conta selecionada não está conectada ao Conta Azul.');
-      return;
-    }
-    const connectedIds = [selectedAccountId];
 
     setIsSyncing(true);
     setSyncProgress(0);
@@ -673,17 +670,21 @@ export const ContaAzulManager: React.FC = () => {
       accId: string,
       prefix: string,
       stepLabel: string,
-    ): Promise<{ synced: number; error?: string }> => {
+    ): Promise<{ synced: number; expected?: number; chunkErrors?: string[] }> => {
       if (fullSync) {
-        setSyncMessage(`${prefix}Sincronizando ${stepLabel} (completa, trimestral)...`);
-        const result = await contaAzulService.triggerSyncChunked(stepType, accId, (chunk, total) => {
-          setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}`);
+        setSyncMessage(`${prefix}Sincronizando ${stepLabel} (completa, mensal)...`);
+        const result = await contaAzulService.triggerSyncChunked(stepType, accId, (chunk, total, info) => {
+          setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}${info ? ` (${info})` : ''}`);
         });
-        if ((result as any).errors?.length) {
-          console.warn(`[Sync] ${stepLabel} chunks com erro:`, (result as any).errors);
-          setSyncMessage(`${prefix}${stepLabel}: ${result.sincronizados} sincronizados, ${(result as any).errors.length} chunk(s) com erro (ver console)`);
+        const chunkErrors = (result as any).errors as string[] | undefined;
+        const expected = (result as any).expectedTotal as number | undefined;
+        if (chunkErrors?.length) {
+          console.warn(`[Sync] ${prefix}${stepLabel} chunks com erro:`, chunkErrors);
         }
-        return { synced: result.sincronizados ?? 0 };
+        if (expected && result.sincronizados < expected) {
+          console.warn(`[Sync] ${prefix}${stepLabel} INCOMPLETO: ${result.sincronizados}/${expected} registros`);
+        }
+        return { synced: result.sincronizados ?? 0, expected, chunkErrors };
       }
       setSyncMessage(`${prefix}Sincronizando ${stepLabel} (rápido)...`);
       const result = await contaAzulService.triggerSyncIncremental(stepType, accId);
@@ -692,6 +693,8 @@ export const ContaAzulManager: React.FC = () => {
 
     if (type === 'all') {
       let totalSynced = 0;
+      let totalExpected = 0;
+      let totalChunkErrors = 0;
       let errors: string[] = [];
       const totalSteps = syncSteps.length * connectedIds.length;
       let currentStep = 0;
@@ -708,8 +711,10 @@ export const ContaAzulManager: React.FC = () => {
 
           if (step.type === 'receivables' || step.type === 'payables') {
             try {
-              const { synced } = await syncFinancial(step.type, accId, prefix, step.label);
+              const { synced, expected, chunkErrors } = await syncFinancial(step.type, accId, prefix, step.label);
               totalSynced += synced;
+              if (expected) totalExpected += expected;
+              if (chunkErrors?.length) totalChunkErrors += chunkErrors.length;
             } catch (e: any) {
               errors.push(`${prefix}${step.label}: ${e.message}`);
             }
@@ -727,12 +732,18 @@ export const ContaAzulManager: React.FC = () => {
       setSyncProgress(100);
       setSyncStep('');
       const modeLabel = fullSync ? 'completa' : 'incremental';
-      if (errors.length > 0) {
-        setSyncMessage(`Sync ${modeLabel} concluída com ${errors.length} erro(s). ${totalSynced} registros sincronizados.`);
-        console.warn('Sync errors:', errors);
-      } else {
-        setSyncMessage(`Sync ${modeLabel}: ${totalSynced} registros sincronizados!`);
+      const parts: string[] = [`Sync ${modeLabel}: ${totalSynced} registros sincronizados`];
+      if (totalExpected > 0) {
+        parts.push(`(API reportou ${totalExpected} registros no total)`);
       }
+      if (totalChunkErrors > 0) {
+        parts.push(`⚠ ${totalChunkErrors} chunk(s) falharam (ver console)`);
+      }
+      if (errors.length > 0) {
+        parts.push(`${errors.length} erro(s) gerais`);
+        console.warn('Sync errors:', errors);
+      }
+      setSyncMessage(parts.join(' | '));
       await loadOverview();
       loadAuxiliaries();
       if (activeTab === 'receivables') loadReceivables();
@@ -742,6 +753,8 @@ export const ContaAzulManager: React.FC = () => {
     } else {
       const stepLabel = syncSteps.find(s => s.type === type)?.label || type;
       let totalSynced = 0;
+      let totalExpected = 0;
+      let totalChunkErrors = 0;
 
       for (const accId of connectedIds) {
         const accName = getAccName(accId);
@@ -751,8 +764,10 @@ export const ContaAzulManager: React.FC = () => {
           setSyncProgress(10);
           setSyncStep(stepLabel);
           try {
-            const { synced } = await syncFinancial(type, accId, prefix, stepLabel);
+            const { synced, expected, chunkErrors } = await syncFinancial(type, accId, prefix, stepLabel);
             totalSynced += synced;
+            if (expected) totalExpected += expected;
+            if (chunkErrors?.length) totalChunkErrors += chunkErrors.length;
           } catch (e: any) {
             setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
           }
@@ -774,7 +789,10 @@ export const ContaAzulManager: React.FC = () => {
         setSyncMessage(`${stepLabel}: 0 registros encontrados. Verifique se a conta está conectada e tente sincronizar novamente.`);
       } else {
         const modeLabel = (type === 'receivables' || type === 'payables') ? (fullSync ? ' (completa)' : ' (rápido)') : '';
-        setSyncMessage(`${stepLabel}${modeLabel}: ${totalSynced} registros sincronizados`);
+        const parts: string[] = [`${stepLabel}${modeLabel}: ${totalSynced} registros sincronizados`];
+        if (totalExpected > 0) parts.push(`(API: ${totalExpected})`);
+        if (totalChunkErrors > 0) parts.push(`⚠ ${totalChunkErrors} chunk(s) falharam`);
+        setSyncMessage(parts.join(' | '));
       }
       await loadOverview();
       if (type === 'receivables') {

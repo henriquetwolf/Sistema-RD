@@ -147,19 +147,19 @@ type SyncType = 'all' | 'receivables' | 'payables' | 'categories' | 'cost-center
 const SYNC_YEARS_BACK = 10;
 const SYNC_YEARS_FORWARD = 5;
 
-function generateQuarterlyRanges(): { data_vencimento_de: string; data_vencimento_ate: string }[] {
+function generateMonthlyRanges(): { data_vencimento_de: string; data_vencimento_ate: string }[] {
   const ranges: { data_vencimento_de: string; data_vencimento_ate: string }[] = [];
   const now = new Date();
   const start = new Date(now);
   start.setFullYear(start.getFullYear() - SYNC_YEARS_BACK);
-  const end = new Date(now);
-  end.setFullYear(end.getFullYear() + SYNC_YEARS_FORWARD);
+  const endDate = new Date(now);
+  endDate.setFullYear(endDate.getFullYear() + SYNC_YEARS_FORWARD);
 
   const cursor = new Date(start);
-  while (cursor < end) {
+  while (cursor < endDate) {
     const rangeStart = cursor.toISOString().split('T')[0];
-    cursor.setMonth(cursor.getMonth() + 3);
-    const rangeEnd = (cursor < end ? cursor : end).toISOString().split('T')[0];
+    cursor.setMonth(cursor.getMonth() + 1);
+    const rangeEnd = (cursor < endDate ? cursor : endDate).toISOString().split('T')[0];
     ranges.push({ data_vencimento_de: rangeStart, data_vencimento_ate: rangeEnd });
   }
   return ranges;
@@ -176,29 +176,52 @@ async function triggerSyncChunked(
   type: 'receivables' | 'payables',
   accountId: string,
   onProgress?: (chunk: number, total: number, info?: string) => void,
-): Promise<ContaAzulSyncResult & { errors?: string[] }> {
-  const ranges = generateQuarterlyRanges();
+): Promise<ContaAzulSyncResult & { errors?: string[]; expectedTotal?: number }> {
+  const ranges = generateMonthlyRanges();
   let totalSynced = 0;
+  let totalExpected = 0;
   const errors: string[] = [];
+  const MAX_RETRIES = 2;
+
   for (let i = 0; i < ranges.length; i++) {
-    onProgress?.(i + 1, ranges.length);
-    try {
-      const result = await triggerSync(type, accountId, ranges[i]);
-      const count = result.sincronizados ?? 0;
-      totalSynced += count;
-      if (count > 0) {
-        console.log(`[SyncChunked] ${type} chunk ${i + 1}/${ranges.length} (${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}): ${count} registros`);
+    onProgress?.(i + 1, ranges.length, `${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}`);
+    let success = false;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await triggerSync(type, accountId, ranges[i]);
+        const count = result.sincronizados ?? 0;
+        const expected = (result as any).esperados ?? 0;
+        totalSynced += count;
+        totalExpected += expected;
+        if (count > 0) {
+          console.log(`[SyncChunked] ${type} chunk ${i + 1}/${ranges.length} (${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}): ${count} registros${expected ? ` (API total: ${expected})` : ''}`);
+        }
+        success = true;
+        break;
+      } catch (e: any) {
+        const isRateLimit = e.message?.includes('429') || e.message?.includes('rate');
+        const delay = isRateLimit ? 5000 : 2000 * (attempt + 1);
+        if (attempt < MAX_RETRIES) {
+          console.warn(`[SyncChunked] ${type} chunk ${i + 1} attempt ${attempt + 1} failed, retrying in ${delay}ms: ${e.message}`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          const msg = `Chunk ${i + 1}/${ranges.length} (${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}): ${e.message}`;
+          errors.push(msg);
+          console.error(`[SyncChunked] ${type} FAILED after ${MAX_RETRIES + 1} attempts:`, msg);
+        }
       }
-    } catch (e: any) {
-      const msg = `Chunk ${i + 1}/${ranges.length} (${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}): ${e.message}`;
-      errors.push(msg);
-      console.error(`[SyncChunked] ${type} ERROR:`, msg);
     }
   }
   if (errors.length > 0) {
     console.warn(`[SyncChunked] ${type}: ${errors.length} chunk(s) falharam. Total sincronizado: ${totalSynced}`);
   }
-  return { success: true, tipo: type, sincronizados: totalSynced, errors: errors.length > 0 ? errors : undefined };
+  return {
+    success: true,
+    tipo: type,
+    sincronizados: totalSynced,
+    errors: errors.length > 0 ? errors : undefined,
+    expectedTotal: totalExpected > 0 ? totalExpected : undefined,
+  };
 }
 
 async function triggerSyncIncremental(
@@ -256,17 +279,25 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
-      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%');
+      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%,status.ilike.%Recebido%,status.ilike.%Settled%');
     } else if (filters.status === 'Pendente') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
+        .not('status', 'ilike', '%Pago%')
+        .not('status', 'ilike', '%Paid%')
+        .not('status', 'ilike', '%Recebido%')
+        .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
         .gte('data_vencimento', today);
     } else if (filters.status === 'Atrasado') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
+        .not('status', 'ilike', '%Pago%')
+        .not('status', 'ilike', '%Paid%')
+        .not('status', 'ilike', '%Recebido%')
+        .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
         .lt('data_vencimento', today);
     } else {
@@ -317,13 +348,15 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
-      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%');
+      query = query.or('status.ilike.%Liquidado%,status.ilike.%Quitado%,status.ilike.%Pago%,status.ilike.%Paid%,status.ilike.%Recebido%,status.ilike.%Settled%');
     } else if (filters.status === 'Pendente') {
       query = query
         .not('status', 'ilike', '%Liquidado%')
         .not('status', 'ilike', '%Quitado%')
         .not('status', 'ilike', '%Pago%')
         .not('status', 'ilike', '%Paid%')
+        .not('status', 'ilike', '%Recebido%')
+        .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
         .gte('data_vencimento', today);
     } else if (filters.status === 'Atrasado') {
@@ -332,6 +365,8 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
         .not('status', 'ilike', '%Quitado%')
         .not('status', 'ilike', '%Pago%')
         .not('status', 'ilike', '%Paid%')
+        .not('status', 'ilike', '%Recebido%')
+        .not('status', 'ilike', '%Settled%')
         .not('status', 'ilike', '%Perdido%')
         .lt('data_vencimento', today);
     } else {

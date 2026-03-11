@@ -67,16 +67,21 @@ function extractItems<T>(body: any): T[] {
   return [];
 }
 
-async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 500): Promise<T[]> {
+interface PaginatedResult<T> { items: T[]; expectedTotal: number | null; }
+
+async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 500): Promise<PaginatedResult<T>> {
   const all: T[] = [];
   let page = 1;
   const size = 1000;
-  // API Conta Azul "buscar" é GET com query params (não POST): data_vencimento_de, data_vencimento_ate, pagina, tamanho_pagina
+  let expectedTotal: number | null = null;
   for (let i = 0; i < maxPages; i++) {
     const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
     const res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
+    if (expectedTotal === null) {
+      expectedTotal = body.itens_totais ?? body.total_itens ?? null;
+    }
     const items: T[] = extractItems<T>(body);
     if (items.length === 0) {
       if (page === 1) {
@@ -85,7 +90,7 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
       break;
     }
     all.push(...items);
-    console.log(`[contaAzulFetchPaginated] ${basePath} page ${page}: ${items.length} items (total: ${all.length})`);
+    console.log(`[contaAzulFetchPaginated] ${basePath} page ${page}: ${items.length} items (total: ${all.length}${expectedTotal ? `/${expectedTotal}` : ''})`);
     if (items.length < size) break;
     page++;
     if (page > maxPages) {
@@ -93,7 +98,10 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
     }
     await new Promise(r => setTimeout(r, 50));
   }
-  return all;
+  if (expectedTotal !== null && all.length < expectedTotal) {
+    console.warn(`[contaAzulFetchPaginated] INCOMPLETE: got ${all.length}/${expectedTotal} items from ${basePath}. Pagination may have missed data.`);
+  }
+  return { items: all, expectedTotal };
 }
 
 function corsHeaders(origin = "*") { return { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" }; }
@@ -152,7 +160,7 @@ async function fetchContactsCpfMap(accountId: string): Promise<ContactMaps> {
   const byId = new Map<string, string>();
   const byName = new Map<string, string>();
   try {
-    const contacts = await contaAzulFetchPaginated<any>(accountId, "/v1/pessoas", {});
+    const { items: contacts } = await contaAzulFetchPaginated<any>(accountId, "/v1/pessoas", {});
     for (const c of contacts) {
       const cpf = c.documento || c.cpf_cnpj || c.cpf || c.cnpj || null;
       if (cpf) {
@@ -294,28 +302,16 @@ async function syncReceivables(req: Request): Promise<Response> {
     }
 
     console.log(`[syncReceivables] Params: ${JSON.stringify(params)} for account ${accountId}`);
-    const [items, contactMaps] = await Promise.all([
+    const [paginated, contactMaps] = await Promise.all([
       contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params),
       fetchContactsCpfMap(accountId),
     ]);
-    console.log(`[syncReceivables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
+    const items = paginated.items;
+    const expectedTotal = paginated.expectedTotal;
+    console.log(`[syncReceivables] Fetched: ${items.length} items${expectedTotal ? ` (API total: ${expectedTotal})` : ''} for account ${accountId} (incremental=${isIncremental})`);
 
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
     console.log(`[syncReceivables] Unique statuses (${statusSet.size}): ${[...statusSet].join(", ")}`);
-    const todayStr = new Date().toISOString().split("T")[0];
-    const dateCounts: Record<string, number> = {};
-    for (const it of items) {
-      const d = it.data_vencimento || "NULL";
-      dateCounts[d] = (dateCounts[d] || 0) + 1;
-    }
-    const todayCount = dateCounts[todayStr] || 0;
-    console.log(`[syncReceivables] API records for today (${todayStr}): ${todayCount}`);
-    const nullDates = dateCounts["NULL"] || 0;
-    if (nullDates > 0) console.log(`[syncReceivables] WARNING: ${nullDates} items have NULL data_vencimento`);
-
-    if (items.length >= 100000) {
-      console.warn(`[syncReceivables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
-    }
 
     const rows = items.map(item => mapReceivableToRow(item, accountId, contactMaps));
     let batchErrors = 0;
@@ -326,7 +322,6 @@ async function syncReceivables(req: Request): Promise<Response> {
       if (error) {
         batchErrors++;
         console.error("[syncReceivables] Batch error at index", i, ":", error.message, error.details);
-        // Retry one-by-one to save as many records as possible
         for (const row of batch) {
           const { error: rowErr } = await db.from("conta_azul_contas_receber").upsert(row, { onConflict: "account_id,id_conta_azul" });
           if (rowErr) {
@@ -342,7 +337,7 @@ async function syncReceivables(req: Request): Promise<Response> {
     }
     console.log(`[syncReceivables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} individual row errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
@@ -376,18 +371,16 @@ async function syncPayables(req: Request): Promise<Response> {
     }
 
     console.log(`[syncPayables] Params: ${JSON.stringify(params)} for account ${accountId}`);
-    const [items, contactMaps] = await Promise.all([
+    const [paginated, contactMaps] = await Promise.all([
       contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params),
       fetchContactsCpfMap(accountId),
     ]);
-    console.log(`[syncPayables] Fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
+    const items = paginated.items;
+    const expectedTotal = paginated.expectedTotal;
+    console.log(`[syncPayables] Fetched: ${items.length} items${expectedTotal ? ` (API total: ${expectedTotal})` : ''} for account ${accountId} (incremental=${isIncremental})`);
 
     const statusSet = new Set(items.map((it: any) => it.status_traduzido || it.status || "NULL"));
     console.log(`[syncPayables] Unique statuses (${statusSet.size}): ${[...statusSet].join(", ")}`);
-
-    if (items.length >= 100000) {
-      console.warn(`[syncPayables] WARNING: High item count (${items.length}), possible truncation at maxPages limit.`);
-    }
 
     const nullCpfCount = items.filter((it: any) => !resolveContactCpf(it.fornecedor, contactMaps) && !resolveContactCpf(it.contato, contactMaps)).length;
     if (nullCpfCount > 0) {
@@ -418,7 +411,7 @@ async function syncPayables(req: Request): Promise<Response> {
     }
     console.log(`[syncPayables] Done: ${count} upserted, ${batchErrors} batch errors, ${rowErrors} individual row errors for account ${accountId}`);
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, esperados: expectedTotal, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
@@ -428,8 +421,8 @@ async function syncCategories(req: Request): Promise<Response> {
   const logId = await createSyncLog("categories", accountId);
   let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", {});
-    const leafItems = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", { permite_apenas_filhos: "true" });
+    const { items } = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", {});
+    const { items: leafItems } = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", { permite_apenas_filhos: "true" });
     console.log(`[syncCategories] account=${accountId} | API returned: ${items.length} categories, ${leafItems.length} leaf categories`);
 
     if (items.length === 0 && leafItems.length === 0) {
@@ -496,7 +489,7 @@ async function syncCostCenters(req: Request): Promise<Response> {
   const logId = await createSyncLog("cost-centers", accountId);
   let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/centro-de-custo");
+    const { items } = await contaAzulFetchPaginated<any>(accountId, "/v1/centro-de-custo");
     const db = getSupabaseServiceClient();
     const now = new Date().toISOString();
     const rows = items.map((item: any) => ({
@@ -527,7 +520,7 @@ async function syncAccounts(req: Request): Promise<Response> {
   const logId = await createSyncLog("accounts", accountId);
   let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/conta-financeira", { apenas_ativo: "true" });
+    const { items } = await contaAzulFetchPaginated<any>(accountId, "/v1/conta-financeira", { apenas_ativo: "true" });
     const db = getSupabaseServiceClient();
     for (const item of items) {
       let saldoAtual = 0;

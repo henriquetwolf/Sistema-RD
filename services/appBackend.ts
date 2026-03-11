@@ -470,8 +470,27 @@ export const appBackend = {
                       nextIdToSet = answers.length > 0 ? (node.yesId || null) : (node.noId || null);
                       break;
 
+                  case 'sms':
+                      let smsPhone = answers.find(a => a.questionId === node.config?.phoneFieldId)?.value;
+                      if (!smsPhone) {
+                          smsPhone = answers.find(a => a.questionTitle.toLowerCase().includes('telefone') || a.questionTitle.toLowerCase().includes('celular'))?.value;
+                      }
+
+                      if (smsPhone) {
+                          const cleanSmsDigits = String(smsPhone).replace(/\D/g, '');
+                          const smsText = replaceVars(node.config?.message || '');
+                          if (smsText) {
+                              const smsConfig = await appBackend.getEmailConfig();
+                              if (smsConfig?.apiKey) {
+                                  const formattedPhone = cleanSmsDigits.startsWith('+') ? cleanSmsDigits : `+55${cleanSmsDigits}`;
+                                  await brevoService.sendSms(smsConfig.apiKey, { to: formattedPhone, content: smsText, sender: 'VOLL' });
+                                  console.log(`[AUTOMATION] SMS disparado p/ ${cleanSmsDigits}`);
+                              }
+                          }
+                      }
+                      break;
+
                   case 'crm_action':
-                      // Ações futuras de CRM
                       break;
               }
           } catch (err) {
@@ -2075,11 +2094,52 @@ export const appBackend = {
               }
               case 'send_email': {
                 if (!clientEmail) break;
-                const subject = replaceVars(step.config?.subject || step.config?.template_name || '');
-                const body = replaceVars(step.config?.body || step.config?.content || '');
+                let subject = replaceVars(step.config?.subject || '');
+                let body = replaceVars(step.config?.body || '');
+
+                if ((!subject || !body) && step.config?.template_id) {
+                  const { data: tpl } = await supabase
+                    .from('marketing_email_templates')
+                    .select('subject, html_content')
+                    .eq('id', step.config.template_id)
+                    .single();
+                  if (tpl) {
+                    if (!subject) subject = replaceVars(tpl.subject || '');
+                    if (!body) body = replaceVars(tpl.html_content || '');
+                  }
+                }
+
+                if (!subject) subject = step.config?.template_name || 'Notificação VOLL';
+
                 if (subject && body) {
                   await appBackend.sendEmailViaSendGrid(clientEmail, subject, body);
                   console.log(`[MKT-AUTO] Email enviado para ${clientEmail}`);
+                } else {
+                  console.warn(`[MKT-AUTO] Email sem conteúdo para automação "${auto.name}" (subject="${subject}", body vazio=${!body})`);
+                }
+                break;
+              }
+              case 'send_sms': {
+                if (!clientPhone) {
+                  console.warn(`[MKT-AUTO] Sem telefone para enviar SMS na automação "${auto.name}"`);
+                  break;
+                }
+                const smsMessage = replaceVars(step.config?.message || '');
+                if (!smsMessage) break;
+                const emailConfig = await appBackend.getEmailConfig();
+                if (emailConfig?.apiKey) {
+                  const smsResult = await brevoService.sendSms(emailConfig.apiKey, {
+                    to: clientPhone.startsWith('+') ? clientPhone : `+55${clientPhone}`,
+                    content: smsMessage,
+                    sender: step.config?.sender || 'VOLL',
+                  });
+                  if (smsResult.success) {
+                    console.log(`[MKT-AUTO] SMS enviado para ${clientPhone}`);
+                  } else {
+                    console.error(`[MKT-AUTO] Falha ao enviar SMS: ${smsResult.error}`);
+                  }
+                } else {
+                  console.warn('[MKT-AUTO] Brevo API key não configurada para SMS');
                 }
                 break;
               }

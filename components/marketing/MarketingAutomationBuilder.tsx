@@ -110,7 +110,7 @@ function getTriggerIcon(triggerType: string): React.ReactNode {
 function summarizeConfig(step: AutomationStep): string {
   const c = step.config || {};
   switch (step.action_type) {
-    case 'send_email': return c.template_name || c.template_id || 'Template não selecionado';
+    case 'send_email': return c.subject || c.template_name || c.template_id || 'Email não configurado';
     case 'send_whatsapp': return c.message ? c.message.substring(0, 60) + (c.message.length > 60 ? '...' : '') : 'Mensagem não definida';
     case 'send_sms': return c.message ? c.message.substring(0, 60) + (c.message.length > 60 ? '...' : '') : 'Mensagem não definida';
     case 'send_push': return c.title || 'Notificação não definida';
@@ -913,12 +913,17 @@ const StepConfigFields: React.FC<{
       return (
         <div className="space-y-2">
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">ID do Template de Email</label>
-            <input value={config.template_id || ''} onChange={e => onChange({ template_id: e.target.value })} className={inputCls} placeholder="UUID do template" />
+            <label className="text-xs font-medium text-slate-600 mb-1 block">ID do Template de Email (opcional)</label>
+            <input value={config.template_id || ''} onChange={e => onChange({ template_id: e.target.value })} className={inputCls} placeholder="UUID do template (preencha para usar template salvo)" />
+          </div>
+          <p className="text-[10px] text-slate-400 text-center">— ou preencha manualmente —</p>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Assunto do Email</label>
+            <input value={config.subject || ''} onChange={e => onChange({ subject: e.target.value })} className={inputCls} placeholder="Ex: Olá {{nome}}, bem-vindo!" />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Nome do Template (referência)</label>
-            <input value={config.template_name || ''} onChange={e => onChange({ template_name: e.target.value })} className={inputCls} placeholder="Ex: Boas-vindas" />
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Corpo do Email (HTML ou texto)</label>
+            <textarea value={config.body || ''} onChange={e => onChange({ body: e.target.value })} className={clsx(inputCls, 'h-24 resize-none')} placeholder="Olá {{nome}}, obrigado pelo seu interesse..." />
           </div>
         </div>
       );

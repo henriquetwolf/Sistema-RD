@@ -67,7 +67,7 @@ export interface FormModel {
 }
 
 // Novos tipos para Automação
-export type NodeType = 'trigger' | 'wait' | 'email' | 'whatsapp' | 'condition' | 'crm_action' | 'exit';
+export type NodeType = 'trigger' | 'wait' | 'email' | 'whatsapp' | 'sms' | 'condition' | 'crm_action' | 'exit';
 
 export interface AutomationNode {
   id: string;

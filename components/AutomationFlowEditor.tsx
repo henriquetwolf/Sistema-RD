@@ -4,7 +4,7 @@ import {
   Zap, Clock, Mail, Kanban, ArrowRight, Plus, X, Save, 
   Play, Pause, ChevronRight, Settings, Trash2, AlertCircle, 
   HelpCircle, CheckCircle2, Split, UserPlus, FileText, MousePointer2,
-  ArrowLeft, Loader2, Info, MessageCircle
+  ArrowLeft, Loader2, Info, MessageCircle, Smartphone
 } from 'lucide-react';
 import { AutomationFlow, AutomationNode, FormModel, NodeType, Pipeline } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -37,6 +37,7 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
         type === 'wait' ? 'Esperar tempo' : 
         type === 'email' ? 'Enviar E-mail' : 
         type === 'whatsapp' ? 'Enviar WhatsApp' : 
+        type === 'sms' ? 'Enviar SMS' :
         type === 'condition' ? 'Verificar Ação' : 'Ação CRM',
       config: 
         type === 'wait' ? { days: 0, hours: 0, minutes: 0 } : 
@@ -102,6 +103,7 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                     node.type === 'wait' ? "bg-blue-100 text-blue-600" :
                     node.type === 'email' ? "bg-purple-100 text-purple-600" :
                     node.type === 'whatsapp' ? "bg-emerald-100 text-emerald-600" :
+                    node.type === 'sms' ? "bg-cyan-100 text-cyan-600" :
                     node.type === 'condition' ? "bg-amber-100 text-amber-600" :
                     "bg-indigo-100 text-indigo-600"
                 )}>
@@ -109,6 +111,7 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                     {node.type === 'wait' && <Clock size={20}/>}
                     {node.type === 'email' && <Mail size={20}/>}
                     {node.type === 'whatsapp' && <MessageCircle size={20}/>}
+                    {node.type === 'sms' && <Smartphone size={20}/>}
                     {node.type === 'condition' && <Split size={20}/>}
                     {node.type === 'crm_action' && <Kanban size={20}/>}
                 </div>
@@ -139,6 +142,7 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                             <button onClick={() => addNode(nodeIdx, 'wait')} className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-white/10 rounded-lg flex items-center gap-3 transition-colors"><Clock size={16} className="text-blue-400"/> Esperar Tempo</button>
                             <button onClick={() => addNode(nodeIdx, 'email')} className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-white/10 rounded-lg flex items-center gap-3 transition-colors"><Mail size={16} className="text-purple-400"/> Enviar E-mail</button>
                             <button onClick={() => addNode(nodeIdx, 'whatsapp')} className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-white/10 rounded-lg flex items-center gap-3 transition-colors"><MessageCircle size={16} className="text-emerald-400"/> Enviar WhatsApp</button>
+                            <button onClick={() => addNode(nodeIdx, 'sms')} className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-white/10 rounded-lg flex items-center gap-3 transition-colors"><Smartphone size={16} className="text-cyan-400"/> Enviar SMS</button>
                             <button onClick={() => addNode(nodeIdx, 'condition')} className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-white/10 rounded-lg flex items-center gap-3 transition-colors"><Split size={16} className="text-amber-400"/> Condição Lógica</button>
                             <button onClick={() => addNode(nodeIdx, 'crm_action')} className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-white/10 rounded-lg flex items-center gap-3 transition-colors"><Kanban size={16} className="text-indigo-400"/> Ação no CRM</button>
                         </div>
@@ -363,6 +367,43 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                                         <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">Tags:</span>
                                         <code className="text-[9px] font-bold text-slate-500">{"{{nome_cliente}}"}</code>
                                         <code className="text-[9px] font-bold text-slate-500">{"{{email}}"}</code>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedNode.type === 'sms' && (
+                            <div className="space-y-6">
+                                <div className="p-5 bg-cyan-50 border border-cyan-100 rounded-3xl flex gap-4 text-xs text-cyan-800">
+                                    <Smartphone size={24} className="shrink-0 text-cyan-500" />
+                                    <p>SMS transacional via Brevo. Requer créditos SMS na conta. Max 160 caracteres.</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Campo do Telefone</label>
+                                    <select 
+                                        className="w-full px-5 py-4 border-2 border-slate-100 bg-white rounded-2xl text-sm font-black appearance-none cursor-pointer focus:border-cyan-500 outline-none"
+                                        value={selectedNode.config.phoneFieldId || ''}
+                                        onChange={e => updateNodeConfig(selectedNode.id, { phoneFieldId: e.target.value })}
+                                    >
+                                        <option value="">Selecione o campo do formulário...</option>
+                                        {currentForm?.questions.map(q => (
+                                            <option key={q.id} value={q.id}>{q.title}</option>
+                                        ))}
+                                    </select>
+                                    {!currentForm && <p className="text-[9px] text-red-500 mt-1 ml-1 font-bold">Selecione o Formulário de Entrada no nó de Gatilho.</p>}
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Mensagem SMS (max 160 caracteres)</label>
+                                    <textarea className="w-full px-5 py-3.5 border-2 border-slate-100 rounded-2xl text-sm h-32 resize-none bg-slate-50 focus:bg-white focus:border-cyan-500 outline-none leading-relaxed transition-all" maxLength={160} value={selectedNode.config.message || ''} onChange={e => updateNodeConfig(selectedNode.id, { message: e.target.value })} placeholder="Olá {{nome_cliente}}, confirmamos seu cadastro!" />
+                                    <div className="mt-2 flex items-center justify-between">
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="text-[9px] font-black text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded uppercase">Tags:</span>
+                                            <code className="text-[9px] font-bold text-slate-500">{"{{nome_cliente}}"}</code>
+                                            <code className="text-[9px] font-bold text-slate-500">{"{{email}}"}</code>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 font-bold">{(selectedNode.config.message || '').length}/160</span>
                                     </div>
                                 </div>
                             </div>

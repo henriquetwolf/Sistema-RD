@@ -112,6 +112,29 @@ export const BulkWhatsAppSender: React.FC = () => {
     }
   };
 
+  const safeParseJson = async (response: Response): Promise<any> => {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        if (text.trim().startsWith('<!') || text.trim().startsWith('<html')) {
+            throw new Error("A API retornou HTML em vez de JSON. Verifique se a URL está correta e se a instância existe.");
+        }
+        throw new Error(`Resposta inválida da API: ${text.substring(0, 150)}`);
+    }
+  };
+
+  const tryFetchJson = async (url: string, headers: Record<string, string>): Promise<{ data: any; ok: boolean; status: number } | null> => {
+    try {
+        const response = await fetch(url, { headers });
+        const data = await safeParseJson(response);
+        return { data, ok: response.ok, status: response.status };
+    } catch (e: any) {
+        if (e.message.includes('HTML')) throw e;
+        return null;
+    }
+  };
+
   const checkRealStatus = async (targetConfig?: any) => {
     const target = targetConfig || config;
     if (!target.instanceUrl || !target.instanceName) return;
@@ -121,9 +144,11 @@ export const BulkWhatsAppSender: React.FC = () => {
         baseUrl = baseUrl.replace(/\/$/, "");
 
         const response = await fetch(`${baseUrl}/instance/connectionState/${target.instanceName.trim()}`, {
-            headers: { 'apikey': target.apiKey.trim() }
+            headers: { 'apikey': target.apiKey.trim(), 'Content-Type': 'application/json' }
         });
-        const data = await response.json();
+        const text = await response.text();
+        let data: any;
+        try { data = JSON.parse(text); } catch { data = {}; }
         const state = data.instance?.state || data.state || 'closed';
         setConfig(prev => ({ ...prev, isConnected: state === 'open' }));
     } catch (e) {
@@ -162,31 +187,38 @@ export const BulkWhatsAppSender: React.FC = () => {
         let baseUrl = config.instanceUrl.trim();
         if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
         baseUrl = baseUrl.replace(/\/$/, "");
+        const headers = { 'apikey': config.apiKey.trim(), 'Content-Type': 'application/json' };
+        const instanceName = config.instanceName.trim();
 
         if (config.evolutionMethod === 'code') {
             const cleanNumber = config.pairingNumber.replace(/\D/g, '');
             if (!cleanNumber) throw new Error("Número de pareamento é obrigatório para este método.");
             
-            let response = await fetch(`${baseUrl}/instance/connect/pairing-code/${config.instanceName.trim()}?number=${cleanNumber}`, {
-                headers: { 'apikey': config.apiKey.trim() }
-            });
-            
-            if (!response.ok && response.status === 404) {
-                response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName.trim()}?number=${cleanNumber}`, {
-                    headers: { 'apikey': config.apiKey.trim() }
-                });
+            setConnLogs(prev => [`Tentando endpoint de pareamento...`, ...prev]);
+
+            const endpoints = [
+                `${baseUrl}/instance/connect/${instanceName}?number=${cleanNumber}`,
+                `${baseUrl}/instance/connect/pairing-code/${instanceName}?number=${cleanNumber}`,
+                `${baseUrl}/instance/connect/pairingCode/${instanceName}?number=${cleanNumber}`,
+            ];
+
+            let result: { data: any; ok: boolean; status: number } | null = null;
+            for (const endpoint of endpoints) {
+                result = await tryFetchJson(endpoint, headers);
+                if (result && (result.ok || result.status !== 404)) break;
             }
 
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Erro no pareamento por código.");
-            setPairingCodeValue(data.code || data.pairingCode);
+            if (!result) throw new Error("Nenhum endpoint de pareamento respondeu. Verifique a URL e versão da API.");
+            if (!result.ok) throw new Error(result.data?.message || `Erro no pareamento (HTTP ${result.status}).`);
+            const code = result.data.code || result.data.pairingCode;
+            if (!code) throw new Error("A API não retornou o código de pareamento. Resposta: " + JSON.stringify(result.data).substring(0, 200));
+            setPairingCodeValue(code);
         } else {
-            const response = await fetch(`${baseUrl}/instance/connect/${config.instanceName.trim()}`, {
-                headers: { 'apikey': config.apiKey.trim() }
-            });
-            const data = await response.json();
+            const response = await fetch(`${baseUrl}/instance/connect/${instanceName}`, { headers });
+            const data = await safeParseJson(response);
             if (!response.ok) throw new Error(data.message || "Erro ao gerar QR Code.");
             const token = data.base64 || data.code;
+            if (!token) throw new Error("A API não retornou QR Code. Resposta: " + JSON.stringify(data).substring(0, 200));
             setQrCodeUrl(token.startsWith('data:image') ? token : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`);
         }
     } catch (err: any) { 

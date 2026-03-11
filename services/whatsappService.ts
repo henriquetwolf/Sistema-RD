@@ -297,7 +297,13 @@ export const whatsappService = {
                 })
             });
 
-            const data = await response.json();
+            const responseText = await response.text();
+            let data: any;
+            try {
+                data = JSON.parse(responseText);
+            } catch {
+                throw new Error("A Evolution API retornou uma resposta inválida. Verifique a URL e a instância.");
+            }
             if (!response.ok) throw new Error(data.message || "Erro na Evolution API. Verifique se a instância está online.");
             return data;
         } catch (err: any) {

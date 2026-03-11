@@ -1,5 +1,6 @@
 
 import { appBackend } from './appBackend';
+import { evolutionProxy } from './evolutionProxy';
 import { AttendanceTag } from '../types';
 
 export const whatsappService = {
@@ -263,7 +264,6 @@ export const whatsappService = {
     },
 
     sendTextMessage: async (chat: any, text: string) => {
-        // Pega a configuração sempre atualizada do backend (que agora usa localStorage como primário)
         const config = await appBackend.getWhatsAppConfig();
         
         if (!config || !config.instanceUrl || !config.instanceName) {
@@ -274,41 +274,23 @@ export const whatsappService = {
             ? chat.contact_phone 
             : chat.wa_id;
 
-        // Sanitização robusta da URL
         let baseUrl = config.instanceUrl.trim();
         if (!baseUrl.includes('://')) {
             baseUrl = `https://${baseUrl}`;
         }
         baseUrl = baseUrl.replace(/\/$/, "");
 
-        const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
-        
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 
-                    'apikey': config.apiKey.trim(), 
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({ 
-                    number: target, 
-                    options: { delay: 1200, presence: "composing" }, 
-                    text: text 
-                })
-            });
-
-            const responseText = await response.text();
-            let data: any;
-            try {
-                data = JSON.parse(responseText);
-            } catch {
-                throw new Error("A Evolution API retornou uma resposta inválida. Verifique a URL e a instância.");
-            }
-            if (!response.ok) throw new Error(data.message || "Erro na Evolution API. Verifique se a instância está online.");
-            return data;
+            return await evolutionProxy.sendTextMessage(
+                baseUrl,
+                config.apiKey.trim(),
+                config.instanceName.trim(),
+                target,
+                text
+            );
         } catch (err: any) {
             if (err.message.includes('Failed to fetch')) {
-                throw new Error("Não foi possível conectar à URL da API. Verifique se o endereço está correto e se o SSL (HTTPS) é válido.");
+                throw new Error("Não foi possível conectar ao proxy. Verifique sua conexão.");
             }
             throw err;
         }

@@ -13,7 +13,13 @@ import {
   FranchiseMeetingAvailability, FranchiseMeetingBlockedDate, FranchiseMeetingBooking, FranchiseMeetingSettings,
   Apostila, ApostilaAnnotation, ApostilaProgress,
   CourseClosing, CourseClosingExpense, CourseClosingHistory,
-  CourseRental, CourseRentalReceipt
+  CourseRental, CourseRentalReceipt,
+  GamificationSetting, GamificationLevel, GamificationPointRule, GamificationBadge,
+  GamificationStudentBadge, GamificationStreak, GamificationChallenge,
+  GamificationChallengeProgress, GamificationReward, GamificationRewardClaim,
+  GamificationStudentPoints, GamificationNotificationSetting,
+  GamificationSummary, GamificationAwardResult, GamificationClaimResult,
+  GamificationLeaderboardEntry, GamificationContentUnlock
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { brevoService } from './brevoService';
@@ -2214,6 +2220,31 @@ export const appBackend = {
     await supabase.from('crm_apostilas').update({ is_active: isActive }).eq('id', id);
   },
 
+  getApostilaAccessList: async (): Promise<{ student_cpf: string; student_name: string; granted_at: string }[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_apostila_access').select('*').order('student_name');
+    return (data || []) as any[];
+  },
+
+  checkApostilaAccess: async (studentCpf: string): Promise<boolean> => {
+    if (!isConfigured) return false;
+    const clean = studentCpf.replace(/\D/g, '');
+    const { data } = await supabase.from('crm_apostila_access').select('id').eq('student_cpf', clean).maybeSingle();
+    return !!data;
+  },
+
+  grantApostilaAccess: async (studentCpf: string, studentName: string): Promise<void> => {
+    if (!isConfigured) return;
+    const clean = studentCpf.replace(/\D/g, '');
+    await supabase.from('crm_apostila_access').upsert({ student_cpf: clean, student_name: studentName, granted_at: new Date().toISOString() }, { onConflict: 'student_cpf' });
+  },
+
+  revokeApostilaAccess: async (studentCpf: string): Promise<void> => {
+    if (!isConfigured) return;
+    const clean = studentCpf.replace(/\D/g, '');
+    await supabase.from('crm_apostila_access').delete().eq('student_cpf', clean);
+  },
+
   // ── Fechamento de Curso ─────────────────────────────────────
 
   uploadClosingReceipt: async (file: File): Promise<string> => {
@@ -2450,5 +2481,600 @@ export const appBackend = {
       updated_at: new Date().toISOString(),
     }).eq('id', id);
     if (error) throw new Error(`Erro ao atualizar status: ${error.message}`);
+  },
+
+  // ── Gamificação (VOLLs) ───────────────────────────────────
+
+  getGamificationSettings: async (): Promise<GamificationSetting[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_settings').select('*');
+    return data || [];
+  },
+
+  getGamificationSettingValue: async (key: string): Promise<any> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('gamification_settings').select('value').eq('key', key).maybeSingle();
+    return data?.value ?? null;
+  },
+
+  saveGamificationSetting: async (key: string, value: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_settings').upsert({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  },
+
+  getGamificationLevels: async (): Promise<GamificationLevel[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_levels').select('*').order('level_number');
+    return data || [];
+  },
+
+  saveGamificationLevel: async (level: Partial<GamificationLevel>): Promise<void> => {
+    if (!isConfigured) return;
+    if (level.id) {
+      await supabase.from('gamification_levels').update(level).eq('id', level.id);
+    } else {
+      await supabase.from('gamification_levels').insert([level]);
+    }
+  },
+
+  deleteGamificationLevel: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_levels').delete().eq('id', id);
+  },
+
+  getGamificationPointRules: async (): Promise<GamificationPointRule[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_point_rules').select('*').order('action_type');
+    return data || [];
+  },
+
+  saveGamificationPointRule: async (rule: Partial<GamificationPointRule>): Promise<void> => {
+    if (!isConfigured) return;
+    if (rule.id) {
+      await supabase.from('gamification_point_rules').update(rule).eq('id', rule.id);
+    } else {
+      await supabase.from('gamification_point_rules').insert([rule]);
+    }
+  },
+
+  deleteGamificationPointRule: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_point_rules').delete().eq('id', id);
+  },
+
+  getGamificationBadges: async (): Promise<GamificationBadge[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_badges').select('*').order('sort_order');
+    return data || [];
+  },
+
+  saveGamificationBadge: async (badge: Partial<GamificationBadge>): Promise<void> => {
+    if (!isConfigured) return;
+    if (badge.id) {
+      await supabase.from('gamification_badges').update(badge).eq('id', badge.id);
+    } else {
+      await supabase.from('gamification_badges').insert([badge]);
+    }
+  },
+
+  deleteGamificationBadge: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_badges').delete().eq('id', id);
+  },
+
+  getGamificationChallenges: async (): Promise<GamificationChallenge[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_challenges').select('*').order('sort_order');
+    return data || [];
+  },
+
+  saveGamificationChallenge: async (challenge: Partial<GamificationChallenge>): Promise<void> => {
+    if (!isConfigured) return;
+    if (challenge.id) {
+      await supabase.from('gamification_challenges').update(challenge).eq('id', challenge.id);
+    } else {
+      await supabase.from('gamification_challenges').insert([challenge]);
+    }
+  },
+
+  deleteGamificationChallenge: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_challenges').delete().eq('id', id);
+  },
+
+  getGamificationRewards: async (): Promise<GamificationReward[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_rewards').select('*').order('sort_order');
+    return data || [];
+  },
+
+  saveGamificationReward: async (reward: Partial<GamificationReward>): Promise<void> => {
+    if (!isConfigured) return;
+    if (reward.id) {
+      await supabase.from('gamification_rewards').update(reward).eq('id', reward.id);
+    } else {
+      await supabase.from('gamification_rewards').insert([reward]);
+    }
+  },
+
+  deleteGamificationReward: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_rewards').delete().eq('id', id);
+  },
+
+  getGamificationNotificationSettings: async (): Promise<GamificationNotificationSetting[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_notification_settings').select('*').order('notification_type');
+    return data || [];
+  },
+
+  saveGamificationNotificationSetting: async (setting: Partial<GamificationNotificationSetting>): Promise<void> => {
+    if (!isConfigured) return;
+    if (setting.id) {
+      await supabase.from('gamification_notification_settings').update({ ...setting, updated_at: new Date().toISOString() }).eq('id', setting.id);
+    }
+  },
+
+  // ── Gamificação – Motor (Aluno) ───────────────────────────
+
+  getStudentVollsBalance: async (studentCpf: string): Promise<number> => {
+    if (!isConfigured) return 0;
+    const { data } = await supabase.from('gamification_student_points').select('volls').eq('student_cpf', studentCpf);
+    return (data || []).reduce((sum: number, r: any) => sum + (r.volls || 0), 0);
+  },
+
+  getStudentVolls: async (studentCpf: string): Promise<{ balance: number; level: GamificationLevel | null }> => {
+    if (!isConfigured) return { balance: 0, level: null };
+    const [balRes, levelsRes] = await Promise.all([
+      supabase.from('gamification_student_points').select('volls').eq('student_cpf', studentCpf),
+      supabase.from('gamification_levels').select('*').order('level_number'),
+    ]);
+    const balance = (balRes.data || []).reduce((sum: number, r: any) => sum + (r.volls || 0), 0);
+    const levels = levelsRes.data || [];
+    const level = levels.filter((l: any) => balance >= l.min_volls && balance <= l.max_volls)[0] || levels[0] || null;
+    return { balance, level };
+  },
+
+  getStudentBadges: async (studentCpf: string): Promise<GamificationStudentBadge[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_student_badges').select('*, gamification_badges(*)').eq('student_cpf', studentCpf).order('earned_at', { ascending: false });
+    return data || [];
+  },
+
+  getStudentStreak: async (studentCpf: string): Promise<GamificationStreak | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('gamification_streaks').select('*').eq('student_cpf', studentCpf).maybeSingle();
+    return data;
+  },
+
+  updateStreak: async (studentCpf: string): Promise<GamificationStreak> => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: existing } = await supabase.from('gamification_streaks').select('*').eq('student_cpf', studentCpf).maybeSingle();
+
+    if (!existing) {
+      const newStreak = { student_cpf: studentCpf, current_streak: 1, longest_streak: 1, last_activity_date: today, streak_started_at: today };
+      const { data } = await supabase.from('gamification_streaks').insert([newStreak]).select().single();
+      return data;
+    }
+
+    if (existing.last_activity_date === today) return existing;
+
+    const lastDate = new Date(existing.last_activity_date);
+    const todayDate = new Date(today);
+    const diffDays = Math.floor((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    let newCurrent = 1;
+    let newStarted = today;
+    if (diffDays === 1) {
+      newCurrent = existing.current_streak + 1;
+      newStarted = existing.streak_started_at;
+    }
+
+    const newLongest = Math.max(existing.longest_streak, newCurrent);
+    const { data } = await supabase.from('gamification_streaks').update({
+      current_streak: newCurrent,
+      longest_streak: newLongest,
+      last_activity_date: today,
+      streak_started_at: newStarted,
+    }).eq('id', existing.id).select().single();
+    return data;
+  },
+
+  awardVolls: async (studentCpf: string, actionType: string, referenceId?: string, referenceType?: string): Promise<GamificationAwardResult> => {
+    const fail: GamificationAwardResult = { success: false, volls_gained: 0, new_balance: 0 };
+    if (!isConfigured) return fail;
+
+    const enabled = await appBackend.getGamificationSettingValue('gamification_enabled');
+    if (enabled === false) return fail;
+
+    const { data: rule } = await supabase.from('gamification_point_rules').select('*').eq('action_type', actionType).eq('is_active', true).maybeSingle();
+    if (!rule) return fail;
+
+    if (rule.max_per_day) {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const { data: todayPoints } = await supabase.from('gamification_student_points')
+        .select('volls').eq('student_cpf', studentCpf).eq('action_type', actionType)
+        .gte('earned_at', todayStart.toISOString());
+      const todayTotal = (todayPoints || []).reduce((s: number, r: any) => s + r.volls, 0);
+      if (todayTotal >= rule.max_per_day) return fail;
+    }
+
+    const dailyCap = await appBackend.getGamificationSettingValue('daily_volls_cap');
+    if (dailyCap) {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const { data: allToday } = await supabase.from('gamification_student_points')
+        .select('volls').eq('student_cpf', studentCpf)
+        .gte('earned_at', todayStart.toISOString());
+      const allTodayTotal = (allToday || []).reduce((s: number, r: any) => s + Math.max(0, r.volls), 0);
+      if (allTodayTotal >= dailyCap) return fail;
+    }
+
+    const [levelsRes] = await Promise.all([
+      supabase.from('gamification_levels').select('*').order('level_number'),
+    ]);
+    const levels = levelsRes.data || [];
+    const oldBalance = await appBackend.getStudentVollsBalance(studentCpf);
+    const oldLevel = levels.filter((l: any) => oldBalance >= l.min_volls && oldBalance <= l.max_volls)[0] || null;
+
+    await supabase.from('gamification_student_points').insert([{
+      student_cpf: studentCpf, rule_id: rule.id, action_type: actionType,
+      volls: rule.volls, reference_id: referenceId || null, reference_type: referenceType || null,
+      description: rule.description,
+    }]);
+
+    const newBalance = oldBalance + rule.volls;
+    const newLevel = levels.filter((l: any) => newBalance >= l.min_volls && newBalance <= l.max_volls)[0] || null;
+    const levelUp = oldLevel && newLevel && oldLevel.level_number < newLevel.level_number ? { old_level: oldLevel, new_level: newLevel } : null;
+
+    const badgeResult = await appBackend.checkAndAwardBadges(studentCpf);
+
+    return {
+      success: true,
+      volls_gained: rule.volls,
+      new_balance: newBalance,
+      new_badge: badgeResult,
+      level_up: levelUp,
+    };
+  },
+
+  checkAndAwardBadges: async (studentCpf: string): Promise<GamificationBadge | null> => {
+    if (!isConfigured) return null;
+
+    const [badgesRes, earnedRes, pointsRes, streakRes] = await Promise.all([
+      supabase.from('gamification_badges').select('*').eq('is_active', true).eq('criteria_type', 'auto'),
+      supabase.from('gamification_student_badges').select('badge_id').eq('student_cpf', studentCpf),
+      supabase.from('gamification_student_points').select('action_type, volls').eq('student_cpf', studentCpf),
+      supabase.from('gamification_streaks').select('*').eq('student_cpf', studentCpf).maybeSingle(),
+    ]);
+
+    const allBadges = badgesRes.data || [];
+    const earnedIds = new Set((earnedRes.data || []).map((b: any) => b.badge_id));
+    const points = pointsRes.data || [];
+    const streak = streakRes.data;
+
+    const actionCounts: Record<string, number> = {};
+    let totalVolls = 0;
+    for (const p of points) {
+      actionCounts[p.action_type] = (actionCounts[p.action_type] || 0) + 1;
+      totalVolls += Math.max(0, p.volls);
+    }
+
+    let newBadge: GamificationBadge | null = null;
+
+    for (const badge of allBadges) {
+      if (earnedIds.has(badge.id)) continue;
+      const cfg = badge.criteria_config as any;
+      if (!cfg?.action || !cfg?.count) continue;
+
+      let met = false;
+      if (cfg.action === 'streak') {
+        met = (streak?.current_streak || 0) >= cfg.count;
+      } else if (cfg.action === 'total_volls') {
+        met = totalVolls >= cfg.count;
+      } else if (cfg.action === 'reward_claimed') {
+        const { count: claimCount } = await supabase.from('gamification_reward_claims').select('id', { count: 'exact', head: true }).eq('student_cpf', studentCpf);
+        met = (claimCount || 0) >= cfg.count;
+      } else {
+        met = (actionCounts[cfg.action] || 0) >= cfg.count;
+      }
+
+      if (met) {
+        await supabase.from('gamification_student_badges').upsert({ student_cpf: studentCpf, badge_id: badge.id }, { onConflict: 'student_cpf,badge_id', ignoreDuplicates: true });
+        if (!newBadge) newBadge = badge;
+      }
+    }
+
+    return newBadge;
+  },
+
+  grantBadgeManually: async (studentCpf: string, badgeId: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_student_badges').upsert({ student_cpf: studentCpf, badge_id: badgeId }, { onConflict: 'student_cpf,badge_id', ignoreDuplicates: true });
+  },
+
+  adjustStudentVolls: async (studentCpf: string, volls: number, description: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('gamification_student_points').insert([{
+      student_cpf: studentCpf, action_type: 'admin_adjustment', volls, description,
+    }]);
+  },
+
+  getLeaderboard: async (period?: 'weekly' | 'monthly' | 'all', limit: number = 20): Promise<GamificationLeaderboardEntry[]> => {
+    if (!isConfigured) return [];
+
+    let query = supabase.from('gamification_student_points').select('student_cpf, volls, earned_at');
+    if (period === 'weekly') {
+      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+      query = query.gte('earned_at', weekAgo.toISOString());
+    } else if (period === 'monthly') {
+      const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
+      query = query.gte('earned_at', monthAgo.toISOString());
+    }
+
+    const { data: pointsData } = await query;
+    const cpfTotals: Record<string, number> = {};
+    for (const p of (pointsData || [])) {
+      cpfTotals[p.student_cpf] = (cpfTotals[p.student_cpf] || 0) + (p.volls || 0);
+    }
+
+    const sorted = Object.entries(cpfTotals).sort((a, b) => b[1] - a[1]).slice(0, limit);
+    const cpfs = sorted.map(s => s[0]);
+    if (!cpfs.length) return [];
+
+    const [alunosRes, levelsRes, badgesRes] = await Promise.all([
+      supabase.from('crm_alunos').select('cpf, full_name').in('cpf', cpfs),
+      supabase.from('gamification_levels').select('*').order('level_number'),
+      supabase.from('gamification_student_badges').select('student_cpf').in('student_cpf', cpfs),
+    ]);
+
+    const nameMap: Record<string, string> = {};
+    for (const a of (alunosRes.data || [])) nameMap[a.cpf] = a.full_name;
+
+    const levels = levelsRes.data || [];
+    const badgeCounts: Record<string, number> = {};
+    for (const b of (badgesRes.data || [])) badgeCounts[b.student_cpf] = (badgeCounts[b.student_cpf] || 0) + 1;
+
+    return sorted.map(([cpf, total], i) => ({
+      student_cpf: cpf,
+      student_name: nameMap[cpf] || cpf,
+      total_volls: total,
+      level: levels.filter(l => total >= l.min_volls && total <= l.max_volls)[0] || null,
+      badges_count: badgeCounts[cpf] || 0,
+      position: i + 1,
+    }));
+  },
+
+  getActiveChallenges: async (studentCpf: string): Promise<(GamificationChallengeProgress & { gamification_challenges: GamificationChallenge })[]> => {
+    if (!isConfigured) return [];
+    const { data: challenges } = await supabase.from('gamification_challenges').select('*').eq('is_active', true);
+    if (!challenges?.length) return [];
+
+    const challengeIds = challenges.map(c => c.id);
+    const { data: progress } = await supabase.from('gamification_challenge_progress').select('*').eq('student_cpf', studentCpf).in('challenge_id', challengeIds);
+    const progressMap: Record<string, any> = {};
+    for (const p of (progress || [])) progressMap[p.challenge_id] = p;
+
+    return challenges.map(ch => {
+      const p = progressMap[ch.id];
+      const target = (ch.criteria_config as any)?.count || 1;
+      return {
+        id: p?.id || '',
+        student_cpf: studentCpf,
+        challenge_id: ch.id,
+        current_progress: p?.current_progress || 0,
+        target_progress: target,
+        completed_at: p?.completed_at || null,
+        claimed: p?.claimed || false,
+        gamification_challenges: ch,
+      };
+    });
+  },
+
+  updateChallengeProgress: async (studentCpf: string, actionType: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { data: challenges } = await supabase.from('gamification_challenges').select('*').eq('is_active', true);
+    if (!challenges?.length) return;
+
+    for (const ch of challenges) {
+      const cfg = ch.criteria_config as any;
+      if (cfg?.action !== actionType) continue;
+
+      const target = cfg.count || 1;
+      const { data: existing } = await supabase.from('gamification_challenge_progress')
+        .select('*').eq('student_cpf', studentCpf).eq('challenge_id', ch.id).maybeSingle();
+
+      if (existing?.completed_at) continue;
+
+      const newProgress = (existing?.current_progress || 0) + 1;
+      const completedAt = newProgress >= target ? new Date().toISOString() : null;
+
+      await supabase.from('gamification_challenge_progress').upsert({
+        student_cpf: studentCpf, challenge_id: ch.id,
+        current_progress: newProgress, target_progress: target, completed_at: completedAt,
+        ...(existing ? { id: existing.id } : {}),
+      }, { onConflict: 'student_cpf,challenge_id' });
+    }
+  },
+
+  claimChallengeReward: async (studentCpf: string, challengeId: string): Promise<boolean> => {
+    if (!isConfigured) return false;
+    const { data: progress } = await supabase.from('gamification_challenge_progress')
+      .select('*').eq('student_cpf', studentCpf).eq('challenge_id', challengeId).maybeSingle();
+    if (!progress || !progress.completed_at || progress.claimed) return false;
+
+    const { data: challenge } = await supabase.from('gamification_challenges').select('*').eq('id', challengeId).maybeSingle();
+    if (!challenge) return false;
+
+    await supabase.from('gamification_challenge_progress').update({ claimed: true }).eq('id', progress.id);
+
+    if (challenge.reward_volls > 0) {
+      await supabase.from('gamification_student_points').insert([{
+        student_cpf: studentCpf, action_type: 'challenge_reward', volls: challenge.reward_volls,
+        reference_id: challengeId, reference_type: 'challenge', description: `Bônus desafio: ${challenge.title}`,
+      }]);
+    }
+
+    if (challenge.reward_badge_id) {
+      await appBackend.grantBadgeManually(studentCpf, challenge.reward_badge_id);
+    }
+
+    return true;
+  },
+
+  getRewardsCatalog: async (): Promise<GamificationReward[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('gamification_rewards').select('*').eq('is_active', true).order('sort_order');
+    return data || [];
+  },
+
+  claimReward: async (studentCpf: string, rewardId: string): Promise<GamificationClaimResult> => {
+    if (!isConfigured) return { success: false, new_balance: 0, reward_details: null, error: 'Não configurado' };
+
+    const [balanceRes, rewardRes] = await Promise.all([
+      appBackend.getStudentVollsBalance(studentCpf),
+      supabase.from('gamification_rewards').select('*').eq('id', rewardId).maybeSingle(),
+    ]);
+
+    const balance = balanceRes;
+    const reward = rewardRes.data as GamificationReward | null;
+    if (!reward) return { success: false, new_balance: balance, reward_details: null, error: 'Recompensa não encontrada' };
+    if (!reward.is_active) return { success: false, new_balance: balance, reward_details: null, error: 'Recompensa indisponível' };
+    if (balance < reward.cost_volls) return { success: false, new_balance: balance, reward_details: null, error: `Saldo insuficiente. Faltam ${reward.cost_volls - balance} VOLLs.` };
+    if (reward.stock !== null && reward.stock <= 0) return { success: false, new_balance: balance, reward_details: null, error: 'Recompensa esgotada' };
+
+    await supabase.from('gamification_student_points').insert([{
+      student_cpf: studentCpf, action_type: 'reward_redemption', volls: -reward.cost_volls,
+      reference_id: rewardId, reference_type: 'reward', description: `Resgate: ${reward.name}`,
+    }]);
+
+    if (reward.stock !== null) {
+      await supabase.from('gamification_rewards').update({ stock: reward.stock - 1 }).eq('id', rewardId);
+    }
+
+    const benefitData: Record<string, any> = {};
+    const config = reward.reward_config as any;
+
+    if (reward.reward_type === 'discount' && config?.discount_percent) {
+      const couponCode = `VOLL${Date.now().toString(36).toUpperCase()}`;
+      const expiresAt = new Date(); expiresAt.setDate(expiresAt.getDate() + 30);
+      try {
+        await supabase.from('pagbank_coupons').insert([{
+          code: couponCode, description: `Gamificação: ${reward.name}`,
+          discount_type: 'percentage', discount_value: config.discount_percent,
+          min_amount: 0, max_uses: 1, current_uses: 0, is_active: true,
+          valid_until: expiresAt.toISOString(),
+          course_id: config.course_id || null,
+        }]);
+        benefitData.coupon_code = couponCode;
+        benefitData.expires_at = expiresAt.toISOString();
+      } catch (e) { console.error('Coupon creation error:', e); }
+    }
+
+    if (reward.reward_type === 'content_unlock' && config?.content_type && config?.content_id) {
+      await supabase.from('gamification_content_unlocks').upsert({
+        student_cpf: studentCpf, content_type: config.content_type, content_id: config.content_id,
+      }, { onConflict: 'student_cpf,content_type,content_id', ignoreDuplicates: true });
+      benefitData.content_type = config.content_type;
+      benefitData.content_id = config.content_id;
+    }
+
+    if (reward.reward_type === 'badge' && config?.badge_id) {
+      await appBackend.grantBadgeManually(studentCpf, config.badge_id);
+      benefitData.badge_id = config.badge_id;
+    }
+
+    const expiresAt = reward.reward_type === 'discount' ? benefitData.expires_at : null;
+    const { data: claim } = await supabase.from('gamification_reward_claims').insert([{
+      student_cpf: studentCpf, reward_id: rewardId, volls_spent: reward.cost_volls,
+      status: 'active', expires_at: expiresAt, benefit_data: benefitData,
+    }]).select('*, gamification_rewards(*)').single();
+
+    await appBackend.updateChallengeProgress(studentCpf, 'reward_claimed');
+    await appBackend.checkAndAwardBadges(studentCpf);
+
+    const newBalance = balance - reward.cost_volls;
+    return { success: true, new_balance: newBalance, reward_details: claim };
+  },
+
+  getStudentRewards: async (studentCpf: string, status?: string): Promise<GamificationRewardClaim[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('gamification_reward_claims').select('*, gamification_rewards(*)').eq('student_cpf', studentCpf);
+    if (status) query = query.eq('status', status);
+    const { data } = await query.order('claimed_at', { ascending: false });
+    return data || [];
+  },
+
+  getStudentVollsStatement: async (studentCpf: string, options?: { limit?: number; offset?: number; actionFilter?: string; dateFrom?: string; dateTo?: string }): Promise<{ transactions: GamificationStudentPoints[]; total: number }> => {
+    if (!isConfigured) return { transactions: [], total: 0 };
+    let query = supabase.from('gamification_student_points').select('*', { count: 'exact' }).eq('student_cpf', studentCpf);
+    if (options?.actionFilter && options.actionFilter !== 'all') {
+      if (options.actionFilter === 'earned') query = query.gt('volls', 0);
+      else if (options.actionFilter === 'spent') query = query.lt('volls', 0);
+    }
+    if (options?.dateFrom) query = query.gte('earned_at', options.dateFrom);
+    if (options?.dateTo) query = query.lte('earned_at', options.dateTo);
+    const { data, count } = await query.order('earned_at', { ascending: false }).range(options?.offset || 0, (options?.offset || 0) + (options?.limit || 20) - 1);
+    return { transactions: data || [], total: count || 0 };
+  },
+
+  getStudentGamificationSummary: async (studentCpf: string): Promise<GamificationSummary> => {
+    if (!isConfigured) return { balance: 0, total_earned: 0, total_spent: 0, level: null, next_level: null, streak: null, recent_badges: [], active_challenges_count: 0, currency_name: 'VOLLs' };
+
+    const [vollsRes, levelsRes, streakRes, badgesRes, challengesRes, settingsRes] = await Promise.all([
+      supabase.from('gamification_student_points').select('volls').eq('student_cpf', studentCpf),
+      supabase.from('gamification_levels').select('*').order('level_number'),
+      supabase.from('gamification_streaks').select('*').eq('student_cpf', studentCpf).maybeSingle(),
+      supabase.from('gamification_student_badges').select('*, gamification_badges(*)').eq('student_cpf', studentCpf).order('earned_at', { ascending: false }).limit(5),
+      supabase.from('gamification_challenges').select('id').eq('is_active', true),
+      supabase.from('gamification_settings').select('value').eq('key', 'currency_name').maybeSingle(),
+    ]);
+
+    const points = vollsRes.data || [];
+    let totalEarned = 0, totalSpent = 0;
+    for (const p of points) {
+      if (p.volls > 0) totalEarned += p.volls;
+      else totalSpent += Math.abs(p.volls);
+    }
+    const balance = totalEarned - totalSpent;
+
+    const levels = levelsRes.data || [];
+    const level = levels.filter(l => balance >= l.min_volls && balance <= l.max_volls)[0] || levels[0] || null;
+    const nextLevel = level ? levels.find(l => l.level_number === level.level_number + 1) || null : null;
+
+    const currencyRaw = settingsRes.data?.value;
+    const currencyName = typeof currencyRaw === 'string' ? currencyRaw.replace(/"/g, '') : 'VOLLs';
+
+    return {
+      balance, total_earned: totalEarned, total_spent: totalSpent,
+      level, next_level: nextLevel,
+      streak: streakRes.data || null,
+      recent_badges: badgesRes.data || [],
+      active_challenges_count: (challengesRes.data || []).length,
+      currency_name: currencyName,
+    };
+  },
+
+  getGamificationDashboard: async (): Promise<Record<string, any>> => {
+    if (!isConfigured) return {};
+    const [pointsRes, badgesRes, claimsRes, streaksRes] = await Promise.all([
+      supabase.from('gamification_student_points').select('volls, student_cpf, earned_at'),
+      supabase.from('gamification_student_badges').select('id, student_cpf'),
+      supabase.from('gamification_reward_claims').select('id, volls_spent'),
+      supabase.from('gamification_streaks').select('student_cpf, current_streak'),
+    ]);
+
+    const points = pointsRes.data || [];
+    const uniqueStudents = new Set(points.map(p => p.student_cpf));
+    const totalDistributed = points.filter(p => p.volls > 0).reduce((s, p) => s + p.volls, 0);
+    const totalSpent = points.filter(p => p.volls < 0).reduce((s, p) => s + Math.abs(p.volls), 0);
+
+    return {
+      total_students: uniqueStudents.size,
+      total_volls_distributed: totalDistributed,
+      total_volls_spent: totalSpent,
+      total_badges_earned: (badgesRes.data || []).length,
+      total_rewards_claimed: (claimsRes.data || []).length,
+      active_streaks: (streaksRes.data || []).filter(s => s.current_streak > 0).length,
+    };
   },
 };

@@ -1497,3 +1497,198 @@ export interface CourseRentalReceipt {
   receipt_url: string;
   created_at: string;
 }
+
+// ── Gamificação (VOLLs) ─────────────────────────────────────
+
+export interface GamificationSetting {
+  id: string;
+  key: string;
+  value: any;
+  updated_at: string;
+}
+
+export interface GamificationLevel {
+  id: string;
+  level_number: number;
+  name: string;
+  min_volls: number;
+  max_volls: number;
+  icon_emoji: string;
+  color: string;
+  created_at: string;
+}
+
+export interface GamificationPointRule {
+  id: string;
+  action_type: string;
+  volls: number;
+  description: string;
+  is_active: boolean;
+  max_per_day: number | null;
+  created_at: string;
+}
+
+export interface GamificationStudentPoints {
+  id: string;
+  student_cpf: string;
+  rule_id: string | null;
+  action_type: string;
+  volls: number;
+  reference_id: string | null;
+  reference_type: string | null;
+  description: string;
+  earned_at: string;
+}
+
+export type BadgeCategory = 'learning' | 'attendance' | 'social' | 'mastery' | 'special';
+export type BadgeRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type BadgeCriteriaType = 'auto' | 'manual';
+
+export interface GamificationBadge {
+  id: string;
+  name: string;
+  description: string;
+  icon_emoji: string;
+  image_url: string | null;
+  category: BadgeCategory;
+  criteria_type: BadgeCriteriaType;
+  criteria_config: Record<string, any>;
+  is_active: boolean;
+  rarity: BadgeRarity;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface GamificationStudentBadge {
+  id: string;
+  student_cpf: string;
+  badge_id: string;
+  earned_at: string;
+  gamification_badges?: GamificationBadge;
+}
+
+export interface GamificationStreak {
+  id: string;
+  student_cpf: string;
+  current_streak: number;
+  longest_streak: number;
+  last_activity_date: string | null;
+  streak_started_at: string | null;
+}
+
+export type ChallengeType = 'daily' | 'weekly' | 'monthly' | 'special';
+
+export interface GamificationChallenge {
+  id: string;
+  title: string;
+  description: string;
+  icon_emoji: string;
+  challenge_type: ChallengeType;
+  criteria_config: Record<string, any>;
+  reward_volls: number;
+  reward_badge_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface GamificationChallengeProgress {
+  id: string;
+  student_cpf: string;
+  challenge_id: string;
+  current_progress: number;
+  target_progress: number;
+  completed_at: string | null;
+  claimed: boolean;
+  gamification_challenges?: GamificationChallenge;
+}
+
+export type RewardType = 'discount' | 'content_unlock' | 'badge' | 'certificate' | 'custom';
+export type RewardClaimStatus = 'active' | 'used' | 'expired';
+
+export interface GamificationReward {
+  id: string;
+  name: string;
+  description: string;
+  icon_emoji: string;
+  image_url: string | null;
+  reward_type: RewardType;
+  reward_config: Record<string, any>;
+  cost_volls: number;
+  stock: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface GamificationRewardClaim {
+  id: string;
+  student_cpf: string;
+  reward_id: string;
+  volls_spent: number;
+  claimed_at: string;
+  status: RewardClaimStatus;
+  expires_at: string | null;
+  benefit_data: Record<string, any>;
+  gamification_rewards?: GamificationReward;
+}
+
+export interface GamificationContentUnlock {
+  id: string;
+  student_cpf: string;
+  content_type: string;
+  content_id: string;
+  reward_claim_id: string | null;
+  unlocked_at: string;
+}
+
+export interface GamificationNotificationSetting {
+  id: string;
+  notification_type: string;
+  toast_enabled: boolean;
+  push_enabled: boolean;
+  persistent_enabled: boolean;
+  title_template: string;
+  message_template: string;
+  icon_emoji: string;
+  updated_at: string;
+}
+
+export interface GamificationSummary {
+  balance: number;
+  total_earned: number;
+  total_spent: number;
+  level: GamificationLevel | null;
+  next_level: GamificationLevel | null;
+  streak: GamificationStreak | null;
+  recent_badges: GamificationStudentBadge[];
+  active_challenges_count: number;
+  currency_name: string;
+}
+
+export interface GamificationAwardResult {
+  success: boolean;
+  volls_gained: number;
+  new_balance: number;
+  new_badge?: GamificationBadge | null;
+  level_up?: { old_level: GamificationLevel; new_level: GamificationLevel } | null;
+  streak_milestone?: number | null;
+}
+
+export interface GamificationClaimResult {
+  success: boolean;
+  new_balance: number;
+  reward_details: GamificationRewardClaim | null;
+  error?: string;
+}
+
+export interface GamificationLeaderboardEntry {
+  student_cpf: string;
+  student_name: string;
+  total_volls: number;
+  level: GamificationLevel | null;
+  badges_count: number;
+  position: number;
+}

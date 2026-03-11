@@ -212,17 +212,10 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const groupedStudents = useMemo(() => {
     const activeDeals = deals.filter(d => {
         if (d.status === 'excluido') return false;
-        
-        // Filtro para garantir que apenas negócios na etapa final de seu funil apareçam (Alunos)
-        const pipe = pipelines.find(p => p.name === d.pipeline);
-        if (!pipe || !pipe.stages || pipe.stages.length === 0) {
-            return d.stage === 'closed';
-        }
-        const lastStageId = pipe.stages[pipe.stages.length - 1].id;
-        return d.stage === lastStageId;
+        return d.student_access_enabled !== false;
     });
     return getGroupedStudents(activeDeals);
-  }, [deals, pipelines]);
+  }, [deals]);
 
   const excludedGroupedStudents = useMemo(() => {
     const excludedDeals = deals.filter(d => d.status === 'excluido');

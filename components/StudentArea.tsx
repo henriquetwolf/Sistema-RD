@@ -20,6 +20,8 @@ import { FormViewer } from './FormViewer';
 import { GoogleGenAI } from "@google/genai";
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import { DigitalWorkbook } from './DigitalWorkbook';
+import GamificationPanel from './GamificationPanel';
+import { GamificationToast, useGamificationToasts } from './GamificationToast';
 import clsx from 'clsx';
 
 interface StudentAreaProps {
@@ -29,7 +31,11 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation' | 'studio_digital' | 'digital_workbook'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts' | 'purchases' | 'my_data' | 'learning_profile' | 'ai_tutor' | 'franchise_presentation' | 'studio_digital' | 'digital_workbook' | 'gamification'>('classes');
+    const [vollsBalance, setVollsBalance] = useState(0);
+    const [vollsCurrencyName, setVollsCurrencyName] = useState('VOLLs');
+    const [vollsShowWidget, setVollsShowWidget] = useState(true);
+    const gamToasts = useGamificationToasts();
     const [checkoutCourseId, setCheckoutCourseId] = useState<string | null>(null);
     const [studentOrders, setStudentOrders] = useState<PagBankOrder[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -140,8 +146,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
     const [fullscreenVideoId, setFullscreenVideoId] = useState<string | null>(null);
 
+    // Apostila Digital Access
+    const [hasApostilaAccess, setHasApostilaAccess] = useState(false);
+
     const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = useMemo(() => student.deals[0]?.id, [student.deals]);
+
+    const hasPresentialDeal = useMemo(() => student.deals.some(d => d.product_type === 'Presencial'), [student.deals]);
 
     useEffect(() => {
         loadBaseData();
@@ -151,7 +162,32 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         fetchSupportNotifications();
         fetchPendingContracts();
         loadStudentOrders();
+        checkApostilaAccess();
+        loadVollsWidget();
     }, [student]);
+
+    const loadVollsWidget = async () => {
+        try {
+            const [balance, currencyName, showWidget] = await Promise.all([
+                appBackend.getStudentVollsBalance(student.cpf),
+                appBackend.getGamificationSettingValue('currency_name'),
+                appBackend.getGamificationSettingValue('show_volls_on_student_header'),
+            ]);
+            setVollsBalance(balance);
+            if (currencyName) setVollsCurrencyName(typeof currencyName === 'string' ? currencyName.replace(/"/g, '') : 'VOLLs');
+            if (showWidget !== null) setVollsShowWidget(showWidget !== false);
+
+            appBackend.awardVolls(student.cpf, 'daily_login').then(r => { if (r.success) setVollsBalance(r.new_balance); });
+            appBackend.updateStreak(student.cpf);
+            appBackend.updateChallengeProgress(student.cpf, 'daily_login');
+        } catch (_) {}
+    };
+
+    const checkApostilaAccess = async () => {
+        if (hasPresentialDeal) { setHasApostilaAccess(true); return; }
+        const manualAccess = await appBackend.checkApostilaAccess(student.cpf);
+        setHasApostilaAccess(manualAccess);
+    };
 
     useEffect(() => {
         if (activeTab === 'certificates') loadCertificates();
@@ -886,6 +922,31 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         prompt += `9. Responda sempre em Português do Brasil.\n`;
         prompt += `10. Seja conciso mas completo.\n\n`;
 
+        // Gamificação
+        try {
+            const [gamSummary, gamRewards] = await Promise.all([
+                appBackend.getStudentGamificationSummary(cleanCpf),
+                appBackend.getRewardsCatalog(),
+            ]);
+            prompt += `[GAMIFICAÇÃO – ${gamSummary.currency_name}]\n`;
+            prompt += `Saldo atual: ${gamSummary.balance} ${gamSummary.currency_name}\n`;
+            prompt += `Nível: ${gamSummary.level?.name || 'Iniciante'} (nível ${gamSummary.level?.level_number || 1})\n`;
+            if (gamSummary.next_level) prompt += `Próximo nível: ${gamSummary.next_level.name} (faltam ${gamSummary.next_level.min_volls - gamSummary.balance} ${gamSummary.currency_name})\n`;
+            prompt += `Sequência atual: ${gamSummary.streak?.current_streak || 0} dias\n`;
+            prompt += `Badges conquistados: ${gamSummary.recent_badges.length > 0 ? gamSummary.recent_badges.map(b => b.gamification_badges?.name || '').filter(Boolean).join(', ') : 'Nenhum ainda'}\n`;
+            prompt += `Desafios ativos: ${gamSummary.active_challenges_count}\n`;
+            if (gamRewards.length > 0) {
+                const affordable = gamRewards.filter(r => r.cost_volls <= gamSummary.balance && r.is_active && (r.stock === null || r.stock > 0));
+                prompt += `\nRecompensas disponíveis para trocar:\n`;
+                gamRewards.slice(0, 10).forEach(r => {
+                    const canAfford = r.cost_volls <= gamSummary.balance;
+                    prompt += `- ${r.name} (${r.cost_volls} ${gamSummary.currency_name}) – ${r.description}${canAfford ? ' ✓ PODE RESGATAR' : ''}\n`;
+                });
+                if (affordable.length > 0) prompt += `O aluno pode trocar ${affordable.length} recompensa(s) agora!\n`;
+            }
+            prompt += `\n`;
+        } catch (_) {}
+
         prompt += `[FLUXO DE INSCRIÇÃO EM TURMA OU EVENTO]\n`;
         prompt += `Quando o aluno demonstrar interesse em se inscrever em uma turma presencial ou em um evento, siga EXATAMENTE este fluxo:\n`;
         prompt += `PASSO 1: Identifique qual turma ou evento o aluno deseja. Se ele não especificou, pergunte.\n`;
@@ -900,7 +961,14 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         prompt += `  Para evento: <<<ENROLLMENT_ACTION:{"type":"event","event_name":"NOME DO EVENTO","location":"LOCAL","dates":"DATAS","event_id":"ID_DO_EVENTO_SE_DISPONIVEL"}>>>\n`;
         prompt += `IMPORTANTE: Só inclua a tag ENROLLMENT_ACTION quando o aluno CONFIRMAR. Nunca inclua apenas por ele perguntar ou demonstrar interesse inicial.\n`;
         prompt += `IMPORTANTE: Use os dados EXATOS dos catálogos acima. Não invente informações.\n`;
-        prompt += `Após incluir a tag, diga ao aluno que seu interesse foi registrado e que a equipe entrará em contato em breve.`;
+        prompt += `Após incluir a tag, diga ao aluno que seu interesse foi registrado e que a equipe entrará em contato em breve.\n\n`;
+
+        prompt += `[FLUXO DE RESGATE DE RECOMPENSA]\n`;
+        prompt += `Quando o aluno quiser trocar/resgatar uma recompensa da loja de gamificação, siga este fluxo:\n`;
+        prompt += `1. Confirme o nome e custo da recompensa com o aluno.\n`;
+        prompt += `2. Verifique se o saldo é suficiente.\n`;
+        prompt += `3. SOMENTE quando o aluno confirmar, inclua: <<<REWARD_ACTION:{"reward_name":"NOME_DA_RECOMPENSA"}>>>\n`;
+        prompt += `IMPORTANTE: Só inclua a tag REWARD_ACTION quando o aluno CONFIRMAR. Após incluir, informe que o resgate foi realizado.\n`;
 
         return prompt;
     };
@@ -969,6 +1037,28 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         return fullResponse.replace(/<<<ENROLLMENT_ACTION:.*?>>>/s, '').trim();
     };
 
+    const processRewardAction = async (fullResponse: string): Promise<string> => {
+        const actionMatch = fullResponse.match(/<<<REWARD_ACTION:(.*?)>>>/s);
+        if (!actionMatch) return fullResponse;
+
+        try {
+            const actionData = JSON.parse(actionMatch[1]);
+            const rewardName = actionData.reward_name || '';
+
+            const catalog = await appBackend.getRewardsCatalog();
+            const reward = catalog.find(r => r.name.toLowerCase().includes(rewardName.toLowerCase()));
+            if (!reward) return fullResponse.replace(/<<<REWARD_ACTION:.*?>>>/s, '').trim();
+
+            const result = await appBackend.claimReward(student.cpf, reward.id);
+            if (result.success) {
+                loadVollsWidget();
+            }
+        } catch (e) {
+            console.error('Reward action error:', e);
+        }
+        return fullResponse.replace(/<<<REWARD_ACTION:.*?>>>/s, '').trim();
+    };
+
     const handleSendChat = async (customMsg?: string) => {
         const text = customMsg || chatInput.trim();
         if (!text || isChatLoading || !selectedAvatar) return;
@@ -1004,18 +1094,22 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             for await (const chunk of response) {
                 const t = chunk.text || '';
                 fullResponse += t;
-                setStreamingText(fullResponse.replace(/<<<ENROLLMENT_ACTION:.*?>>>/s, ''));
+                setStreamingText(fullResponse.replace(/<<<ENROLLMENT_ACTION:.*?>>>/s, '').replace(/<<<REWARD_ACTION:.*?>>>/s, ''));
             }
 
             setIsStreamingChat(false);
             setStreamingText('');
 
-            const cleanResponse = await processEnrollmentAction(fullResponse);
+            let cleanResponse = await processEnrollmentAction(fullResponse);
+            cleanResponse = await processRewardAction(cleanResponse);
 
             const botMsg: AiChatMessage = { id: crypto.randomUUID(), aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: cleanResponse, created_at: new Date().toISOString() };
             setChatMessages(prev => [...prev, botMsg]);
 
             await appBackend.client.from('crm_ai_chat_messages').insert([{ aluno_id: alunoId, avatar_id: selectedAvatar.id, role: 'assistant', content: cleanResponse }]);
+
+            appBackend.awardVolls(student.cpf, 'ai_chat', selectedAvatar.id, 'ai_chat').then(r => { if (r.success) { loadVollsWidget(); gamToasts.showAwardToast(r, vollsCurrencyName); } });
+            appBackend.updateChallengeProgress(student.cpf, 'ai_chat');
         } catch (e: any) {
             console.error('Chat error:', e);
             setIsStreamingChat(false);
@@ -1519,6 +1613,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                 ? [...completedLessonIds, lessonId] 
                 : completedLessonIds.filter(id => id !== lessonId);
             setCompletedLessonIds(updatedProgress);
+
+            if (newStatus) {
+                appBackend.awardVolls(student.cpf, 'lesson_completed', lessonId, 'lesson').then(r => { if (r.success) { loadVollsWidget(); gamToasts.showAwardToast(r, vollsCurrencyName); } });
+                appBackend.updateChallengeProgress(student.cpf, 'lesson_completed');
+                appBackend.updateStreak(student.cpf);
+            }
+
             if (newStatus && playingCourse.certificateTemplateId) {
                 const allLessonIdsInCourse = courseStructure?.modules.flatMap(m => (courseStructure.lessons[m.id] || []).map(l => l.id)) || [];
                 const isFinished = allLessonIdsInCourse.every(id => updatedProgress.includes(id));
@@ -1526,7 +1627,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                     const alreadyHasCert = certificates.some(c => c.certificate_template_id === playingCourse.certificateTemplateId);
                     if (!alreadyHasCert) {
                         await appBackend.issueCertificate(String(mainDealId), playingCourse.certificateTemplateId);
-                        await loadCertificates(); 
+                        await loadCertificates();
+                        appBackend.awardVolls(student.cpf, 'course_completed', playingCourse.id, 'course');
+                        appBackend.awardVolls(student.cpf, 'certificate_earned', playingCourse.id, 'certificate');
+                        loadVollsWidget();
                         alert("Parabens! Voce concluiu o curso e seu diploma esta disponivel na aba Meus Diplomas!");
                     }
                 }
@@ -1688,6 +1792,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                             <LifeBuoy size={20} />
                             {pendingTicketsCount > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-lg">{pendingTicketsCount}</span>}
                         </button>
+                        {vollsShowWidget && (
+                            <button onClick={() => setActiveTab('gamification')} className="flex items-center gap-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 px-4 py-2 rounded-2xl hover:shadow-md transition-all active:scale-95 group" title={`Saldo: ${vollsBalance} ${vollsCurrencyName}`}>
+                                <div className="w-7 h-7 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center text-white shadow-inner">
+                                    <Trophy size={14} />
+                                </div>
+                                <div className="flex flex-col items-start">
+                                    <span className="text-xs font-black text-amber-700 leading-none">{vollsBalance.toLocaleString('pt-BR')}</span>
+                                    <span className="text-[8px] font-bold text-amber-500 uppercase tracking-widest">{vollsCurrencyName}</span>
+                                </div>
+                            </button>
+                        )}
                         <div className="flex flex-col items-end text-right">
                             <span className="text-sm font-black text-slate-800 leading-none">{student.name}</span>
                             <span className="text-[10px] font-bold text-purple-600 uppercase tracking-tighter">Matricula Ativa</span>
@@ -1776,8 +1891,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'purchases', label: 'Minhas Compras', icon: ShoppingCart, color: 'text-teal-600' },
                         { id: 'my_data', label: 'Meus Dados', icon: User, color: 'text-slate-600' },
                         { id: 'learning_profile', label: 'Meu Perfil', icon: Brain, color: 'text-pink-600' },
-                        { id: 'digital_workbook', label: 'Apostila Digital', icon: BookOpen, color: 'text-rose-600' },
+                        ...(hasApostilaAccess ? [{ id: 'digital_workbook', label: 'Apostila Digital', icon: BookOpen, color: 'text-rose-600' }] : []),
                         { id: 'studio_digital', label: 'Studio Digital', icon: Sparkles, color: 'text-amber-600' },
+                        { id: 'gamification', label: 'Gamificação', icon: Trophy, color: 'text-amber-600' },
                         { id: 'ai_tutor', label: 'Tutor IA', icon: Bot, color: 'text-purple-600' },
                         { id: 'franchise_presentation', label: 'Apresentação Franquia', icon: Store, color: 'text-teal-600' }
                     ].map(tab => (
@@ -2562,6 +2678,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         );
                     })()}
 
+                    {/* ── Gamificação ───────────────────── */}
+                    {activeTab === 'gamification' && (
+                        <GamificationPanel studentCpf={student.cpf} />
+                    )}
+
                     {/* ── Apresentação Franquia VOLL Studios ───────────────────── */}
                     {activeTab === 'franchise_presentation' && (
                         <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -3171,6 +3292,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                     </div>
                 </button>
             )}
+
+            <GamificationToast items={gamToasts.toasts} onDismiss={gamToasts.dismiss} />
 
             <footer className="py-12 text-center text-slate-300">
                 <p className="text-[10px] font-black uppercase tracking-[0.4em]">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>

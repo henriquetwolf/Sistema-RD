@@ -54,6 +54,7 @@ import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { pushService } from './services/pushService';
 import { VollMarketingManager } from './components/VollMarketingManager';
 import { InvoiceManager } from './components/InvoiceManager';
+import { GamificationAdmin } from './components/GamificationAdmin';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage, AuthenticatedUser, UserRole, USER_ROLE_LABELS } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -66,11 +67,11 @@ import {
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
   LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser, Smartphone,
-  Fingerprint, ArrowLeftRight, Megaphone, BookOpen
+  Fingerprint, ArrowLeftRight, Megaphone, BookOpen, Trophy
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing' | 'notas_fiscais' | 'apostila_digital' | 'fechamento_curso' | 'aluguel_curso';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul' | 'pagbank' | 'app_manual' | 'cpf_lookup' | 'studio_digital' | 'voll_marketing' | 'notas_fiscais' | 'apostila_digital' | 'fechamento_curso' | 'aluguel_curso' | 'gamification';
 
 class MarketingErrorBoundary extends React.Component<
   { children: React.ReactNode; onBack: () => void },
@@ -803,6 +804,7 @@ function App() {
                                 {canAccess('teachers') && <button onClick={() => setDashboardTab('teachers')} title="Professores" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><School size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Professores</span>}</button>}
                                 {canAccess('fechamento_curso') && <button onClick={() => setDashboardTab('fechamento_curso')} title="Fechamento de Curso" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'fechamento_curso' ? "bg-emerald-50 text-emerald-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileText size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Fechamento de Curso</span>}</button>}
                                 {canAccess('aluguel_curso') && <button onClick={() => setDashboardTab('aluguel_curso')} title="Aluguel de Curso" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'aluguel_curso' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Building2 size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Aluguel de Curso</span>}</button>}
+                                {canAccess('gamification') && <button onClick={() => setDashboardTab('gamification')} title="Gamificação" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'gamification' ? "bg-violet-50 text-violet-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Trophy size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Gamificação</span>}</button>}
                                 <button onClick={() => setDashboardTab('conta_azul')} title="Conta Azul" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'conta_azul' ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Landmark size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Conta Azul</span>}</button>
                                 <button onClick={() => setDashboardTab('pagbank')} title="PagBank" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'pagbank' ? "bg-green-50 text-green-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">PagBank</span>}</button>
                                 <button onClick={() => setDashboardTab('app_manual')} title="Manual APP" className={clsx("w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all", sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-2", dashboardTab === 'app_manual' ? "bg-purple-50 text-purple-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Smartphone size={18} className="flex-shrink-0" />{!sidebarCollapsed && <span className="truncate">Manual APP</span>}</button>
@@ -932,6 +934,7 @@ function App() {
                         {dashboardTab === 'apostila_digital' && <ApostilaManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'fechamento_curso' && <CourseClosingManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'aluguel_curso' && <CourseRentalManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'gamification' && <GamificationAdmin onBack={() => setDashboardTab('overview')} />}
                     </div>
                 </div>
             </main>}

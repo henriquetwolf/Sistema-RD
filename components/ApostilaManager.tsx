@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
     ArrowLeft, Loader2, Plus, Trash2, Save, BookOpen,
-    Upload, FileText, CheckCircle2, AlertCircle, X, Edit2, ToggleLeft, ToggleRight
+    Upload, FileText, CheckCircle2, AlertCircle, X, Edit2, ToggleLeft, ToggleRight,
+    Users, Search, UserPlus, UserMinus, Lock, Unlock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -15,7 +16,14 @@ interface ApostilaManagerProps {
     onBack: () => void;
 }
 
+interface ApostilaAccessEntry {
+    student_cpf: string;
+    student_name: string;
+    granted_at: string;
+}
+
 export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
+    const [activeSection, setActiveSection] = useState<'apostilas' | 'access'>('apostilas');
     const [apostilas, setApostilas] = useState<Apostila[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -31,9 +39,19 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
     const [isCountingPages, setIsCountingPages] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+    // Access Control State
+    const [accessList, setAccessList] = useState<ApostilaAccessEntry[]>([]);
+    const [accessSearch, setAccessSearch] = useState('');
+    const [allStudents, setAllStudents] = useState<{ cpf: string; name: string; email: string; hasPresential: boolean }[]>([]);
+    const [studentSearch, setStudentSearch] = useState('');
+    const [isLoadingAccess, setIsLoadingAccess] = useState(false);
+    const [isGranting, setIsGranting] = useState<string | null>(null);
+    const [revokeConfirm, setRevokeConfirm] = useState<string | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { loadApostilas(); }, []);
+    useEffect(() => { if (activeSection === 'access') loadAccessData(); }, [activeSection]);
 
     const loadApostilas = async () => {
         setIsLoading(true);
@@ -143,6 +161,70 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
         loadApostilas();
     };
 
+    const loadAccessData = async () => {
+        setIsLoadingAccess(true);
+        try {
+            const [accessRes, dealsRes] = await Promise.all([
+                appBackend.getApostilaAccessList(),
+                appBackend.client.from('crm_deals').select('cpf, contact_name, company_name, email, product_type, student_access_enabled').neq('status', 'excluido')
+            ]);
+            setAccessList(accessRes);
+
+            const studentMap: Record<string, { cpf: string; name: string; email: string; hasPresential: boolean }> = {};
+            (dealsRes.data || []).forEach((d: any) => {
+                if (!d.cpf || d.student_access_enabled === false) return;
+                const clean = d.cpf.replace(/\D/g, '');
+                if (!clean) return;
+                if (!studentMap[clean]) {
+                    studentMap[clean] = { cpf: clean, name: d.company_name || d.contact_name || 'Sem Nome', email: d.email || '', hasPresential: false };
+                }
+                if (d.product_type === 'Presencial') studentMap[clean].hasPresential = true;
+            });
+            setAllStudents(Object.values(studentMap).sort((a, b) => a.name.localeCompare(b.name)));
+        } catch (e) { console.error(e); }
+        setIsLoadingAccess(false);
+    };
+
+    const handleGrantAccess = async (cpf: string, name: string) => {
+        setIsGranting(cpf);
+        try {
+            await appBackend.grantApostilaAccess(cpf, name);
+            await loadAccessData();
+        } catch (e) { console.error(e); }
+        setIsGranting(null);
+    };
+
+    const handleRevokeAccess = async (cpf: string) => {
+        try {
+            await appBackend.revokeApostilaAccess(cpf);
+            setRevokeConfirm(null);
+            await loadAccessData();
+        } catch (e) { console.error(e); }
+    };
+
+    const formatCPF = (val: string) => {
+        if (!val) return '';
+        const n = val.replace(/\D/g, '');
+        return n.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').replace(/(-\d{2})\d+?$/, '$1');
+    };
+
+    const accessCpfSet = useMemo(() => new Set(accessList.map(a => a.student_cpf)), [accessList]);
+
+    const filteredAccessList = useMemo(() => {
+        if (!accessSearch.trim()) return accessList;
+        const q = accessSearch.toLowerCase();
+        return accessList.filter(a => a.student_name.toLowerCase().includes(q) || a.student_cpf.includes(q.replace(/\D/g, '')));
+    }, [accessList, accessSearch]);
+
+    const filteredStudentsToGrant = useMemo(() => {
+        if (!studentSearch.trim()) return [];
+        const q = studentSearch.toLowerCase();
+        return allStudents
+            .filter(s => !s.hasPresential && !accessCpfSet.has(s.cpf))
+            .filter(s => s.name.toLowerCase().includes(q) || s.cpf.includes(q.replace(/\D/g, '')) || s.email.toLowerCase().includes(q))
+            .slice(0, 20);
+    }, [allStudents, studentSearch, accessCpfSet]);
+
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
             {/* Header */}
@@ -153,11 +235,23 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
                         <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
                             <BookOpen size={24} className="text-rose-600" /> Apostila Digital
                         </h1>
-                        <p className="text-sm text-slate-500 mt-0.5">Gerencie as apostilas interativas disponíveis para os alunos</p>
+                        <p className="text-sm text-slate-500 mt-0.5">Gerencie as apostilas e controle de acesso dos alunos</p>
                     </div>
                 </div>
-                <button onClick={openNewModal} className="flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-rose-600/20 transition-all active:scale-95">
-                    <Plus size={18} /> Nova Apostila
+                {activeSection === 'apostilas' && (
+                    <button onClick={openNewModal} className="flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-rose-600/20 transition-all active:scale-95">
+                        <Plus size={18} /> Nova Apostila
+                    </button>
+                )}
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex gap-2 bg-slate-100 p-1 rounded-2xl w-fit">
+                <button onClick={() => setActiveSection('apostilas')} className={clsx("px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2", activeSection === 'apostilas' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                    <BookOpen size={16} /> Apostilas
+                </button>
+                <button onClick={() => setActiveSection('access')} className={clsx("px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2", activeSection === 'access' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                    <Users size={16} /> Acesso de Alunos
                 </button>
             </div>
 
@@ -168,7 +262,9 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* Loading */}
+            {/* ── Seção: Apostilas ────────────────────────────── */}
+            {activeSection === 'apostilas' && (
+            <>
             {isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="animate-spin text-rose-600" size={32} /></div>
             ) : apostilas.length === 0 ? (
@@ -219,6 +315,101 @@ export const ApostilaManager: React.FC<ApostilaManagerProps> = ({ onBack }) => {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+            </>
+            )}
+
+            {/* ── Seção: Acesso de Alunos ───────────────────── */}
+            {activeSection === 'access' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 text-sm text-amber-800">
+                        <p className="font-bold flex items-center gap-2 mb-1"><Unlock size={16} /> Regras de acesso à Apostila Digital</p>
+                        <p className="text-amber-700">Alunos com <strong>curso presencial</strong> recebem acesso automaticamente. Use esta seção para liberar manualmente para outros alunos.</p>
+                    </div>
+
+                    {/* Search to grant */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                        <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2"><UserPlus size={16} className="text-rose-500" /> Liberar Acesso Manual</h3>
+                        <div className="relative">
+                            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={studentSearch}
+                                onChange={e => setStudentSearch(e.target.value)}
+                                placeholder="Busque pelo nome, CPF ou e-mail do aluno..."
+                                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        {filteredStudentsToGrant.length > 0 && (
+                            <div className="mt-3 border border-slate-100 rounded-xl divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                                {filteredStudentsToGrant.map(s => (
+                                    <div key={s.cpf} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-700">{s.name}</p>
+                                            <p className="text-xs text-slate-400">{formatCPF(s.cpf)} &middot; {s.email}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleGrantAccess(s.cpf, s.name)}
+                                            disabled={isGranting === s.cpf}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 active:scale-95"
+                                        >
+                                            {isGranting === s.cpf ? <Loader2 size={13} className="animate-spin" /> : <Unlock size={13} />}
+                                            Liberar
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {studentSearch.trim() && filteredStudentsToGrant.length === 0 && (
+                            <p className="text-xs text-slate-400 mt-3 text-center py-2">Nenhum aluno encontrado sem acesso automático.</p>
+                        )}
+                    </div>
+
+                    {/* Current access list */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2"><Users size={16} className="text-indigo-500" /> Acessos Manuais Liberados ({accessList.length})</h3>
+                            {accessList.length > 5 && (
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input type="text" value={accessSearch} onChange={e => setAccessSearch(e.target.value)} placeholder="Filtrar..." className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs w-48 focus:outline-none focus:ring-2 focus:ring-rose-500" />
+                                </div>
+                            )}
+                        </div>
+
+                        {isLoadingAccess ? (
+                            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-rose-500" size={28} /></div>
+                        ) : filteredAccessList.length === 0 ? (
+                            <div className="py-12 text-center text-slate-300">
+                                <Lock size={36} className="mx-auto mb-3 opacity-20" />
+                                <p className="font-bold">Nenhum acesso manual liberado</p>
+                                <p className="text-xs mt-1">Use a busca acima para liberar alunos.</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-slate-100 rounded-xl border border-slate-100 max-h-96 overflow-y-auto">
+                                {filteredAccessList.map(a => (
+                                    <div key={a.student_cpf} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-700">{a.student_name || 'Sem Nome'}</p>
+                                            <p className="text-xs text-slate-400">{formatCPF(a.student_cpf)} &middot; Liberado em {new Date(a.granted_at).toLocaleDateString('pt-BR')}</p>
+                                        </div>
+                                        {revokeConfirm === a.student_cpf ? (
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => handleRevokeAccess(a.student_cpf)} className="px-2.5 py-1 bg-red-600 text-white text-[10px] font-bold rounded-lg hover:bg-red-700">Revogar</button>
+                                                <button onClick={() => setRevokeConfirm(null)} className="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-lg hover:bg-slate-300">Cancelar</button>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => setRevokeConfirm(a.student_cpf)} className="flex items-center gap-1 px-3 py-1.5 text-red-500 hover:bg-red-50 text-xs font-bold rounded-lg transition-colors">
+                                                <UserMinus size={13} /> Remover
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 

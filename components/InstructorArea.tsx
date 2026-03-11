@@ -393,8 +393,18 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
              </div>
              <div>
                 <h1 className="text-sm font-black text-slate-800 leading-tight">{instructor.fullName}</h1>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Portal do Instrutor</span>
+                    {instructor.teacherLevel && (
+                        <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-black">
+                            <GraduationCap size={10} /> {instructor.teacherLevel}
+                        </span>
+                    )}
+                    {instructor.levelHonorarium > 0 && (
+                        <span className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[9px] font-black">
+                            <DollarSign size={10} /> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(instructor.levelHonorarium)}
+                        </span>
+                    )}
                     {unreadCount > 0 && (
                         <div className="flex items-center gap-1 bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-black animate-pulse">
                             <Bell size={10} fill="currentColor" /> {unreadCount} NOVAS

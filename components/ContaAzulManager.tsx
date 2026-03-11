@@ -80,6 +80,8 @@ export const ContaAzulManager: React.FC = () => {
   const [syncMessage, setSyncMessage] = useState('');
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncStep, setSyncStep] = useState('');
+  const [pendingRecSession, setPendingRecSession] = useState<{ sessionId: string; pending: number; total: number; completed: number } | null>(null);
+  const [pendingPaySession, setPendingPaySession] = useState<{ sessionId: string; pending: number; total: number; completed: number } | null>(null);
 
   // Loading states
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -618,11 +620,24 @@ export const ContaAzulManager: React.FC = () => {
     }
   }, [selectedAccountId]);
 
+  const checkPendingSessions = useCallback(async () => {
+    if (!selectedAccountId) return;
+    try {
+      const [recPending, payPending] = await Promise.all([
+        contaAzulService.getPendingSession(selectedAccountId, 'receivables'),
+        contaAzulService.getPendingSession(selectedAccountId, 'payables'),
+      ]);
+      setPendingRecSession(recPending ? { sessionId: recPending.sessionId, pending: recPending.pendingRanges.length, total: recPending.totalRanges, completed: recPending.completedRanges } : null);
+      setPendingPaySession(payPending ? { sessionId: payPending.sessionId, pending: payPending.pendingRanges.length, total: payPending.totalRanges, completed: payPending.completedRanges } : null);
+    } catch { /* ignore */ }
+  }, [selectedAccountId]);
+
   useEffect(() => {
     if (!isSelectedConnected) return;
     loadOverview();
     loadAuxiliaries();
-  }, [isSelectedConnected, loadOverview, loadAuxiliaries]);
+    checkPendingSessions();
+  }, [isSelectedConnected, loadOverview, loadAuxiliaries, checkPendingSessions]);
 
   useEffect(() => {
     if (activeTab === 'receivables' && isSelectedConnected) {
@@ -648,7 +663,7 @@ export const ContaAzulManager: React.FC = () => {
     { type: 'payables', label: 'Contas a Pagar' },
   ];
 
-  const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts', fullSync = false) => {
+  const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts', fullSync = false, resumeSessionId?: string) => {
     const connectedIds = accountStatuses
       .filter(s => s.connected)
       .map(s => s.account_id);
@@ -670,12 +685,16 @@ export const ContaAzulManager: React.FC = () => {
       accId: string,
       prefix: string,
       stepLabel: string,
+      _resumeId?: string,
     ): Promise<{ synced: number; expected?: number; chunkErrors?: string[] }> => {
-      if (fullSync) {
-        setSyncMessage(`${prefix}Sincronizando ${stepLabel} (completa, mensal)...`);
+      if (fullSync || _resumeId) {
+        const isResume = !!_resumeId;
+        setSyncMessage(`${prefix}Sincronizando ${stepLabel} (${isResume ? 'retomando' : 'completa, paralela'})...`);
         const result = await contaAzulService.triggerSyncChunked(stepType, accId, (chunk, total, info) => {
-          setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}${info ? ` (${info})` : ''}`);
-        });
+          const pct = Math.round((chunk / total) * 100);
+          setSyncProgress(pct);
+          setSyncMessage(`${prefix}${stepLabel}... ${chunk}/${total}${info ? ` (${info})` : ''}`);
+        }, _resumeId);
         const chunkErrors = (result as any).errors as string[] | undefined;
         const expected = (result as any).expectedTotal as number | undefined;
         if (chunkErrors?.length) {
@@ -764,7 +783,7 @@ export const ContaAzulManager: React.FC = () => {
           setSyncProgress(10);
           setSyncStep(stepLabel);
           try {
-            const { synced, expected, chunkErrors } = await syncFinancial(type, accId, prefix, stepLabel);
+            const { synced, expected, chunkErrors } = await syncFinancial(type, accId, prefix, stepLabel, resumeSessionId);
             totalSynced += synced;
             if (expected) totalExpected += expected;
             if (chunkErrors?.length) totalChunkErrors += chunkErrors.length;
@@ -807,7 +826,14 @@ export const ContaAzulManager: React.FC = () => {
     }
 
     setIsSyncing(false);
+    checkPendingSessions();
     setTimeout(() => { setSyncMessage(''); setSyncProgress(0); setSyncStep(''); }, 6000);
+  };
+
+  const handleResume = async (syncType: 'receivables' | 'payables') => {
+    const session = syncType === 'receivables' ? pendingRecSession : pendingPaySession;
+    if (!session) return;
+    await handleSync(syncType, true, session.sessionId);
   };
 
   // ── Create ──────────────────────────────────────────────
@@ -1038,6 +1064,50 @@ export const ContaAzulManager: React.FC = () => {
                 Etapa atual: {syncStep}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Resume Pending Sync Banner */}
+      {!isSyncing && (pendingRecSession || pendingPaySession) && (
+        <div className="mb-4 shrink-0 animate-in fade-in duration-300">
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={14} className="text-amber-600" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-700">
+                Sincronização interrompida
+              </span>
+            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <p className="text-xs text-amber-700 flex-1">
+                {pendingRecSession && (
+                  <span className="block">Receber: {pendingRecSession.completed}/{pendingRecSession.total} partes concluídas ({pendingRecSession.pending} restantes)</span>
+                )}
+                {pendingPaySession && (
+                  <span className="block">Pagar: {pendingPaySession.completed}/{pendingPaySession.total} partes concluídas ({pendingPaySession.pending} restantes)</span>
+                )}
+              </p>
+              <div className="flex gap-2">
+                {pendingRecSession && (
+                  <button
+                    onClick={() => handleResume('receivables')}
+                    disabled={isSyncing}
+                    className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all"
+                  >
+                    <RefreshCw size={13} /> Retomar Receber
+                  </button>
+                )}
+                {pendingPaySession && (
+                  <button
+                    onClick={() => handleResume('payables')}
+                    disabled={isSyncing}
+                    className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all"
+                  >
+                    <RefreshCw size={13} /> Retomar Pagar
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

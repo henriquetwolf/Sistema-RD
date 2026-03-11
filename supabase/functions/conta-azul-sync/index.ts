@@ -156,7 +156,16 @@ interface ContactMaps {
   byName: Map<string, string>;
 }
 
-async function fetchContactsCpfMap(accountId: string): Promise<ContactMaps> {
+const CONTACTS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const contactsCache = new Map<string, { maps: ContactMaps; fetchedAt: number }>();
+
+async function fetchContactsCpfMap(accountId: string, forceRefresh = false): Promise<ContactMaps> {
+  const cached = contactsCache.get(accountId);
+  if (!forceRefresh && cached && (Date.now() - cached.fetchedAt) < CONTACTS_CACHE_TTL_MS) {
+    console.log(`[fetchContactsCpfMap] Using cached contacts for account ${accountId} (age: ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s)`);
+    return cached.maps;
+  }
+
   const byId = new Map<string, string>();
   const byName = new Map<string, string>();
   try {
@@ -170,10 +179,17 @@ async function fetchContactsCpfMap(accountId: string): Promise<ContactMaps> {
       }
     }
     console.log(`[fetchContactsCpfMap] Loaded ${byId.size} contacts with CPF/CNPJ out of ${contacts.length} total for account ${accountId}`);
+    const maps = { byId, byName };
+    contactsCache.set(accountId, { maps, fetchedAt: Date.now() });
+    return maps;
   } catch (e: any) {
     console.warn(`[fetchContactsCpfMap] Error fetching contacts: ${e.message}`);
+    if (cached) {
+      console.log(`[fetchContactsCpfMap] Falling back to stale cache for account ${accountId}`);
+      return cached.maps;
+    }
+    return { byId, byName };
   }
-  return { byId, byName };
 }
 
 function resolveContactCpf(entity: any, contactMaps?: ContactMaps): string | null {

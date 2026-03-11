@@ -146,23 +146,100 @@ type SyncType = 'all' | 'receivables' | 'payables' | 'categories' | 'cost-center
 
 const SYNC_YEARS_BACK = 10;
 const SYNC_YEARS_FORWARD = 5;
+const SYNC_CONCURRENCY = 5;
+const SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 
-function generateMonthlyRanges(): { data_vencimento_de: string; data_vencimento_ate: string }[] {
-  const ranges: { data_vencimento_de: string; data_vencimento_ate: string }[] = [];
+type DateRange = { data_vencimento_de: string; data_vencimento_ate: string };
+
+function fmtDate(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function addMonths(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setMonth(r.getMonth() + n);
+  return r;
+}
+
+/**
+ * Generates date ranges with variable granularity:
+ *   >3 years back   -> annual   (~7 ranges)
+ *   1-3 years back  -> quarterly (~8 ranges)
+ *   last year + future -> monthly (~12 + 60 = ~72, but we use quarterly for >1yr future)
+ * Total: ~35-50 ranges instead of ~180
+ */
+function generateSmartRanges(): DateRange[] {
+  const ranges: DateRange[] = [];
   const now = new Date();
-  const start = new Date(now);
-  start.setFullYear(start.getFullYear() - SYNC_YEARS_BACK);
-  const endDate = new Date(now);
-  endDate.setFullYear(endDate.getFullYear() + SYNC_YEARS_FORWARD);
+  now.setHours(0, 0, 0, 0);
 
-  const cursor = new Date(start);
-  while (cursor < endDate) {
-    const rangeStart = cursor.toISOString().split('T')[0];
-    cursor.setMonth(cursor.getMonth() + 1);
-    const rangeEnd = (cursor < endDate ? cursor : endDate).toISOString().split('T')[0];
-    ranges.push({ data_vencimento_de: rangeStart, data_vencimento_ate: rangeEnd });
+  const absStart = new Date(now);
+  absStart.setFullYear(absStart.getFullYear() - SYNC_YEARS_BACK);
+  const absEnd = new Date(now);
+  absEnd.setFullYear(absEnd.getFullYear() + SYNC_YEARS_FORWARD);
+
+  const threeYearsAgo = new Date(now);
+  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+  const oneYearAgo = new Date(now);
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const oneYearAhead = new Date(now);
+  oneYearAhead.setFullYear(oneYearAhead.getFullYear() + 1);
+
+  function pushRanges(from: Date, to: Date, stepMonths: number) {
+    const cursor = new Date(from);
+    while (cursor < to) {
+      const rangeStart = fmtDate(cursor);
+      const next = addMonths(cursor, stepMonths);
+      const capped = next < to ? next : to;
+      ranges.push({ data_vencimento_de: rangeStart, data_vencimento_ate: fmtDate(capped) });
+      cursor.setTime(capped.getTime());
+    }
   }
+
+  pushRanges(absStart, threeYearsAgo, 12);
+  pushRanges(threeYearsAgo, oneYearAgo, 3);
+  pushRanges(oneYearAgo, oneYearAhead, 1);
+  pushRanges(oneYearAhead, absEnd, 3);
+
   return ranges;
+}
+
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number,
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const idx = nextIndex++;
+      results[idx] = await tasks[idx]();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+let _sessionKeepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+function startSessionKeepAlive() {
+  stopSessionKeepAlive();
+  supabase.auth.refreshSession();
+  _sessionKeepAliveTimer = setInterval(() => {
+    supabase.auth.refreshSession().catch((e) =>
+      console.warn('[SessionKeepAlive] refresh failed:', e)
+    );
+  }, SESSION_REFRESH_INTERVAL_MS);
+}
+
+function stopSessionKeepAlive() {
+  if (_sessionKeepAliveTimer) {
+    clearInterval(_sessionKeepAliveTimer);
+    _sessionKeepAliveTimer = null;
+  }
 }
 
 async function triggerSync(type: SyncType, accountId: string, body?: Record<string, any>): Promise<ContaAzulSyncResult> {
@@ -172,56 +249,200 @@ async function triggerSync(type: SyncType, accountId: string, body?: Record<stri
   });
 }
 
+// ── Sync chunks persistence (resume capability) ─────────────
+
+interface SyncChunkRow {
+  id: string;
+  session_id: string;
+  sync_type: string;
+  account_id: string;
+  range_start: string;
+  range_end: string;
+  status: string;
+  records_synced: number;
+  error_message: string | null;
+}
+
+async function createSyncSession(
+  accountId: string,
+  syncType: string,
+  ranges: DateRange[],
+): Promise<{ sessionId: string; pendingRanges: DateRange[] }> {
+  const sessionId = crypto.randomUUID();
+
+  const rows = ranges.map((r) => ({
+    session_id: sessionId,
+    account_id: accountId,
+    sync_type: syncType,
+    range_start: r.data_vencimento_de,
+    range_end: r.data_vencimento_ate,
+    status: 'pending',
+    records_synced: 0,
+  }));
+
+  const BATCH = 200;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    await supabase.from('conta_azul_sync_chunks').insert(rows.slice(i, i + BATCH));
+  }
+
+  return { sessionId, pendingRanges: ranges };
+}
+
+async function markChunkCompleted(sessionId: string, range: DateRange, recordsSynced: number) {
+  await supabase
+    .from('conta_azul_sync_chunks')
+    .update({ status: 'completed', records_synced: recordsSynced, completed_at: new Date().toISOString() })
+    .eq('session_id', sessionId)
+    .eq('range_start', range.data_vencimento_de)
+    .eq('range_end', range.data_vencimento_ate);
+}
+
+async function markChunkError(sessionId: string, range: DateRange, errorMsg: string) {
+  await supabase
+    .from('conta_azul_sync_chunks')
+    .update({ status: 'error', error_message: errorMsg, completed_at: new Date().toISOString() })
+    .eq('session_id', sessionId)
+    .eq('range_start', range.data_vencimento_de)
+    .eq('range_end', range.data_vencimento_ate);
+}
+
+async function getPendingSession(
+  accountId: string,
+  syncType: string,
+): Promise<{ sessionId: string; pendingRanges: DateRange[]; totalRanges: number; completedRanges: number } | null> {
+  const { data: sessions } = await supabase
+    .from('conta_azul_sync_chunks')
+    .select('session_id')
+    .eq('account_id', accountId)
+    .eq('sync_type', syncType)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (!sessions || sessions.length === 0) return null;
+  const sessionId = sessions[0].session_id;
+
+  const { data: allChunks } = await supabase
+    .from('conta_azul_sync_chunks')
+    .select('range_start, range_end, status')
+    .eq('session_id', sessionId)
+    .order('range_start', { ascending: true });
+
+  if (!allChunks || allChunks.length === 0) return null;
+
+  const pending = allChunks
+    .filter((c: any) => c.status === 'pending')
+    .map((c: any) => ({ data_vencimento_de: c.range_start, data_vencimento_ate: c.range_end }));
+
+  if (pending.length === 0) return null;
+
+  return {
+    sessionId,
+    pendingRanges: pending,
+    totalRanges: allChunks.length,
+    completedRanges: allChunks.filter((c: any) => c.status === 'completed').length,
+  };
+}
+
+async function cleanOldSyncSessions() {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  await supabase
+    .from('conta_azul_sync_chunks')
+    .delete()
+    .lt('created_at', cutoff);
+}
+
 async function triggerSyncChunked(
   type: 'receivables' | 'payables',
   accountId: string,
   onProgress?: (chunk: number, total: number, info?: string) => void,
-): Promise<ContaAzulSyncResult & { errors?: string[]; expectedTotal?: number }> {
-  const ranges = generateMonthlyRanges();
-  let totalSynced = 0;
-  let totalExpected = 0;
-  const errors: string[] = [];
-  const MAX_RETRIES = 2;
+  resumeSessionId?: string,
+): Promise<ContaAzulSyncResult & { errors?: string[]; expectedTotal?: number; sessionId?: string }> {
+  startSessionKeepAlive();
 
-  for (let i = 0; i < ranges.length; i++) {
-    onProgress?.(i + 1, ranges.length, `${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}`);
-    let success = false;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const result = await triggerSync(type, accountId, ranges[i]);
-        const count = result.sincronizados ?? 0;
-        const expected = (result as any).esperados ?? 0;
-        totalSynced += count;
-        totalExpected += expected;
-        if (count > 0) {
-          console.log(`[SyncChunked] ${type} chunk ${i + 1}/${ranges.length} (${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}): ${count} registros${expected ? ` (API total: ${expected})` : ''}`);
-        }
-        success = true;
-        break;
-      } catch (e: any) {
-        const isRateLimit = e.message?.includes('429') || e.message?.includes('rate');
-        const delay = isRateLimit ? 5000 : 2000 * (attempt + 1);
-        if (attempt < MAX_RETRIES) {
-          console.warn(`[SyncChunked] ${type} chunk ${i + 1} attempt ${attempt + 1} failed, retrying in ${delay}ms: ${e.message}`);
-          await new Promise(r => setTimeout(r, delay));
-        } else {
-          const msg = `Chunk ${i + 1}/${ranges.length} (${ranges[i].data_vencimento_de} → ${ranges[i].data_vencimento_ate}): ${e.message}`;
-          errors.push(msg);
-          console.error(`[SyncChunked] ${type} FAILED after ${MAX_RETRIES + 1} attempts:`, msg);
+  try {
+    cleanOldSyncSessions().catch(() => {});
+
+    let ranges: DateRange[];
+    let sessionId: string;
+    let totalRanges: number;
+    let completedOffset = 0;
+
+    if (resumeSessionId) {
+      const pending = await getPendingSession(accountId, type);
+      if (pending && pending.sessionId === resumeSessionId) {
+        sessionId = pending.sessionId;
+        ranges = pending.pendingRanges;
+        totalRanges = pending.totalRanges;
+        completedOffset = pending.completedRanges;
+        console.log(`[SyncChunked] Resuming session ${sessionId}: ${ranges.length} pending of ${totalRanges}`);
+      } else {
+        ranges = generateSmartRanges();
+        const session = await createSyncSession(accountId, type, ranges);
+        sessionId = session.sessionId;
+        totalRanges = ranges.length;
+      }
+    } else {
+      ranges = generateSmartRanges();
+      const session = await createSyncSession(accountId, type, ranges);
+      sessionId = session.sessionId;
+      totalRanges = ranges.length;
+    }
+
+    let totalSynced = 0;
+    let totalExpected = 0;
+    const errors: string[] = [];
+    const MAX_RETRIES = 2;
+    let completedCount = completedOffset;
+
+    const tasks = ranges.map((range, _i) => async () => {
+      const label = `${range.data_vencimento_de} → ${range.data_vencimento_ate}`;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const result = await triggerSync(type, accountId, range);
+          const count = result.sincronizados ?? 0;
+          const expected = (result as any).esperados ?? 0;
+          totalSynced += count;
+          totalExpected += expected;
+          completedCount++;
+          onProgress?.(completedCount, totalRanges, label);
+          if (count > 0) {
+            console.log(`[SyncChunked] ${type} (${label}): ${count} registros`);
+          }
+          await markChunkCompleted(sessionId, range, count);
+          return;
+        } catch (e: any) {
+          const isRateLimit = e.message?.includes('429') || e.message?.includes('rate');
+          const delay = isRateLimit ? 5000 : 2000 * (attempt + 1);
+          if (attempt < MAX_RETRIES) {
+            console.warn(`[SyncChunked] ${type} (${label}) attempt ${attempt + 1} failed, retrying in ${delay}ms: ${e.message}`);
+            await new Promise(r => setTimeout(r, delay));
+          } else {
+            const msg = `(${label}): ${e.message}`;
+            errors.push(msg);
+            console.error(`[SyncChunked] ${type} FAILED:`, msg);
+            await markChunkError(sessionId, range, e.message);
+          }
         }
       }
+    });
+
+    await runWithConcurrency(tasks, SYNC_CONCURRENCY);
+
+    if (errors.length > 0) {
+      console.warn(`[SyncChunked] ${type}: ${errors.length} chunk(s) falharam. Total sincronizado: ${totalSynced}`);
     }
+    return {
+      success: true,
+      tipo: type,
+      sincronizados: totalSynced,
+      errors: errors.length > 0 ? errors : undefined,
+      expectedTotal: totalExpected > 0 ? totalExpected : undefined,
+      sessionId,
+    };
+  } finally {
+    stopSessionKeepAlive();
   }
-  if (errors.length > 0) {
-    console.warn(`[SyncChunked] ${type}: ${errors.length} chunk(s) falharam. Total sincronizado: ${totalSynced}`);
-  }
-  return {
-    success: true,
-    tipo: type,
-    sincronizados: totalSynced,
-    errors: errors.length > 0 ? errors : undefined,
-    expectedTotal: totalExpected > 0 ? totalExpected : undefined,
-  };
 }
 
 async function triggerSyncIncremental(
@@ -767,6 +988,7 @@ export const contaAzulService = {
   triggerSyncChunked,
   triggerSyncIncremental,
   getSyncLogs,
+  getPendingSession,
   // Read
   getReceivables,
   getReceivableStats,

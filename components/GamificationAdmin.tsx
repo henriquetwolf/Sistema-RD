@@ -348,7 +348,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
               </tr>
             ))}
             {levels.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Nenhum nível cadastrado</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Nenhum nível encontrado. Se há dados no banco, execute a migração <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">043_fix_gamification_policies.sql</span> no Supabase.</td></tr>
             )}
           </tbody>
         </table>
@@ -467,7 +467,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
               </tr>
             ))}
             {rules.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma regra cadastrada</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma regra encontrada. Se há dados no banco, execute a migração <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">043_fix_gamification_policies.sql</span> no Supabase.</td></tr>
             )}
           </tbody>
         </table>
@@ -591,7 +591,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
           </div>
         ))}
         {badges.length === 0 && (
-          <div className="col-span-full text-center py-12 text-slate-400">Nenhum badge cadastrado</div>
+          <div className="col-span-full text-center py-12 text-slate-400">Nenhum badge encontrado. Se há dados no banco, execute a migração <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">043_fix_gamification_policies.sql</span> no Supabase.</div>
         )}
       </div>
 
@@ -805,7 +805,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
           </div>
         ))}
         {filteredChallenges.length === 0 && (
-          <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum desafio encontrado</div>
+          <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum desafio encontrado. Se há dados no banco, execute a migração <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">043_fix_gamification_policies.sql</span> no Supabase.</div>
         )}
       </div>
 
@@ -965,7 +965,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
           </div>
         ))}
         {rewards.length === 0 && (
-          <div className="col-span-full text-center py-12 text-slate-400">Nenhuma recompensa cadastrada</div>
+          <div className="col-span-full text-center py-12 text-slate-400">Nenhuma recompensa encontrada. Se há dados no banco, execute a migração <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">043_fix_gamification_policies.sql</span> no Supabase.</div>
         )}
       </div>
 

@@ -2487,140 +2487,147 @@ export const appBackend = {
 
   getGamificationSettings: async (): Promise<GamificationSetting[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_settings').select('*');
+    const { data, error } = await supabase.from('gamification_settings').select('*');
+    if (error) { console.error('getGamificationSettings error:', error); return []; }
     return data || [];
   },
 
   getGamificationSettingValue: async (key: string): Promise<any> => {
     if (!isConfigured) return null;
-    const { data } = await supabase.from('gamification_settings').select('value').eq('key', key).maybeSingle();
+    const { data, error } = await supabase.from('gamification_settings').select('value').eq('key', key).maybeSingle();
+    if (error) { console.error('getGamificationSettingValue error:', error); return null; }
     return data?.value ?? null;
   },
 
   saveGamificationSetting: async (key: string, value: any): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('gamification_settings').upsert({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, { onConflict: 'key' });
-    if (error) throw new Error(`Erro ao salvar configuração: ${error.message}`);
+    await supabase.from('gamification_settings').upsert({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, { onConflict: 'key' }).throwOnError();
   },
 
   getGamificationLevels: async (): Promise<GamificationLevel[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_levels').select('*').order('level_number');
+    const { data, error } = await supabase.from('gamification_levels').select('*').order('level_number');
+    if (error) { console.error('getGamificationLevels error:', error); return []; }
     return data || [];
   },
 
   saveGamificationLevel: async (level: Partial<GamificationLevel>): Promise<void> => {
     if (!isConfigured) return;
-    if (level.id) {
-      const { error } = await supabase.from('gamification_levels').update(level).eq('id', level.id);
-      if (error) throw new Error(`Erro ao atualizar nível: ${error.message}`);
+    const cleanLevel = { ...level };
+    delete (cleanLevel as any).created_at;
+    if (!cleanLevel.id) delete (cleanLevel as any).id;
+    if (cleanLevel.id) {
+      await supabase.from('gamification_levels').update(cleanLevel).eq('id', cleanLevel.id).throwOnError();
     } else {
-      const { error } = await supabase.from('gamification_levels').insert([level]);
-      if (error) throw new Error(`Erro ao criar nível: ${error.message}`);
+      await supabase.from('gamification_levels').insert([cleanLevel]).throwOnError();
     }
   },
 
   deleteGamificationLevel: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('gamification_levels').delete().eq('id', id);
-    if (error) throw new Error(`Erro ao excluir nível: ${error.message}`);
+    await supabase.from('gamification_levels').delete().eq('id', id).throwOnError();
   },
 
   getGamificationPointRules: async (): Promise<GamificationPointRule[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_point_rules').select('*').order('action_type');
+    const { data, error } = await supabase.from('gamification_point_rules').select('*').order('action_type');
+    if (error) { console.error('getGamificationPointRules error:', error); return []; }
     return data || [];
   },
 
   saveGamificationPointRule: async (rule: Partial<GamificationPointRule>): Promise<void> => {
     if (!isConfigured) return;
-    if (rule.id) {
-      const { error } = await supabase.from('gamification_point_rules').update(rule).eq('id', rule.id);
-      if (error) throw new Error(`Erro ao atualizar regra: ${error.message}`);
+    const clean = { ...rule };
+    delete (clean as any).created_at;
+    if (!clean.id) delete (clean as any).id;
+    if (clean.id) {
+      await supabase.from('gamification_point_rules').update(clean).eq('id', clean.id).throwOnError();
     } else {
-      const { error } = await supabase.from('gamification_point_rules').insert([rule]);
-      if (error) throw new Error(`Erro ao criar regra: ${error.message}`);
+      await supabase.from('gamification_point_rules').insert([clean]).throwOnError();
     }
   },
 
   deleteGamificationPointRule: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('gamification_point_rules').delete().eq('id', id);
-    if (error) throw new Error(`Erro ao excluir regra: ${error.message}`);
+    await supabase.from('gamification_point_rules').delete().eq('id', id).throwOnError();
   },
 
   getGamificationBadges: async (): Promise<GamificationBadge[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_badges').select('*').order('sort_order');
+    const { data, error } = await supabase.from('gamification_badges').select('*').order('sort_order');
+    if (error) { console.error('getGamificationBadges error:', error); return []; }
     return data || [];
   },
 
   saveGamificationBadge: async (badge: Partial<GamificationBadge>): Promise<void> => {
     if (!isConfigured) return;
-    if (badge.id) {
-      const { error } = await supabase.from('gamification_badges').update(badge).eq('id', badge.id);
-      if (error) throw new Error(`Erro ao atualizar badge: ${error.message}`);
+    const clean = { ...badge };
+    delete (clean as any).created_at;
+    if (!clean.id) delete (clean as any).id;
+    if (clean.id) {
+      await supabase.from('gamification_badges').update(clean).eq('id', clean.id).throwOnError();
     } else {
-      const { error } = await supabase.from('gamification_badges').insert([badge]);
-      if (error) throw new Error(`Erro ao criar badge: ${error.message}`);
+      await supabase.from('gamification_badges').insert([clean]).throwOnError();
     }
   },
 
   deleteGamificationBadge: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('gamification_badges').delete().eq('id', id);
-    if (error) throw new Error(`Erro ao excluir badge: ${error.message}`);
+    await supabase.from('gamification_badges').delete().eq('id', id).throwOnError();
   },
 
   getGamificationChallenges: async (): Promise<GamificationChallenge[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_challenges').select('*').order('sort_order');
+    const { data, error } = await supabase.from('gamification_challenges').select('*').order('sort_order');
+    if (error) { console.error('getGamificationChallenges error:', error); return []; }
     return data || [];
   },
 
   saveGamificationChallenge: async (challenge: Partial<GamificationChallenge>): Promise<void> => {
     if (!isConfigured) return;
-    if (challenge.id) {
-      const { error } = await supabase.from('gamification_challenges').update(challenge).eq('id', challenge.id);
-      if (error) throw new Error(`Erro ao atualizar desafio: ${error.message}`);
+    const clean = { ...challenge };
+    delete (clean as any).created_at;
+    if (!clean.id) delete (clean as any).id;
+    if (clean.id) {
+      await supabase.from('gamification_challenges').update(clean).eq('id', clean.id).throwOnError();
     } else {
-      const { error } = await supabase.from('gamification_challenges').insert([challenge]);
-      if (error) throw new Error(`Erro ao criar desafio: ${error.message}`);
+      await supabase.from('gamification_challenges').insert([clean]).throwOnError();
     }
   },
 
   deleteGamificationChallenge: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('gamification_challenges').delete().eq('id', id);
-    if (error) throw new Error(`Erro ao excluir desafio: ${error.message}`);
+    await supabase.from('gamification_challenges').delete().eq('id', id).throwOnError();
   },
 
   getGamificationRewards: async (): Promise<GamificationReward[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_rewards').select('*').order('sort_order');
+    const { data, error } = await supabase.from('gamification_rewards').select('*').order('sort_order');
+    if (error) { console.error('getGamificationRewards error:', error); return []; }
     return data || [];
   },
 
   saveGamificationReward: async (reward: Partial<GamificationReward>): Promise<void> => {
     if (!isConfigured) return;
-    if (reward.id) {
-      const { error } = await supabase.from('gamification_rewards').update(reward).eq('id', reward.id);
-      if (error) throw new Error(`Erro ao atualizar recompensa: ${error.message}`);
+    const clean = { ...reward };
+    delete (clean as any).created_at;
+    if (!clean.id) delete (clean as any).id;
+    if (clean.id) {
+      await supabase.from('gamification_rewards').update(clean).eq('id', clean.id).throwOnError();
     } else {
-      const { error } = await supabase.from('gamification_rewards').insert([reward]);
-      if (error) throw new Error(`Erro ao criar recompensa: ${error.message}`);
+      await supabase.from('gamification_rewards').insert([clean]).throwOnError();
     }
   },
 
   deleteGamificationReward: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('gamification_rewards').delete().eq('id', id);
-    if (error) throw new Error(`Erro ao excluir recompensa: ${error.message}`);
+    await supabase.from('gamification_rewards').delete().eq('id', id).throwOnError();
   },
 
   getGamificationNotificationSettings: async (): Promise<GamificationNotificationSetting[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('gamification_notification_settings').select('*').order('notification_type');
+    const { data, error } = await supabase.from('gamification_notification_settings').select('*').order('notification_type');
+    if (error) { console.error('getGamificationNotificationSettings error:', error); return []; }
     return data || [];
   },
 

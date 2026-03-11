@@ -365,10 +365,20 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
               if (!cleanNumber) throw new Error("Número de pareamento é obrigatório para este método.");
               addLog("Solicitando código de pareamento...");
               const code = await evolutionProxy.connectPairingCode(baseUrl, apiKey, instanceName, cleanNumber);
+              if (code === "ALREADY_CONNECTED") {
+                  setConfig(prev => ({ ...prev, isConnected: true }));
+                  addLog("WhatsApp já está conectado! Não é necessário parear novamente.");
+                  return;
+              }
               setPairingCodeValue(code);
           } else {
               addLog("Gerando QR Code...");
               const data = await evolutionProxy.connectQrCode(baseUrl, apiKey, instanceName);
+              if (data.alreadyConnected) {
+                  setConfig(prev => ({ ...prev, isConnected: true }));
+                  addLog("WhatsApp já está conectado! Não é necessário parear novamente.");
+                  return;
+              }
               const token = data.base64 || data.code;
               if (!token) throw new Error("A API não retornou QR Code. Resposta: " + JSON.stringify(data).substring(0, 200));
               setQrCodeUrl(token.startsWith('data:image') ? token : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`);

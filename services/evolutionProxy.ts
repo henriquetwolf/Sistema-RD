@@ -66,39 +66,55 @@ export const evolutionProxy = {
     }
   },
 
-  connectQrCode: async (baseUrl: string, apiKey: string, instanceName: string): Promise<{ base64?: string; code?: string }> => {
+  connectQrCode: async (baseUrl: string, apiKey: string, instanceName: string): Promise<{ base64?: string; code?: string; alreadyConnected?: boolean }> => {
     const result = await callProxy({
       baseUrl,
       apiKey,
       endpoint: `/instance/connect/${instanceName}`,
     });
     if (!result.ok) throw new Error(result.data?.message || `Erro ao gerar QR Code (HTTP ${result.status})`);
+    const state = result.data?.instance?.state || result.data?.state;
+    if (state === "open") return { alreadyConnected: true };
     return result.data;
   },
 
   connectPairingCode: async (baseUrl: string, apiKey: string, instanceName: string, number: string): Promise<string> => {
-    const endpoints = [
-      `/instance/connect/${instanceName}?number=${number}`,
-      `/instance/connect/pairing-code/${instanceName}?number=${number}`,
-      `/instance/connect/pairingCode/${instanceName}?number=${number}`,
-    ];
+    const result = await callProxy({
+      baseUrl,
+      apiKey,
+      endpoint: `/instance/connect/${instanceName}?number=${number}`,
+    });
 
-    let lastError = "";
-    for (const endpoint of endpoints) {
-      try {
-        const result = await callProxy({ baseUrl, apiKey, endpoint });
-        if (result.status === 404) continue;
-        if (!result.ok) {
-          lastError = result.data?.message || `Erro HTTP ${result.status}`;
-          continue;
-        }
-        const code = result.data?.code || result.data?.pairingCode;
-        if (code) return code;
-      } catch (e: any) {
-        lastError = e.message;
+    if (result.ok) {
+      const state = result.data?.instance?.state || result.data?.state;
+      if (state === "open") return "ALREADY_CONNECTED";
+      const code = result.data?.code || result.data?.pairingCode;
+      if (code) return code;
+    }
+
+    if (result.status === 404 || !result.ok) {
+      const fallbackEndpoints = [
+        `/instance/connect/pairing-code/${instanceName}?number=${number}`,
+        `/instance/connect/pairingCode/${instanceName}?number=${number}`,
+      ];
+      for (const endpoint of fallbackEndpoints) {
+        try {
+          const fb = await callProxy({ baseUrl, apiKey, endpoint });
+          if (fb.status === 404) continue;
+          const fbState = fb.data?.instance?.state || fb.data?.state;
+          if (fbState === "open") return "ALREADY_CONNECTED";
+          if (fb.ok) {
+            const code = fb.data?.code || fb.data?.pairingCode;
+            if (code) return code;
+          }
+        } catch { continue; }
       }
     }
-    throw new Error(lastError || "Nenhum endpoint de pareamento respondeu. Verifique a URL e versão da API.");
+
+    throw new Error(
+      result.data?.message ||
+      `Erro ao obter código (HTTP ${result.status}). Resposta: ${JSON.stringify(result.data).substring(0, 200)}`
+    );
   },
 
   sendTextMessage: async (baseUrl: string, apiKey: string, instanceName: string, number: string, text: string): Promise<any> => {

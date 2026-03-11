@@ -217,7 +217,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.saveGamificationSetting(key, value);
       setSettingsMap(prev => ({ ...prev, [key]: value }));
       showToast('Configuração salva');
-    } catch { showToast('Erro ao salvar', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar configuração', 'error'); }
   };
 
   const renderSettings = () => {
@@ -287,7 +287,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       setLevels(await appBackend.getGamificationLevels());
       setEditingLevel(null);
       showToast('Nível salvo');
-    } catch { showToast('Erro ao salvar nível', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar nível', 'error'); }
   };
 
   const deleteLevel = async (id: string) => {
@@ -296,7 +296,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.deleteGamificationLevel(id);
       setLevels(prev => prev.filter(l => l.id !== id));
       showToast('Nível excluído');
-    } catch { showToast('Erro ao excluir', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao excluir nível', 'error'); }
   };
 
   const renderLevels = () => (
@@ -407,7 +407,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       setRules(await appBackend.getGamificationPointRules());
       setEditingRule(null);
       showToast('Regra salva');
-    } catch { showToast('Erro ao salvar regra', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar regra', 'error'); }
   };
 
   const deleteRule = async (id: string) => {
@@ -416,14 +416,14 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.deleteGamificationPointRule(id);
       setRules(prev => prev.filter(r => r.id !== id));
       showToast('Regra excluída');
-    } catch { showToast('Erro ao excluir', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao excluir regra', 'error'); }
   };
 
   const toggleRuleActive = async (rule: GamificationPointRule) => {
     try {
       await appBackend.saveGamificationPointRule({ id: rule.id, is_active: !rule.is_active });
       setRules(prev => prev.map(r => r.id === rule.id ? { ...r, is_active: !r.is_active } : r));
-    } catch { showToast('Erro ao atualizar', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao atualizar', 'error'); }
   };
 
   const renderRules = () => (
@@ -525,7 +525,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       setBadges(await appBackend.getGamificationBadges());
       setBadgeModal(null);
       showToast('Badge salvo');
-    } catch { showToast('Erro ao salvar badge', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar badge', 'error'); }
   };
 
   const deleteBadge = async (id: string) => {
@@ -534,7 +534,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.deleteGamificationBadge(id);
       setBadges(prev => prev.filter(b => b.id !== id));
       showToast('Badge excluído');
-    } catch { showToast('Erro ao excluir', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao excluir badge', 'error'); }
   };
 
   const grantBadge = async () => {
@@ -543,7 +543,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.grantBadgeManually(grantBadgeModal.cpf.replace(/\D/g, ''), grantBadgeModal.badgeId);
       showToast('Badge concedido com sucesso');
       setGrantBadgeModal(null);
-    } catch { showToast('Erro ao conceder badge', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao conceder badge', 'error'); }
   };
 
   const renderBadges = () => (
@@ -734,7 +734,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       setChallenges(await appBackend.getGamificationChallenges());
       setChallengeModal(null);
       showToast('Desafio salvo');
-    } catch { showToast('Erro ao salvar desafio', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar desafio', 'error'); }
   };
 
   const deleteChallenge = async (id: string) => {
@@ -743,7 +743,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.deleteGamificationChallenge(id);
       setChallenges(prev => prev.filter(c => c.id !== id));
       showToast('Desafio excluído');
-    } catch { showToast('Erro ao excluir', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao excluir desafio', 'error'); }
   };
 
   const filteredChallenges = challengeFilter === 'all' ? challenges : challenges.filter(c => c.challenge_type === challengeFilter);
@@ -914,7 +914,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       setRewards(await appBackend.getGamificationRewards());
       setRewardModal(null);
       showToast('Recompensa salva');
-    } catch { showToast('Erro ao salvar recompensa', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar recompensa', 'error'); }
   };
 
   const deleteReward = async (id: string) => {
@@ -923,7 +923,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       await appBackend.deleteGamificationReward(id);
       setRewards(prev => prev.filter(r => r.id !== id));
       showToast('Recompensa excluída');
-    } catch { showToast('Erro ao excluir', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao excluir recompensa', 'error'); }
   };
 
   const renderRewards = () => (
@@ -1164,7 +1164,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
     try {
       await appBackend.saveGamificationNotificationSetting(setting);
       showToast('Notificação salva');
-    } catch { showToast('Erro ao salvar', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao salvar notificação', 'error'); }
   };
 
   const updateNotifLocal = (id: string, field: keyof GamificationNotificationSetting, value: any) => {
@@ -1231,7 +1231,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
     setLeaderboardPeriod(period);
     try {
       setLeaderboard(await appBackend.getLeaderboard(period, 50));
-    } catch { showToast('Erro ao carregar ranking', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao carregar ranking', 'error'); }
   };
 
   const handleAdjust = async () => {
@@ -1253,7 +1253,7 @@ export const GamificationAdmin: React.FC<GamificationAdminProps> = ({ onBack }) 
       ]);
       setDashStats(stats);
       setLeaderboard(lb);
-    } catch { showToast('Erro ao ajustar VOLLs', 'error'); }
+    } catch (e: any) { showToast(e?.message || 'Erro ao ajustar VOLLs', 'error'); }
   };
 
   const filteredLeaderboard = leaderboardSearch

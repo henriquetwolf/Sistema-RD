@@ -128,15 +128,29 @@ export const EmailMarketingManager: React.FC = () => {
   const sendNow = useCallback(async () => {
     if (!editingCampaign) return;
     setIsLoading(true);
+    setConfirmSend(false);
     try {
-      await appBackend.saveEmailCampaign({ ...editingCampaign, status: 'sending' });
+      const campaignId = await appBackend.saveEmailCampaign({ ...editingCampaign, status: 'draft' });
+      if (!campaignId) {
+        await load();
+        backToList();
+        return;
+      }
+      const result = await appBackend.sendEmailCampaignNow(campaignId);
+      if (result.error && result.sent === 0 && result.failed === 0) {
+        alert(result.error);
+      } else {
+        alert(result.failed > 0
+          ? `Envio concluído: ${result.sent} enviados, ${result.failed} falhas.`
+          : `${result.sent} email(s) enviado(s) com sucesso.`);
+      }
       await load();
       backToList();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert(e?.message || 'Erro ao enviar campanha.');
     } finally {
       setIsLoading(false);
-      setConfirmSend(false);
     }
   }, [editingCampaign, load, backToList]);
 

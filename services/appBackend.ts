@@ -1691,12 +1691,15 @@ export const appBackend = {
     }));
   },
 
-  saveEmailCampaign: async (campaign: any): Promise<void> => {
-    if (!isConfigured) return;
+  saveEmailCampaign: async (campaign: any): Promise<string> => {
+    if (!isConfigured) return '';
     const { stats, ab_test, subject_b, scheduled, ...rest } = campaign;
+    const id = campaign.id || crypto.randomUUID();
     const row = {
       ...rest,
-      id: campaign.id || crypto.randomUUID(),
+      id,
+      segment_id: rest.segment_id || null,
+      template_id: rest.template_id || null,
       stats_sent: stats?.sent ?? rest.stats_sent ?? 0,
       stats_delivered: stats?.delivered ?? rest.stats_delivered ?? 0,
       stats_opened: stats?.opened ?? rest.stats_opened ?? 0,
@@ -1706,8 +1709,55 @@ export const appBackend = {
       ab_test_enabled: ab_test ?? rest.ab_test_enabled ?? false,
       ab_subject_b: subject_b ?? rest.ab_subject_b ?? '',
     };
-    const { error } = await supabase.from('marketing_email_campaigns').upsert(row);
+    const { data, error } = await supabase.from('marketing_email_campaigns').upsert(row).select('id').single();
     if (error) throw error;
+    return (data?.id as string) || id;
+  },
+
+  /** Envia a campanha de email para os leads do segmento via Brevo. Exige configuração de email (Formulários ou CRM). */
+  sendEmailCampaignNow: async (campaignId: string): Promise<{ sent: number; failed: number; error?: string }> => {
+    if (!isConfigured) return { sent: 0, failed: 0, error: 'Supabase não configurado.' };
+    const config = await appBackend.getEmailConfig();
+    if (!config?.apiKey) return { sent: 0, failed: 0, error: 'Configure o Brevo em Formulários → Configuração de Email (chave API) para enviar campanhas.' };
+    const { data: campaign } = await supabase.from('marketing_email_campaigns').select('*').eq('id', campaignId).single();
+    if (!campaign) return { sent: 0, failed: 0, error: 'Campanha não encontrada.' };
+    const fromEmail = (campaign.from_email || config.senderEmail || '').trim();
+    const fromName = (campaign.from_name || config.senderName || 'VOLL').trim();
+    if (!fromEmail) return { sent: 0, failed: 0, error: 'Campanha sem email do remetente. Preencha "Email do Remetente" ao editar.' };
+    let leads: any[] = [];
+    if (campaign.segment_id) {
+      const seg = await supabase.from('marketing_segments').select('*').eq('id', campaign.segment_id).single();
+      if (seg.data?.segment_type === 'static' && seg.data.static_lead_ids?.length) {
+        const { data } = await supabase.from('marketing_leads').select('*').in('id', seg.data.static_lead_ids);
+        leads = data || [];
+      } else {
+        const { data } = await supabase.from('marketing_leads').select('*');
+        leads = data || [];
+      }
+    } else {
+      const { data } = await supabase.from('marketing_leads').select('*');
+      leads = data || [];
+    }
+    const withEmail = leads.filter((l: any) => (l.email || '').trim() && !l.opted_out);
+    if (withEmail.length === 0) return { sent: 0, failed: 0, error: 'Nenhum lead com email para enviar (ou segmento vazio). Adicione leads em Gestão de Leads.' };
+    let sent = 0;
+    let failed = 0;
+    const subject = (campaign.subject || '').trim() || 'Sem assunto';
+    const htmlContent = (campaign.html_content || '').trim() || '<p>Sem conteúdo.</p>';
+    for (const lead of withEmail) {
+      const to = (lead.email || '').trim();
+      const toName = (lead.name || lead.email || to).trim();
+      const result = await brevoService.sendEmail(config.apiKey, fromEmail, fromName, { to, toName, subject, htmlContent });
+      if (result.success) sent++; else failed++;
+    }
+    await supabase.from('marketing_email_campaigns').update({
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      stats_sent: sent + failed,
+      stats_delivered: sent,
+      updated_at: new Date().toISOString(),
+    }).eq('id', campaignId);
+    return { sent, failed };
   },
 
   deleteEmailCampaign: async (id: string): Promise<void> => {

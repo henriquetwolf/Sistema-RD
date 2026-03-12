@@ -9,7 +9,7 @@
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ai_provider_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider TEXT NOT NULL CHECK (provider IN ('claude','gemini','openai','custom')),
+    provider TEXT NOT NULL CHECK (provider IN ('claude','openrouter','gemini','openai','custom')),
     label TEXT NOT NULL DEFAULT '',
     api_key_encrypted TEXT NOT NULL DEFAULT '',
     model TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS lp_ads_landing_pages (
     page_type TEXT NOT NULL DEFAULT 'base'
         CHECK (page_type IN ('base','variant')),
     creation_mode TEXT NOT NULL DEFAULT 'ai_claude'
-        CHECK (creation_mode IN ('ai_claude','import_html','blank_template')),
+        CHECK (creation_mode IN ('ai_claude','ai_openrouter','import_html','blank_template')),
     title TEXT DEFAULT '',
     content JSONB DEFAULT '{}',
     html_code TEXT DEFAULT '',

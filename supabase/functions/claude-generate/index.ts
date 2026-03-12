@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -20,44 +21,19 @@ serve(async (req: Request) => {
     const body = await req.json();
     const { job_type, project_id, target_id, section_id, user_instruction } = body;
 
+    // ── Validation-only flow ────────────────────────────────
     if (project_id === "validate-only") {
-      const { data: config } = await supabase
-        .from("ai_provider_configs")
-        .select("*")
-        .eq("provider", "claude")
-        .eq("is_active", true)
-        .maybeSingle();
-      if (!config?.api_key_encrypted) {
-        return json({ success: false, error: "Claude não configurado" });
-      }
-      const testResp = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": config.api_key_encrypted,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: config.model || "claude-sonnet-4-20250514",
-          max_tokens: 10,
-          messages: [{ role: "user", content: "Responda apenas: OK" }],
-        }),
-      });
-      if (!testResp.ok) {
-        return json({ success: false, error: "API key inválida ou sem créditos" });
-      }
-      return json({ success: true });
+      const config = await getActiveConfig(supabase);
+      if (!config) return json({ success: false, error: "Nenhum provider de IA configurado e ativo." });
+
+      const testResult = await validateProvider(config);
+      return json(testResult);
     }
 
-    const { data: config } = await supabase
-      .from("ai_provider_configs")
-      .select("*")
-      .eq("provider", "claude")
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (!config?.api_key_encrypted) {
-      return json({ success: false, error: "Configure a API do Claude antes de gerar." });
+    // ── Get active AI config ────────────────────────────────
+    const config = await getActiveConfig(supabase);
+    if (!config) {
+      return json({ success: false, error: "Configure um provider de IA (Claude ou OpenRouter) antes de gerar." });
     }
 
     const { data: project } = await supabase
@@ -112,28 +88,31 @@ serve(async (req: Request) => {
       return json({ success: false, error: `Tipo de job desconhecido: ${job_type}` });
     }
 
+    // ── Call AI (routed by provider) ────────────────────────
     const startTime = Date.now();
-    const claudeResponse = await callClaude(config, systemPrompt, prompt);
+    const aiResponse = await callAI(config, systemPrompt, prompt);
     const duration = Date.now() - startTime;
 
-    if (!claudeResponse.success) {
+    if (!aiResponse.success) {
       await supabase.from("lp_ads_generation_jobs").update({
         status: "failed",
-        error_message: claudeResponse.error,
+        error_message: aiResponse.error,
         finished_at: new Date().toISOString(),
       }).eq("id", job.id);
-      return json({ success: false, error: claudeResponse.error });
+      return json({ success: false, error: aiResponse.error });
     }
 
-    const result = parseClaudeResponse(claudeResponse.text, job_type);
+    const result = parseAIResponse(aiResponse.text, job_type);
+    const providerLabel = config.provider === "openrouter" ? `openrouter/${config.model}` : config.provider;
+    const creationMode = config.provider === "openrouter" ? "ai_openrouter" : "ai_claude";
 
     await supabase.from("lp_ads_generation_jobs").update({
       status: "completed",
       prompt_used: prompt.substring(0, 5000),
       model_used: config.model,
-      tokens_input: claudeResponse.usage?.input_tokens || 0,
-      tokens_output: claudeResponse.usage?.output_tokens || 0,
-      cost_estimate: estimateCost(config.model, claudeResponse.usage),
+      tokens_input: aiResponse.usage?.input_tokens || 0,
+      tokens_output: aiResponse.usage?.output_tokens || 0,
+      cost_estimate: estimateCost(config.provider, config.model, aiResponse.usage),
       finished_at: new Date().toISOString(),
     }).eq("id", job.id);
 
@@ -143,7 +122,7 @@ serve(async (req: Request) => {
       const lpPayload: any = {
         project_id,
         page_type: "base",
-        creation_mode: "ai_claude",
+        creation_mode: creationMode,
         title: `${project.name} - Landing Page Base`,
         content: result.sections ? { sections: result.sections, meta: result.meta, theme: result.theme } : {},
         html_code: result.html_code || "",
@@ -165,9 +144,9 @@ serve(async (req: Request) => {
         html_code: lpPayload.html_code,
         prompt_used: prompt.substring(0, 5000),
         model_used: config.model,
-        tokens_input: claudeResponse.usage?.input_tokens || 0,
-        tokens_output: claudeResponse.usage?.output_tokens || 0,
-        generated_by: "claude",
+        tokens_input: aiResponse.usage?.input_tokens || 0,
+        tokens_output: aiResponse.usage?.output_tokens || 0,
+        generated_by: providerLabel,
       }]);
       await supabase.from("lp_ads_projects").update({ status: "generated" }).eq("id", project_id);
     } else if (job_type === "generate_ad") {
@@ -184,7 +163,7 @@ serve(async (req: Request) => {
         project_id,
         campaign_id: target_id,
         page_type: "variant",
-        creation_mode: "ai_claude",
+        creation_mode: creationMode,
         title: `${project.name} - ${campaign?.focus_angle || campaign?.name || "Variante"}`,
         content: result.sections ? { sections: result.sections, meta: result.meta, theme: result.theme } : {},
         html_code: result.html_code || "",
@@ -206,9 +185,9 @@ serve(async (req: Request) => {
         html_code: lpPayload.html_code,
         prompt_used: prompt.substring(0, 5000),
         model_used: config.model,
-        tokens_input: claudeResponse.usage?.input_tokens || 0,
-        tokens_output: claudeResponse.usage?.output_tokens || 0,
-        generated_by: "claude",
+        tokens_input: aiResponse.usage?.input_tokens || 0,
+        tokens_output: aiResponse.usage?.output_tokens || 0,
+        generated_by: providerLabel,
       }]);
     } else if (job_type === "regenerate_section" && target_id) {
       const { data: lp } = await supabase.from("lp_ads_landing_pages").select("*").eq("id", target_id).single();
@@ -224,19 +203,19 @@ serve(async (req: Request) => {
       if (lp) {
         const newVersion = (lp.current_version || 0) + 1;
         await supabase.from("lp_ads_landing_pages").update({
-          html_code: claudeResponse.text,
+          html_code: aiResponse.text,
           current_version: newVersion,
         }).eq("id", target_id);
         await supabase.from("lp_ads_lp_versions").insert([{
           landing_page_id: target_id,
           version_number: newVersion,
           content: lp.content || {},
-          html_code: claudeResponse.text,
+          html_code: aiResponse.text,
           prompt_used: prompt.substring(0, 5000),
           model_used: config.model,
-          tokens_input: claudeResponse.usage?.input_tokens || 0,
-          tokens_output: claudeResponse.usage?.output_tokens || 0,
-          generated_by: "claude",
+          tokens_input: aiResponse.usage?.input_tokens || 0,
+          tokens_output: aiResponse.usage?.output_tokens || 0,
+          generated_by: providerLabel,
         }]);
       }
     }
@@ -246,10 +225,11 @@ serve(async (req: Request) => {
       job_id: job.id,
       result,
       metadata: {
+        provider: config.provider,
         model: config.model,
-        tokens_input: claudeResponse.usage?.input_tokens || 0,
-        tokens_output: claudeResponse.usage?.output_tokens || 0,
-        cost_estimate_usd: estimateCost(config.model, claudeResponse.usage),
+        tokens_input: aiResponse.usage?.input_tokens || 0,
+        tokens_output: aiResponse.usage?.output_tokens || 0,
+        cost_estimate_usd: estimateCost(config.provider, config.model, aiResponse.usage),
         duration_ms: duration,
       },
     });
@@ -259,11 +239,68 @@ serve(async (req: Request) => {
   }
 });
 
+// ── Helpers ──────────────────────────────────────────────────
+
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+async function getActiveConfig(supabase: any): Promise<any | null> {
+  const { data } = await supabase
+    .from("ai_provider_configs")
+    .select("*")
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  return data || null;
+}
+
+async function validateProvider(config: any): Promise<{ success: boolean; error?: string }> {
+  if (!config.api_key_encrypted) {
+    return { success: false, error: `${config.provider} não configurado` };
+  }
+
+  try {
+    if (config.provider === "openrouter") {
+      const resp = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.api_key_encrypted}`,
+          "HTTP-Referer": Deno.env.get("SUPABASE_URL") ?? "https://voll.app",
+        },
+        body: JSON.stringify({
+          model: config.model || "anthropic/claude-sonnet-4-20250514",
+          max_tokens: 10,
+          messages: [{ role: "user", content: "Responda apenas: OK" }],
+        }),
+      });
+      if (!resp.ok) return { success: false, error: "API key OpenRouter inválida ou sem créditos" };
+      return { success: true };
+    }
+
+    // Claude (direto)
+    const resp = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.api_key_encrypted,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: config.model || "claude-sonnet-4-20250514",
+        max_tokens: 10,
+        messages: [{ role: "user", content: "Responda apenas: OK" }],
+      }),
+    });
+    if (!resp.ok) return { success: false, error: "API key Claude inválida ou sem créditos" };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 function getTargetType(jobType: string): string {
@@ -272,6 +309,110 @@ function getTargetType(jobType: string): string {
   if (jobType.includes("section")) return "section";
   return "";
 }
+
+// ── AI Call Router ──────────────────────────────────────────
+
+async function callAI(config: any, systemPrompt: string, userPrompt: string): Promise<any> {
+  if (config.provider === "openrouter") {
+    return callOpenRouter(config, systemPrompt, userPrompt);
+  }
+  return callClaude(config, systemPrompt, userPrompt);
+}
+
+async function callClaude(config: any, systemPrompt: string, userPrompt: string, retries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const resp = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": config.api_key_encrypted,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: config.model || "claude-sonnet-4-20250514",
+          max_tokens: config.max_tokens || 4096,
+          temperature: config.temperature ?? 0.7,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.text();
+        if (attempt === retries) return { success: false, error: `Claude API: ${resp.status} - ${err}` };
+        await new Promise(r => setTimeout(r, Math.pow(3, attempt) * 1000));
+        continue;
+      }
+
+      const data = await resp.json();
+      const text = data.content?.[0]?.text || "";
+      return {
+        success: true,
+        text,
+        usage: {
+          input_tokens: data.usage?.input_tokens || 0,
+          output_tokens: data.usage?.output_tokens || 0,
+        },
+      };
+    } catch (err: any) {
+      if (attempt === retries) return { success: false, error: err.message };
+      await new Promise(r => setTimeout(r, Math.pow(3, attempt) * 1000));
+    }
+  }
+  return { success: false, error: "Claude: falha após múltiplas tentativas" };
+}
+
+async function callOpenRouter(config: any, systemPrompt: string, userPrompt: string, retries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const messages: any[] = [];
+      if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+      messages.push({ role: "user", content: userPrompt });
+
+      const resp = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.api_key_encrypted}`,
+          "HTTP-Referer": Deno.env.get("SUPABASE_URL") ?? "https://voll.app",
+          "X-Title": "VOLL LP+Ads Generator",
+        },
+        body: JSON.stringify({
+          model: config.model || "anthropic/claude-sonnet-4-20250514",
+          max_tokens: config.max_tokens || 4096,
+          temperature: config.temperature ?? 0.7,
+          messages,
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.text();
+        if (attempt === retries) return { success: false, error: `OpenRouter API: ${resp.status} - ${err}` };
+        await new Promise(r => setTimeout(r, Math.pow(3, attempt) * 1000));
+        continue;
+      }
+
+      const data = await resp.json();
+      const text = data.choices?.[0]?.message?.content || "";
+
+      return {
+        success: true,
+        text,
+        usage: {
+          input_tokens: data.usage?.prompt_tokens || 0,
+          output_tokens: data.usage?.completion_tokens || 0,
+        },
+      };
+    } catch (err: any) {
+      if (attempt === retries) return { success: false, error: err.message };
+      await new Promise(r => setTimeout(r, Math.pow(3, attempt) * 1000));
+    }
+  }
+  return { success: false, error: "OpenRouter: falha após múltiplas tentativas" };
+}
+
+// ── Prompt Builders ─────────────────────────────────────────
 
 function buildProductData(project: any): string {
   const fields = [
@@ -392,44 +533,9 @@ INSTRUÇÃO: ${instruction}
 Retorne JSON da seção: {"id":"${sectionId}","type":"${section?.type || ""}","enabled":true,"headline":"...","body":"...","items":[...],"cta":"..."}`;
 }
 
-async function callClaude(config: any, systemPrompt: string, userPrompt: string, retries = 3): Promise<any> {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const resp = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": config.api_key_encrypted,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: config.model || "claude-sonnet-4-20250514",
-          max_tokens: config.max_tokens || 4096,
-          temperature: config.temperature ?? 0.7,
-          system: systemPrompt,
-          messages: [{ role: "user", content: userPrompt }],
-        }),
-      });
+// ── Response Parser ─────────────────────────────────────────
 
-      if (!resp.ok) {
-        const err = await resp.text();
-        if (attempt === retries) return { success: false, error: `Claude API: ${resp.status} - ${err}` };
-        await new Promise(r => setTimeout(r, Math.pow(3, attempt) * 1000));
-        continue;
-      }
-
-      const data = await resp.json();
-      const text = data.content?.[0]?.text || "";
-      return { success: true, text, usage: data.usage };
-    } catch (err: any) {
-      if (attempt === retries) return { success: false, error: err.message };
-      await new Promise(r => setTimeout(r, Math.pow(3, attempt) * 1000));
-    }
-  }
-  return { success: false, error: "Falha após múltiplas tentativas" };
-}
-
-function parseClaudeResponse(text: string, jobType: string): any {
+function parseAIResponse(text: string, jobType: string): any {
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { html_code: text };
@@ -440,10 +546,27 @@ function parseClaudeResponse(text: string, jobType: string): any {
   }
 }
 
-function estimateCost(model: string, usage: any): number {
+// ── Cost Estimation ─────────────────────────────────────────
+
+function estimateCost(provider: string, model: string, usage: any): number {
   if (!usage) return 0;
   const inputTokens = usage.input_tokens || 0;
   const outputTokens = usage.output_tokens || 0;
+
+  if (provider === "openrouter") {
+    // OpenRouter pricing varies per model — use approximate known rates
+    if (model.includes("haiku")) return (inputTokens * 0.25 + outputTokens * 1.25) / 1_000_000;
+    if (model.includes("gpt-4o-mini") || model.includes("gemini-flash")) return (inputTokens * 0.15 + outputTokens * 0.6) / 1_000_000;
+    if (model.includes("gpt-4o")) return (inputTokens * 2.5 + outputTokens * 10) / 1_000_000;
+    if (model.includes("llama")) return (inputTokens * 0.8 + outputTokens * 0.8) / 1_000_000;
+    if (model.includes("deepseek")) return (inputTokens * 0.14 + outputTokens * 0.28) / 1_000_000;
+    if (model.includes("sonnet")) return (inputTokens * 3 + outputTokens * 15) / 1_000_000;
+    if (model.includes("gemini-pro")) return (inputTokens * 1.25 + outputTokens * 5) / 1_000_000;
+    // Fallback: moderate cost assumption
+    return (inputTokens * 1 + outputTokens * 3) / 1_000_000;
+  }
+
+  // Claude direct pricing
   if (model.includes("haiku")) return (inputTokens * 0.25 + outputTokens * 1.25) / 1_000_000;
   if (model.includes("sonnet")) return (inputTokens * 3 + outputTokens * 15) / 1_000_000;
   return (inputTokens * 3 + outputTokens * 15) / 1_000_000;

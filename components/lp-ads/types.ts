@@ -2,12 +2,12 @@
 
 export type LPAdsProjectStatus = 'draft' | 'generating' | 'generated' | 'reviewing' | 'approved' | 'published' | 'archived';
 export type LPAdsPageType = 'base' | 'variant';
-export type LPAdsCreationMode = 'ai_claude' | 'import_html' | 'blank_template';
+export type LPAdsCreationMode = 'ai_claude' | 'ai_openrouter' | 'import_html' | 'blank_template';
 export type LPAdsAssetType = 'url' | 'pdf' | 'text' | 'html_file';
 export type LPAdsPlatform = 'google_ads' | 'meta_ads' | 'instagram' | 'tiktok' | 'linkedin' | 'youtube' | 'other';
 export type LPAdsJobType = 'generate_base_lp' | 'generate_ad' | 'generate_variant_lp' | 'regenerate_section' | 'rewrite_html';
 export type LPAdsJobStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type AIProvider = 'claude' | 'gemini' | 'openai' | 'custom';
+export type AIProvider = 'claude' | 'openrouter' | 'gemini' | 'openai' | 'custom';
 
 export interface AIProviderConfig {
   id: string;

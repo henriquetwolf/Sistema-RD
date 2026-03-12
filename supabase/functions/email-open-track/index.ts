@@ -1,10 +1,12 @@
 /**
  * Rastreamento de abertura de e-mail (tracking pixel).
  * GET ?s=<send_id> → 1x1 GIF e marca abertura única do destinatário (uma por e-mail).
+ * Ignora requisições nos primeiros 45s após o envio (prefetch de Gmail/Outlook não conta como abertura).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MIN_SECONDS_AFTER_SEND = 45; // prefetchers carregam na hora; usuário real abre depois
 const TRANSPARENT_GIF = Uint8Array.from(
   atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"),
   (c) => c.charCodeAt(0)
@@ -44,7 +46,7 @@ Deno.serve(async (req) => {
   try {
     const { data: sendRow } = await supabase
       .from("marketing_email_sends")
-      .select("id, campaign_id, opened_at")
+      .select("id, campaign_id, opened_at, sent_at")
       .eq("id", sendId)
       .single();
 
@@ -57,8 +59,11 @@ Deno.serve(async (req) => {
 
     const campaignId = sendRow.campaign_id as string;
     const alreadyOpened = !!sendRow.opened_at;
+    const sentAt = sendRow.sent_at ? new Date(sendRow.sent_at as string).getTime() : 0;
+    const elapsedSec = sentAt ? (Date.now() - sentAt) / 1000 : MIN_SECONDS_AFTER_SEND;
+    const afterMinDelay = elapsedSec >= MIN_SECONDS_AFTER_SEND;
 
-    if (!alreadyOpened) {
+    if (!alreadyOpened && afterMinDelay) {
       const now = new Date().toISOString();
       await supabase
         .from("marketing_email_sends")

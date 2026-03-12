@@ -1754,7 +1754,13 @@ export const appBackend = {
     let sent = 0;
     let failed = 0;
     const subject = (campaign.subject || '').trim() || 'Sem assunto';
-    const htmlContent = (campaign.html_content || '').trim() || '<p>Sem conteúdo.</p>';
+    let htmlContent = (campaign.html_content || '').trim() || '<p>Sem conteúdo.</p>';
+    const baseUrl = (APP_URL || '').replace(/\/$/, '');
+    const trackingPixelUrl = baseUrl ? `${baseUrl}/functions/v1/email-open-track?c=${campaignId}` : '';
+    if (trackingPixelUrl) {
+      const pixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none" alt="" />`;
+      htmlContent = htmlContent.includes('</body>') ? htmlContent.replace('</body>', `${pixel}</body>`) : htmlContent + '\n' + pixel;
+    }
     for (const lead of withEmail) {
       const to = (lead.email || '').trim();
       const toName = (lead.name || lead.email || to).trim();

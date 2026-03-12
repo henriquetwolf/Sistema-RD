@@ -1624,13 +1624,15 @@ export const appBackend = {
   // --- Segments ---
   getMarketingSegments: async (): Promise<any[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('marketing_segments').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('marketing_segments').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
     return data || [];
   },
 
   saveMarketingSegment: async (segment: any): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('marketing_segments').upsert({ ...segment, id: segment.id || crypto.randomUUID() });
+    const { error } = await supabase.from('marketing_segments').upsert({ ...segment, id: segment.id || crypto.randomUUID() });
+    if (error) throw error;
   },
 
   deleteMarketingSegment: async (id: string): Promise<void> => {
@@ -1671,13 +1673,41 @@ export const appBackend = {
   // --- Email Campaigns ---
   getEmailCampaigns: async (): Promise<any[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('marketing_email_campaigns').select('*').order('created_at', { ascending: false });
-    return data || [];
+    const { data, error } = await supabase.from('marketing_email_campaigns').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    // Mapeia colunas do banco (stats_*, ab_*) para o que o frontend espera (stats, ab_test, subject_b)
+    return (data || []).map((row: any) => ({
+      ...row,
+      stats: {
+        sent: row.stats_sent ?? row.stats?.sent ?? 0,
+        delivered: row.stats_delivered ?? row.stats?.delivered ?? 0,
+        opened: row.stats_opened ?? row.stats?.opened ?? 0,
+        clicked: row.stats_clicked ?? row.stats?.clicked ?? 0,
+        bounced: row.stats_bounced ?? row.stats?.bounced ?? 0,
+        unsubscribed: row.stats_unsubscribed ?? row.stats?.unsubscribed ?? 0,
+      },
+      ab_test: row.ab_test_enabled ?? row.ab_test ?? false,
+      subject_b: row.ab_subject_b ?? row.subject_b ?? '',
+    }));
   },
 
   saveEmailCampaign: async (campaign: any): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('marketing_email_campaigns').upsert({ ...campaign, id: campaign.id || crypto.randomUUID() });
+    const { stats, ab_test, subject_b, scheduled, ...rest } = campaign;
+    const row = {
+      ...rest,
+      id: campaign.id || crypto.randomUUID(),
+      stats_sent: stats?.sent ?? rest.stats_sent ?? 0,
+      stats_delivered: stats?.delivered ?? rest.stats_delivered ?? 0,
+      stats_opened: stats?.opened ?? rest.stats_opened ?? 0,
+      stats_clicked: stats?.clicked ?? rest.stats_clicked ?? 0,
+      stats_bounced: stats?.bounced ?? rest.stats_bounced ?? 0,
+      stats_unsubscribed: stats?.unsubscribed ?? rest.stats_unsubscribed ?? 0,
+      ab_test_enabled: ab_test ?? rest.ab_test_enabled ?? false,
+      ab_subject_b: subject_b ?? rest.ab_subject_b ?? '',
+    };
+    const { error } = await supabase.from('marketing_email_campaigns').upsert(row);
+    if (error) throw error;
   },
 
   deleteEmailCampaign: async (id: string): Promise<void> => {

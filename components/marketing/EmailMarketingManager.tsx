@@ -531,10 +531,13 @@ export const EmailMarketingManager: React.FC = () => {
                 className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
               >
                 <option value="">Todos os contatos</option>
-                {segments.map((s: any) => (
+                {(segments || []).map((s: any) => (
                   <option key={s.id} value={s.id}>{s.name || 'Segmento'}</option>
                 ))}
               </select>
+              {Array.isArray(segments) && segments.length === 0 && (
+                <p className="text-xs text-slate-500">Nenhum segmento criado. Crie segmentos em VOLL Marketing → Segmentos para filtrar o público.</p>
+              )}
             </div>
 
             {/* Schedule */}

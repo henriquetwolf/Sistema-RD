@@ -1779,13 +1779,29 @@ export const appBackend = {
   // --- WhatsApp Buttons ---
   getMarketingWAButtons: async (): Promise<any[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('marketing_wa_buttons').select('*').order('created_at', { ascending: false });
-    return data || [];
+    const { data, error } = await supabase.from('marketing_wa_buttons').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    // Mapeia colunas do banco para o que o frontend espera (position, label_text, click_count)
+    return (data || []).map((row: any) => ({
+      ...row,
+      position: row.button_position ?? row.position ?? 'bottom-right',
+      label_text: row.label ?? row.label_text ?? '',
+      click_count: row.stats_clicks ?? row.click_count ?? 0,
+    }));
   },
 
   saveMarketingWAButton: async (btn: any): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('marketing_wa_buttons').upsert({ ...btn, id: btn.id || crypto.randomUUID() });
+    const { position, label_text, click_count, ...rest } = btn;
+    const row = {
+      ...rest,
+      id: btn.id || crypto.randomUUID(),
+      button_position: position ?? rest.button_position ?? 'bottom-right',
+      label: label_text ?? rest.label ?? '',
+      stats_clicks: click_count ?? rest.stats_clicks ?? 0,
+    };
+    const { error } = await supabase.from('marketing_wa_buttons').upsert(row);
+    if (error) throw error;
   },
 
   deleteMarketingWAButton: async (id: string): Promise<void> => {

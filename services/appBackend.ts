@@ -1032,7 +1032,12 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_support_tickets').select('*').eq('sender_id', senderId).order('created_at', { ascending: false });
+    // Retorna chamados onde o usuário é REMETENTE ou DESTINATÁRIO (ex.: chamados iniciados pelo admin para este usuário)
+    const { data, error } = await supabase
+      .from('crm_support_tickets')
+      .select('*')
+      .or(`sender_id.eq.${senderId},target_id.eq.${senderId}`)
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((t: any) => ({ id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at }));
   },

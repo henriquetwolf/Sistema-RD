@@ -92,8 +92,17 @@ export const LPAdsAdCampaignList: React.FC<Props> = ({ project, campaigns, baseL
         project_id: project.id,
         target_id: campaignId,
       });
-      if (result?.success) onCampaignsChange();
-      else alert(result?.error || 'Erro ao gerar anúncio.');
+      if (result?.success) {
+        if (result.job_id && result.status !== 'completed') {
+          const jobResult = await appBackend.lpAds.waitForJob(result.job_id);
+          if (jobResult.success) onCampaignsChange();
+          else alert(jobResult.error || 'Erro ao gerar anúncio.');
+        } else {
+          onCampaignsChange();
+        }
+      } else if (result?.error) {
+        alert(result.error);
+      }
     } catch { /* silent */ }
     setGeneratingAdId(null);
   };
@@ -108,10 +117,20 @@ export const LPAdsAdCampaignList: React.FC<Props> = ({ project, campaigns, baseL
         target_id: campaignId,
       });
       if (result?.success) {
-        onLPChange();
-        onCampaignsChange();
-      } else {
-        alert(result?.error || 'Erro ao gerar LP derivada.');
+        if (result.job_id && result.status !== 'completed') {
+          const jobResult = await appBackend.lpAds.waitForJob(result.job_id);
+          if (jobResult.success) {
+            onLPChange();
+            onCampaignsChange();
+          } else {
+            alert(jobResult.error || 'Erro ao gerar LP derivada.');
+          }
+        } else {
+          onLPChange();
+          onCampaignsChange();
+        }
+      } else if (result?.error) {
+        alert(result.error);
       }
     } catch { /* silent */ }
     setGeneratingLpId(null);

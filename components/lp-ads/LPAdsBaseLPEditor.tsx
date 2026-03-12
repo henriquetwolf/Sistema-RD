@@ -34,6 +34,7 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
   const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
   const [rewriteInstruction, setRewriteInstruction] = useState('');
   const [isRewriting, setIsRewriting] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,20 +52,41 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
 
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
+    setGenerationProgress('Iniciando geração...');
     try {
       const result = await appBackend.lpAds.generate({
         job_type: 'generate_base_lp',
         project_id: project.id,
       });
-      if (result?.success) {
+
+      if (result?.success && result?.job_id) {
+        if (result.status === 'completed') {
+          onLPChange();
+        } else {
+          setGenerationProgress('IA gerando sua página de vendas... Isso pode levar até 2 minutos.');
+          const jobResult = await appBackend.lpAds.waitForJob(result.job_id, (status) => {
+            if (status === 'running') setGenerationProgress('IA gerando sua página de vendas... Aguarde...');
+            else if (status === 'completed') setGenerationProgress('Página gerada! Carregando...');
+          });
+          if (jobResult.success) {
+            onLPChange();
+          } else if (jobResult.status !== 'timeout') {
+            alert(jobResult.error || 'Erro na geração.');
+          } else {
+            alert('A geração está demorando mais que o esperado. Recarregue a página em alguns instantes.');
+          }
+        }
+      } else if (result?.success && result?.result) {
+        // Old Edge Function format — result returned directly
         onLPChange();
-      } else {
-        alert(result?.error || 'Erro na geração. Verifique a configuração do Claude.');
+      } else if (result?.error) {
+        alert(result.error);
       }
     } catch (err: any) {
       alert(err?.message || 'Erro ao gerar landing page.');
     }
     setIsGenerating(false);
+    setGenerationProgress('');
   };
 
   const handleImportHtml = async (html: string) => {
@@ -150,9 +172,12 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
         target_id: lp?.id,
         user_instruction: rewriteInstruction,
       });
-      if (result?.success && result?.result?.html_code) {
-        setHtmlCode(result.result.html_code);
+      if (result?.success) {
+        if (result.job_id && result.status !== 'completed') {
+          await appBackend.lpAds.waitForJob(result.job_id);
+        }
         setRewriteInstruction('');
+        onLPChange();
       }
     } catch { /* silent */ }
     setIsRewriting(false);
@@ -167,7 +192,12 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
         target_id: lp?.id,
         section_id: sectionId,
       });
-      if (result?.success) onLPChange();
+      if (result?.success) {
+        if (result.job_id && result.status !== 'completed') {
+          await appBackend.lpAds.waitForJob(result.job_id);
+        }
+        onLPChange();
+      }
     } catch { /* silent */ }
     setRegeneratingSection(null);
   };
@@ -204,12 +234,18 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
               className="bg-white rounded-2xl border-2 border-slate-100 p-8 hover:border-indigo-300 hover:shadow-lg transition-all text-center group"
             >
               {isGenerating ? (
-                <Loader2 size={36} className="mx-auto mb-4 text-indigo-400 animate-spin" />
+                <>
+                  <Loader2 size={36} className="mx-auto mb-4 text-indigo-400 animate-spin" />
+                  <h3 className="font-bold text-indigo-600 mb-1">Gerando página...</h3>
+                  <p className="text-xs text-indigo-400">{generationProgress || 'Preparando...'}</p>
+                </>
               ) : (
-                <Sparkles size={36} className="mx-auto mb-4 text-indigo-500 group-hover:scale-110 transition-transform" />
+                <>
+                  <Sparkles size={36} className="mx-auto mb-4 text-indigo-500 group-hover:scale-110 transition-transform" />
+                  <h3 className="font-bold text-slate-800 mb-1">Gerar com IA</h3>
+                  <p className="text-xs text-slate-400">A IA cria uma landing page completa e estilizada baseada nos dados do produto</p>
+                </>
               )}
-              <h3 className="font-bold text-slate-800 mb-1">Gerar com IA (Claude)</h3>
-              <p className="text-xs text-slate-400">A IA cria uma landing page completa baseada nos dados do produto</p>
             </button>
 
             <button
@@ -468,7 +504,7 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
             className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-indigo-200 rounded-xl text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40"
           >
             {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {lp ? 'Regenerar Landing Page Completa' : 'Gerar com Claude'}
+            {isGenerating ? (generationProgress || 'Gerando...') : lp ? 'Regenerar Landing Page Completa' : 'Gerar com IA'}
           </button>
         </div>
 

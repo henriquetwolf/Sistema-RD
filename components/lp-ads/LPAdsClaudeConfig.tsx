@@ -35,6 +35,29 @@ const PROVIDER_TABS: { id: ProviderTab; label: string; icon: React.ReactNode; de
   { id: 'openrouter', label: 'OpenRouter', icon: <Globe2 size={18} />, description: 'Acesso a centenas de modelos (Claude, GPT, Gemini, Llama...) com uma única API key.' },
 ];
 
+const POWERFUL_SYSTEM_PROMPT = `Você é um copywriter sênior de vendas e web designer de classe mundial. Você cria landing pages de alta conversão, visualmente impressionantes.
+
+REGRAS OBRIGATÓRIAS PARA TODAS AS GERAÇÕES DE LANDING PAGE:
+1. O html_code DEVE ser uma página HTML COMPLETA com <!DOCTYPE html>, <html lang="pt-BR">, <head> e <body>.
+2. SEMPRE inclua no <head>:
+   <script src="https://cdn.tailwindcss.com"></script>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+3. Use design VISUALMENTE IMPRESSIONANTE:
+   - Gradientes vibrantes no hero (bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800)
+   - Texto branco grande no hero (text-4xl md:text-6xl font-black)
+   - Cards com sombras (shadow-xl rounded-2xl) e padding generoso
+   - Botões de CTA grandes e vibrantes com hover effects
+   - Emojis em listas de benefícios (✅ ⚡ 🎯 💡 🏆)
+   - Seções alternando bg-white e bg-gray-50, espaçamento py-16 md:py-24
+   - Responsivo com breakpoints md: e lg:
+   - FAQ com <details>/<summary> estilizados
+   - Footer escuro (bg-gray-900)
+4. Gere pelo menos 12 seções: hero, problema, transformação, como funciona, benefícios, para quem é, o que inclui, prova social, preço, garantia, FAQ, CTA final.
+5. Use {{form}} onde o formulário deve aparecer e {{cta_link}} em todos os CTAs.
+6. Copy em português brasileiro, persuasiva (técnicas PAS, AIDA).
+7. SEMPRE retorne JSON válido quando solicitado.
+8. A página deve ser LONGA e DETALHADA — nunca minimalista.`;
+
 const DEFAULT_CONFIGS: Record<ProviderTab, Partial<AIProviderConfig>> = {
   claude: {
     provider: 'claude',
@@ -43,7 +66,7 @@ const DEFAULT_CONFIGS: Record<ProviderTab, Partial<AIProviderConfig>> = {
     model: 'claude-sonnet-4-20250514',
     temperature: 0.7,
     max_tokens: 16000,
-    system_prompt: '',
+    system_prompt: POWERFUL_SYSTEM_PROMPT,
     is_active: false,
   },
   openrouter: {
@@ -53,7 +76,7 @@ const DEFAULT_CONFIGS: Record<ProviderTab, Partial<AIProviderConfig>> = {
     model: 'anthropic/claude-sonnet-4-20250514',
     temperature: 0.7,
     max_tokens: 16000,
-    system_prompt: '',
+    system_prompt: POWERFUL_SYSTEM_PROMPT,
     is_active: false,
   },
 };
@@ -86,6 +109,26 @@ export const LPAdsClaudeConfig: React.FC = () => {
             setCustomModel(openrouterConfig.model);
           }
         }
+
+        // Auto-upgrade configs with outdated values
+        for (const provider of ['claude', 'openrouter'] as ProviderTab[]) {
+          const cfg = newConfigs[provider];
+          if (cfg.id && cfg.api_key_encrypted) {
+            let needsUpdate = false;
+            if ((cfg.max_tokens || 0) < 16000) {
+              cfg.max_tokens = 16000;
+              needsUpdate = true;
+            }
+            if (!cfg.system_prompt || cfg.system_prompt.length < 200) {
+              cfg.system_prompt = POWERFUL_SYSTEM_PROMPT;
+              needsUpdate = true;
+            }
+            if (needsUpdate) {
+              try { await appBackend.lpAds.aiConfigs.save({ ...cfg }); } catch { /* silent */ }
+            }
+          }
+        }
+
         setConfigs(newConfigs);
         if (!claudeConfig?.is_active && openrouterConfig?.is_active) setActiveTab('openrouter');
       } catch { /* silent */ }

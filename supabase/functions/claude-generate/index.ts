@@ -25,9 +25,20 @@ serve(async (req: Request) => {
     if (project_id === "validate-only") {
       const config = await getActiveConfig(supabase);
       if (!config) return json({ success: false, error: "Nenhum provider de IA configurado e ativo." });
-
       const testResult = await validateProvider(config);
       return json(testResult);
+    }
+
+    // ── Poll job status flow ────────────────────────────────
+    if (job_type === "poll_status") {
+      const jobId = target_id;
+      const { data: jobData } = await supabase
+        .from("lp_ads_generation_jobs")
+        .select("id, status, error_message, finished_at, model_used, tokens_input, tokens_output, cost_estimate")
+        .eq("id", jobId)
+        .single();
+      if (!jobData) return json({ success: false, error: "Job não encontrado" });
+      return json({ success: true, job: jobData });
     }
 
     // ── Get active AI config ────────────────────────────────
@@ -49,16 +60,7 @@ serve(async (req: Request) => {
       .select("*")
       .eq("project_id", project_id);
 
-    const jobRecord = {
-      project_id,
-      target_id: target_id || null,
-      target_type: getTargetType(job_type),
-      job_type,
-      status: "running",
-      started_at: new Date().toISOString(),
-    };
-    const { data: job } = await supabase.from("lp_ads_generation_jobs").insert([jobRecord]).select().single();
-
+    // ── Build prompt (pre-flight) ───────────────────────────
     const productData = buildProductData(project);
     const referenceContent = buildReferenceContent(assets || []);
 
@@ -107,15 +109,74 @@ NÃO retorne JSON — retorne APENAS o HTML completo.`;
       return json({ success: false, error: `Tipo de job desconhecido: ${job_type}` });
     }
 
+    // ── Create job record ───────────────────────────────────
+    const jobRecord = {
+      project_id,
+      target_id: target_id || null,
+      target_type: getTargetType(job_type),
+      job_type,
+      status: "running",
+      started_at: new Date().toISOString(),
+    };
+    const { data: job } = await supabase.from("lp_ads_generation_jobs").insert([jobRecord]).select().single();
+
+    if (!job) return json({ success: false, error: "Falha ao criar job." });
+
     // ── Determine max_tokens based on job type ─────────────
     const lpJobTypes = ["generate_base_lp", "generate_variant_lp", "rewrite_html"];
     const effectiveMaxTokens = lpJobTypes.includes(job_type)
       ? Math.max(config.max_tokens || 4096, 16000)
       : config.max_tokens || 4096;
 
-    // ── Call AI (routed by provider) ────────────────────────
+    // ── Process in background — respond immediately ─────────
+    const processingPromise = processGeneration(
+      supabase, config, systemPrompt, prompt, effectiveMaxTokens,
+      job, job_type, project_id, project, target_id, section_id
+    );
+
+    // Use EdgeRuntime.waitUntil if available; otherwise fallback
+    try {
+      // @ts-ignore - EdgeRuntime is a Deno Deploy global
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+        EdgeRuntime.waitUntil(processingPromise);
+      } else {
+        processingPromise.catch((err: any) => console.error("Background processing error:", err));
+      }
+    } catch {
+      processingPromise.catch((err: any) => console.error("Background processing error:", err));
+    }
+
+    return json({
+      success: true,
+      job_id: job.id,
+      status: "processing",
+      message: "Geração iniciada. Acompanhe pelo job_id.",
+    });
+
+  } catch (err: any) {
+    console.error("claude-generate error:", err);
+    return json({ success: false, error: err.message || "Erro interno" }, 500);
+  }
+});
+
+// ── Background Processing ───────────────────────────────────
+
+async function processGeneration(
+  supabase: any,
+  config: any,
+  systemPrompt: string,
+  prompt: string,
+  maxTokens: number,
+  job: any,
+  job_type: string,
+  project_id: string,
+  project: any,
+  target_id: string | null,
+  section_id: string | null,
+): Promise<void> {
+  try {
     const startTime = Date.now();
-    const aiResponse = await callAI(config, systemPrompt, prompt, effectiveMaxTokens);
+    const aiResponse = await callAI(config, systemPrompt, prompt, maxTokens);
     const duration = Date.now() - startTime;
 
     if (!aiResponse.success) {
@@ -124,7 +185,7 @@ NÃO retorne JSON — retorne APENAS o HTML completo.`;
         error_message: aiResponse.error,
         finished_at: new Date().toISOString(),
       }).eq("id", job.id);
-      return json({ success: false, error: aiResponse.error });
+      return;
     }
 
     const result = parseAIResponse(aiResponse.text, job_type);
@@ -244,25 +305,15 @@ NÃO retorne JSON — retorne APENAS o HTML completo.`;
         }]);
       }
     }
-
-    return json({
-      success: true,
-      job_id: job.id,
-      result,
-      metadata: {
-        provider: config.provider,
-        model: config.model,
-        tokens_input: aiResponse.usage?.input_tokens || 0,
-        tokens_output: aiResponse.usage?.output_tokens || 0,
-        cost_estimate_usd: estimateCost(config.provider, config.model, aiResponse.usage),
-        duration_ms: duration,
-      },
-    });
   } catch (err: any) {
-    console.error("claude-generate error:", err);
-    return json({ success: false, error: err.message || "Erro interno" }, 500);
+    console.error("processGeneration error:", err);
+    await supabase.from("lp_ads_generation_jobs").update({
+      status: "failed",
+      error_message: err.message || "Erro no processamento",
+      finished_at: new Date().toISOString(),
+    }).eq("id", job.id);
   }
-});
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 

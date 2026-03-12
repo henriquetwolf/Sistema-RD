@@ -3689,11 +3689,108 @@ export const appBackend = {
       return data.publicUrl || '';
     },
 
+    ensureConfigUpgraded: async (): Promise<void> => {
+      if (!isConfigured) return;
+      try {
+        const { data: configs } = await supabase.from('ai_provider_configs').select('*');
+        if (!configs) return;
+        const POWERFUL_SYSTEM_PROMPT = `Você é um copywriter sênior de vendas e web designer de classe mundial. Você cria landing pages de alta conversão, visualmente impressionantes.
+
+REGRAS OBRIGATÓRIAS PARA TODAS AS GERAÇÕES DE LANDING PAGE:
+1. O html_code DEVE ser uma página HTML COMPLETA com <!DOCTYPE html>, <html lang="pt-BR">, <head> e <body>.
+2. SEMPRE inclua no <head>:
+   <script src="https://cdn.tailwindcss.com"></script>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+3. Use design VISUALMENTE IMPRESSIONANTE:
+   - Gradientes vibrantes no hero (bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800)
+   - Texto branco grande no hero (text-4xl md:text-6xl font-black)
+   - Cards com sombras (shadow-xl rounded-2xl) e padding generoso
+   - Botões de CTA grandes e vibrantes com hover effects
+   - Emojis em listas de benefícios
+   - Seções alternando bg-white e bg-gray-50, espaçamento py-16 md:py-24
+   - Responsivo com breakpoints md: e lg:
+   - FAQ com <details>/<summary> estilizados
+   - Footer escuro (bg-gray-900)
+4. Gere pelo menos 12 seções: hero, problema, transformação, como funciona, benefícios, para quem é, o que inclui, prova social, preço, garantia, FAQ, CTA final.
+5. Use {{form}} onde o formulário deve aparecer e {{cta_link}} em todos os CTAs.
+6. Copy em português brasileiro, persuasiva (técnicas PAS, AIDA).
+7. SEMPRE retorne JSON válido quando solicitado.
+8. A página deve ser LONGA e DETALHADA — nunca minimalista.`;
+
+        for (const cfg of configs) {
+          let needsUpdate = false;
+          const updates: Record<string, any> = {};
+          if ((cfg.max_tokens || 0) < 16000) {
+            updates.max_tokens = 16000;
+            needsUpdate = true;
+          }
+          if (!cfg.system_prompt || cfg.system_prompt.length < 200) {
+            updates.system_prompt = POWERFUL_SYSTEM_PROMPT;
+            needsUpdate = true;
+          }
+          if (needsUpdate) {
+            await supabase.from('ai_provider_configs').update(updates).eq('id', cfg.id);
+          }
+        }
+      } catch { /* silent */ }
+    },
+
     generate: async (payload: { job_type: string; project_id: string; target_id?: string; section_id?: string; user_instruction?: string }): Promise<any> => {
       if (!isConfigured) return { success: false, error: 'Not configured' };
-      const { data, error } = await supabase.functions.invoke('claude-generate', { body: payload });
+      await appBackend.lpAds.ensureConfigUpgraded();
+
+      try {
+        const { data, error } = await supabase.functions.invoke('claude-generate', { body: payload });
+        if (error) throw error;
+        return data;
+      } catch (err: any) {
+        // If the Edge Function timed out, check if a job was created and is running
+        const { data: recentJobs } = await supabase
+          .from('lp_ads_generation_jobs')
+          .select('id, status')
+          .eq('project_id', payload.project_id)
+          .eq('job_type', payload.job_type)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (recentJobs?.[0]) {
+          const job = recentJobs[0];
+          if (job.status === 'running') {
+            return { success: true, job_id: job.id, status: 'processing' };
+          }
+          if (job.status === 'completed') {
+            return { success: true, job_id: job.id, status: 'completed' };
+          }
+        }
+        throw err;
+      }
+    },
+
+    pollJobStatus: async (jobId: string): Promise<{ status: string; error_message?: string; finished_at?: string }> => {
+      if (!isConfigured) throw new Error('Not configured');
+      const { data, error } = await supabase
+        .from('lp_ads_generation_jobs')
+        .select('id, status, error_message, finished_at, model_used, tokens_input, tokens_output, cost_estimate')
+        .eq('id', jobId)
+        .single();
       if (error) throw error;
       return data;
+    },
+
+    waitForJob: async (jobId: string, onProgress?: (status: string) => void, maxWaitMs = 180000): Promise<{ success: boolean; status: string; error?: string }> => {
+      const startTime = Date.now();
+      let pollInterval = 2000;
+      while (Date.now() - startTime < maxWaitMs) {
+        try {
+          const job = await appBackend.lpAds.pollJobStatus(jobId);
+          if (onProgress) onProgress(job.status);
+          if (job.status === 'completed') return { success: true, status: 'completed' };
+          if (job.status === 'failed') return { success: false, status: 'failed', error: job.error_message || 'Erro na geração' };
+        } catch { /* ignore polling errors */ }
+        await new Promise(r => setTimeout(r, pollInterval));
+        pollInterval = Math.min(pollInterval * 1.3, 5000);
+      }
+      return { success: false, status: 'timeout', error: 'Tempo limite excedido. A geração pode ainda estar em andamento.' };
     },
   },
 };

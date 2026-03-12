@@ -63,7 +63,12 @@ serve(async (req: Request) => {
     const referenceContent = buildReferenceContent(assets || []);
 
     let prompt = "";
-    let systemPrompt = config.system_prompt || "Você é um assistente especialista em marketing digital e copywriting.";
+    const defaultSystemPrompt = `Você é um copywriter sênior de vendas e web designer de classe mundial.
+Você cria landing pages de alta conversão, visualmente impressionantes, com HTML completo usando Tailwind CSS.
+Suas páginas são profissionais, modernas e geram milhões em vendas.
+Você SEMPRE retorna JSON válido quando solicitado.
+Nunca retorne apenas texto simples — sempre gere HTML completo e estilizado.`;
+    let systemPrompt = config.system_prompt || defaultSystemPrompt;
 
     if (job_type === "generate_base_lp") {
       prompt = buildBaseLPPrompt(productData, referenceContent, project.tone_of_voice || "Profissional");
@@ -83,14 +88,34 @@ serve(async (req: Request) => {
     } else if (job_type === "rewrite_html") {
       const { data: lp } = await supabase.from("lp_ads_landing_pages").select("*").eq("id", target_id).single();
       if (!lp) return json({ success: false, error: "Landing page não encontrada" });
-      prompt = `Reescreva o HTML seguindo estas instruções: ${user_instruction}\n\nHTML ATUAL:\n${lp.html_code}\n\nRetorne APENAS o HTML completo atualizado. Mantenha {{form}} e {{cta_link}} intactos. Use Tailwind CSS.`;
+      prompt = `Reescreva o HTML da landing page seguindo estas instruções: ${user_instruction}
+
+HTML ATUAL:
+${lp.html_code}
+
+REGRAS OBRIGATÓRIAS:
+1. Retorne APENAS o HTML completo (<!DOCTYPE html> até </html>)
+2. MANTENHA {{form}} e {{cta_link}} nos mesmos locais
+3. INCLUA o CDN do Tailwind CSS: <script src="https://cdn.tailwindcss.com"></script>
+4. INCLUA Google Fonts: <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+5. Use design moderno: gradientes, sombras, cards, espaçamento amplo, tipografia forte
+6. A página deve ser visualmente impressionante e profissional
+7. Responsivo com breakpoints md: e lg:
+
+NÃO retorne JSON — retorne APENAS o HTML completo.`;
     } else {
       return json({ success: false, error: `Tipo de job desconhecido: ${job_type}` });
     }
 
+    // ── Determine max_tokens based on job type ─────────────
+    const lpJobTypes = ["generate_base_lp", "generate_variant_lp", "rewrite_html"];
+    const effectiveMaxTokens = lpJobTypes.includes(job_type)
+      ? Math.max(config.max_tokens || 4096, 16000)
+      : config.max_tokens || 4096;
+
     // ── Call AI (routed by provider) ────────────────────────
     const startTime = Date.now();
-    const aiResponse = await callAI(config, systemPrompt, prompt);
+    const aiResponse = await callAI(config, systemPrompt, prompt, effectiveMaxTokens);
     const duration = Date.now() - startTime;
 
     if (!aiResponse.success) {
@@ -312,14 +337,15 @@ function getTargetType(jobType: string): string {
 
 // ── AI Call Router ──────────────────────────────────────────
 
-async function callAI(config: any, systemPrompt: string, userPrompt: string): Promise<any> {
+async function callAI(config: any, systemPrompt: string, userPrompt: string, maxTokens?: number): Promise<any> {
+  const tokens = maxTokens || config.max_tokens || 4096;
   if (config.provider === "openrouter") {
-    return callOpenRouter(config, systemPrompt, userPrompt);
+    return callOpenRouter(config, systemPrompt, userPrompt, tokens);
   }
-  return callClaude(config, systemPrompt, userPrompt);
+  return callClaude(config, systemPrompt, userPrompt, tokens);
 }
 
-async function callClaude(config: any, systemPrompt: string, userPrompt: string, retries = 3): Promise<any> {
+async function callClaude(config: any, systemPrompt: string, userPrompt: string, maxTokens: number, retries = 3): Promise<any> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const resp = await fetch(ANTHROPIC_API_URL, {
@@ -331,7 +357,7 @@ async function callClaude(config: any, systemPrompt: string, userPrompt: string,
         },
         body: JSON.stringify({
           model: config.model || "claude-sonnet-4-20250514",
-          max_tokens: config.max_tokens || 4096,
+          max_tokens: maxTokens,
           temperature: config.temperature ?? 0.7,
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
@@ -363,7 +389,7 @@ async function callClaude(config: any, systemPrompt: string, userPrompt: string,
   return { success: false, error: "Claude: falha após múltiplas tentativas" };
 }
 
-async function callOpenRouter(config: any, systemPrompt: string, userPrompt: string, retries = 3): Promise<any> {
+async function callOpenRouter(config: any, systemPrompt: string, userPrompt: string, maxTokens: number, retries = 3): Promise<any> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const messages: any[] = [];
@@ -380,7 +406,7 @@ async function callOpenRouter(config: any, systemPrompt: string, userPrompt: str
         },
         body: JSON.stringify({
           model: config.model || "anthropic/claude-sonnet-4-20250514",
-          max_tokens: config.max_tokens || 4096,
+          max_tokens: maxTokens,
           temperature: config.temperature ?? 0.7,
           messages,
         }),
@@ -447,32 +473,83 @@ function buildReferenceContent(assets: any[]): string {
 }
 
 function buildBaseLPPrompt(productData: string, referenceContent: string, tone: string): string {
-  return `Você é um copywriter sênior e web designer especialista em landing pages de alta conversão.
+  return `Você é um copywriter sênior de vendas e um web designer de classe mundial. Sua especialidade é criar landing pages de alta conversão que vendem milhões.
 
-TAREFA: Gerar uma landing page completa em HTML com Tailwind CSS para o produto abaixo.
+TAREFA: Criar uma landing page de vendas COMPLETA, PROFISSIONAL e VISUALMENTE IMPRESSIONANTE.
 
 DADOS DO PRODUTO:
 ${productData}
 
 ${referenceContent ? `MATERIAL DE REFERÊNCIA:\n${referenceContent}` : ""}
 
-REGRAS:
-1. Retorne APENAS JSON válido com as chaves: html_code, sections, meta, theme
-2. Copy em português brasileiro, persuasiva (técnicas PAS, AIDA)
-3. NÃO invente dados não fornecidos. Use placeholders como "[Insira depoimento]" se necessário.
-4. Tom de voz: ${tone}
-5. Use {{form}} onde o formulário deve aparecer
-6. Use {{cta_link}} nos links de CTA
-7. HTML com Tailwind CSS inline, responsivo, design moderno
-8. Seções: hero, pain, transformation, method, benefits, target, modules, testimonials, pricing, guarantee, faq, cta_final
+REGRAS OBRIGATÓRIAS DE RESPOSTA:
+- Retorne APENAS um JSON válido. Sem texto antes ou depois.
+- O campo "html_code" DEVE conter uma página HTML COMPLETA e AUTO-CONTIDA.
+- O JSON DEVE ter exatamente estas chaves: html_code, sections, meta, theme
 
-Responda com JSON:
+REGRAS DE DESIGN DO HTML (CRÍTICO):
+O html_code DEVE ser uma página HTML completa com:
+1. Tag <!DOCTYPE html> e <html lang="pt-BR">
+2. <head> com meta charset, viewport, title, e OBRIGATORIAMENTE o CDN do Tailwind CSS:
+   <script src="https://cdn.tailwindcss.com"></script>
+   E também Google Fonts (Inter):
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+3. <body> com font-family Inter aplicado
+
+REGRAS DE DESIGN VISUAL (CRÍTICO - a página DEVE ser bonita):
+- Use gradientes vibrantes no hero (ex: bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800)
+- Texto branco sobre fundos escuros no hero, com headline GRANDE (text-4xl md:text-6xl font-black)
+- Seções alternando fundo branco e fundo cinza claro (bg-gray-50)
+- Cards com sombras (shadow-xl rounded-2xl), bordas suaves, padding generoso
+- Ícones usando emojis relevantes (✅ ⚡ 🎯 💡 🏆 etc.) em listas de benefícios
+- Botões de CTA grandes, vibrantes, com hover effects (px-8 py-4 bg-gradient-to-r rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all)
+- Espaçamento amplo entre seções (py-16 md:py-24)
+- Responsivo: mobile-first, usar md: e lg: breakpoints
+- Tipografia forte: headlines em font-black ou font-extrabold, subtítulos em font-bold
+- Use max-w-6xl mx-auto para container
+- Badges e destaques coloridos para palavras-chave
+- Seção de preço com destaque visual (border, shadow, badge "Mais Popular")
+- FAQ com estilo accordion visual (mesmo sem JS, usar <details>/<summary>)
+- Footer escuro (bg-gray-900 text-gray-400)
+
+SEÇÕES OBRIGATÓRIAS (nesta ordem):
+1. HERO - Headline impactante (text-4xl md:text-6xl), subheadline, CTA grande, fundo com gradiente escuro
+2. PROBLEMA/DOR - Descreva as dores do público, use ícones/emojis, fundo branco
+3. TRANSFORMAÇÃO - Mostre o antes/depois, o que muda na vida da pessoa
+4. COMO FUNCIONA - 3-4 passos com cards numerados e ícones
+5. BENEFÍCIOS - Lista com emojis ✅, cards ou grid de 2-3 colunas
+6. PARA QUEM É - Lista do público ideal com checkmarks
+7. O QUE ESTÁ INCLUSO - Módulos/entregáveis em cards
+8. PROVA SOCIAL - Depoimentos em cards com aspas, nome e foto placeholder
+9. OFERTA/PREÇO - Card de preço destacado com lista de tudo que inclui e CTA
+10. GARANTIA - Badge/card com ícone de escudo, texto persuasivo
+11. FAQ - Perguntas frequentes com <details>/<summary> estilizados
+12. CTA FINAL - Última chamada urgente com fundo gradiente e botão grande
+
+REGRAS DE COPY:
+- Português brasileiro, copy persuasiva e profissional
+- Use técnicas: PAS (Problem-Agitation-Solution), AIDA, urgência, escassez
+- Tom de voz: ${tone}
+- NÃO invente dados (preços, números) que não foram fornecidos. Use "[Insira aqui]" como placeholder.
+- Headline do hero deve ser magnética, provocativa e focada no benefício principal
+
+PLACEHOLDERS OBRIGATÓRIOS:
+- Use {{form}} no HTML onde o formulário de captura de leads deve aparecer
+- Use {{cta_link}} como href de todos os botões de CTA (ex: <a href="{{cta_link}}")
+
+FORMATO JSON:
 {
-  "html_code": "<html completo>",
-  "sections": [{"id":"hero","type":"hero","enabled":true,"headline":"...","body":"...","cta":"...","items":[]},...],
+  "html_code": "<!DOCTYPE html>\\n<html lang=\\"pt-BR\\">\\n<head>...PÁGINA COMPLETA...</html>",
+  "sections": [
+    {"id":"hero","type":"hero","enabled":true,"headline":"...","body":"...","cta":"...","items":[]},
+    {"id":"pain","type":"pain","enabled":true,"headline":"...","body":"...","items":["dor 1","dor 2"]},
+    ...demais seções...
+  ],
   "meta": {"title":"...","description":"...","keywords":["..."]},
-  "theme": {"primary_color":"#...","text_color":"#1a202c","bg_color":"#ffffff","font_family":"Inter, sans-serif","tone":"${tone}"}
-}`;
+  "theme": {"primary_color":"#4F46E5","text_color":"#1a202c","bg_color":"#ffffff","font_family":"Inter, sans-serif","tone":"${tone}"}
+}
+
+IMPORTANTE: O html_code deve ser LONGO e DETALHADO — uma página de venda completa com pelo menos 12 seções visuais. NÃO gere HTML curto ou minimalista.`;
 }
 
 function buildAdPrompt(productData: string, campaign: any): string {
@@ -495,29 +572,54 @@ Crie pelo menos 3 headlines, 2 descriptions, 2 primary_texts e 1 visual_suggesti
 }
 
 function buildVariantLPPrompt(productData: string, baseLp: any, campaign: any): string {
-  const baseContent = JSON.stringify(baseLp.content || {}).substring(0, 8000);
-  return `Crie uma LP derivada adaptando a página base para o ângulo do anúncio.
+  const baseHtml = baseLp.html_code || "";
+  return `Você é um copywriter sênior e web designer de classe mundial. Crie uma VARIANTE da landing page base, adaptada ao ângulo específico do anúncio abaixo.
 
-PRODUTO:
+DADOS DO PRODUTO:
 ${productData}
 
-LP BASE:
-${baseContent}
+HTML DA LP BASE (use como referência de design e estrutura):
+${baseHtml.substring(0, 12000)}
 
-${baseLp.html_code ? `HTML BASE (resumo):\n${baseLp.html_code.substring(0, 4000)}` : ""}
+ANÚNCIO - ÂNGULO ESPECÍFICO:
+- Foco: ${campaign.focus_angle}
+- Persona alvo: ${campaign.persona}
+- Dor específica: ${campaign.specific_pain}
+- Promessa específica: ${campaign.specific_promise}
+- Tom de voz: ${campaign.tone_of_voice}
 
-ANÚNCIO:
-Foco: ${campaign.focus_angle}
-Persona: ${campaign.persona}
-Dor: ${campaign.specific_pain}
-Promessa: ${campaign.specific_promise}
-Tom: ${campaign.tone_of_voice}
+REGRAS OBRIGATÓRIAS:
+1. MANTENHA a mesma oferta, produto e preço da LP base
+2. ADAPTE completamente: headline, argumentos, benefícios listados, narrativa, CTA texts — tudo focado no ângulo "${campaign.focus_angle}"
+3. MANTENHA o mesmo nível de qualidade visual da LP base (gradientes, cards, sombras, Tailwind CSS)
+4. O html_code DEVE ser uma página HTML COMPLETA com <!DOCTYPE html>, <head> com Tailwind CDN, Google Fonts, etc.
+5. Use {{form}} onde o formulário deve aparecer
+6. Use {{cta_link}} como href de todos os botões de CTA
+7. A headline do hero DEVE falar diretamente com a persona "${campaign.persona}" e endereçar a dor "${campaign.specific_pain}"
+8. O HTML deve incluir:
+   <script src="https://cdn.tailwindcss.com"></script>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-REGRAS:
-- MANTENHA a mesma oferta e produto
-- ADAPTE headline, argumentos, benefícios, CTA e narrativa para "${campaign.focus_angle}"
-- Mantenha {{form}} e {{cta_link}}
-- Retorne JSON: {html_code, sections, meta, theme}`;
+REGRAS DE DESIGN VISUAL:
+- Gradientes vibrantes no hero
+- Cards com sombras (shadow-xl rounded-2xl)
+- Botões de CTA grandes e vibrantes
+- Seções bem espaçadas (py-16 md:py-24)
+- Responsivo com breakpoints md: e lg:
+- Tipografia forte com font-black e font-extrabold
+- Emojis relevantes em listas de benefícios
+- FAQ com <details>/<summary>
+- Footer escuro
+
+FORMATO DE RESPOSTA (JSON):
+{
+  "html_code": "<!DOCTYPE html>\\n<html lang=\\"pt-BR\\">...PÁGINA COMPLETA...</html>",
+  "sections": [{"id":"hero","type":"hero","enabled":true,"headline":"...","body":"...","cta":"...","items":[]},...],
+  "meta": {"title":"...","description":"...","keywords":["..."]},
+  "theme": {"primary_color":"#...","text_color":"#1a202c","bg_color":"#ffffff","font_family":"Inter, sans-serif","tone":"${campaign.tone_of_voice}"}
+}
+
+IMPORTANTE: Retorne APENAS JSON válido. O html_code deve ser uma página COMPLETA e LONGA com pelo menos 10 seções visuais.`;
 }
 
 function buildRegenerateSectionPrompt(productData: string, lp: any, sectionId: string, instruction: string): string {

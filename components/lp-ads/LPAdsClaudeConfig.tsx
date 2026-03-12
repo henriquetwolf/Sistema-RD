@@ -42,7 +42,7 @@ const DEFAULT_CONFIGS: Record<ProviderTab, Partial<AIProviderConfig>> = {
     api_key_encrypted: '',
     model: 'claude-sonnet-4-20250514',
     temperature: 0.7,
-    max_tokens: 4096,
+    max_tokens: 16000,
     system_prompt: '',
     is_active: false,
   },
@@ -52,7 +52,7 @@ const DEFAULT_CONFIGS: Record<ProviderTab, Partial<AIProviderConfig>> = {
     api_key_encrypted: '',
     model: 'anthropic/claude-sonnet-4-20250514',
     temperature: 0.7,
-    max_tokens: 4096,
+    max_tokens: 16000,
     system_prompt: '',
     is_active: false,
   },
@@ -298,10 +298,10 @@ export const LPAdsClaudeConfig: React.FC = () => {
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Max Tokens</label>
             <input
               type="number"
-              value={currentConfig.max_tokens || 4096}
-              onChange={e => updateConfig({ max_tokens: parseInt(e.target.value) || 4096 })}
-              min={256}
-              max={16384}
+              value={currentConfig.max_tokens || 16000}
+              onChange={e => updateConfig({ max_tokens: parseInt(e.target.value) || 16000 })}
+              min={1024}
+              max={128000}
               className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl text-sm font-medium focus:border-indigo-400 focus:outline-none"
             />
           </div>

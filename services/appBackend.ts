@@ -1733,13 +1733,27 @@ export const appBackend = {
   // --- Pop-ups ---
   getMarketingPopups: async (): Promise<any[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('marketing_popups').select('*').order('created_at', { ascending: false });
-    return data || [];
+    const { data, error } = await supabase.from('marketing_popups').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    // Mapeia colunas do banco (stats_views, stats_conversions) para o que o frontend espera (views, conversions)
+    return (data || []).map((row: any) => ({
+      ...row,
+      views: row.stats_views ?? row.views ?? 0,
+      conversions: row.stats_conversions ?? row.conversions ?? 0,
+    }));
   },
 
   saveMarketingPopup: async (popup: any): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('marketing_popups').upsert({ ...popup, id: popup.id || crypto.randomUUID() });
+    const { views, conversions, ...rest } = popup;
+    const row = {
+      ...rest,
+      id: popup.id || crypto.randomUUID(),
+      stats_views: views ?? rest.stats_views ?? 0,
+      stats_conversions: conversions ?? rest.stats_conversions ?? 0,
+    };
+    const { error } = await supabase.from('marketing_popups').upsert(row);
+    if (error) throw error;
   },
 
   deleteMarketingPopup: async (id: string): Promise<void> => {

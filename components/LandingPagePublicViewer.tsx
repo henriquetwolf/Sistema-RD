@@ -9,6 +9,7 @@ import {
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
 import { MarketingPopupsRenderer } from './marketing/MarketingPopupsRenderer';
+import { MarketingWAButtonRenderer } from './marketing/MarketingWAButtonRenderer';
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
@@ -86,6 +87,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
           <div className="min-h-screen bg-white overflow-x-hidden">
               {renderWithForm()}
               <MarketingPopupsRenderer />
+              <MarketingWAButtonRenderer />
           </div>
       );
   }
@@ -443,6 +445,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         </main>
       </div>
       <MarketingPopupsRenderer />
+      <MarketingWAButtonRenderer />
     </>
   );
 };

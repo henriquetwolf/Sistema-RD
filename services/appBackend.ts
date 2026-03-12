@@ -1692,23 +1692,34 @@ export const appBackend = {
   },
 
   saveEmailCampaign: async (campaign: any): Promise<string> => {
-    if (!isConfigured) return '';
+    if (!isConfigured) throw new Error('Supabase não configurado. Verifique a conexão.');
     const { stats, ab_test, subject_b, scheduled, ...rest } = campaign;
-    const id = campaign.id || crypto.randomUUID();
-    const row = {
-      ...rest,
+    const id = (campaign.id && String(campaign.id).trim()) ? campaign.id : crypto.randomUUID();
+    const ts = (v: any) => (v && String(v).trim() ? String(v).trim() : null);
+    const row: Record<string, any> = {
       id,
-      segment_id: rest.segment_id || null,
+      name: (rest.name || '').trim() || 'Sem nome',
+      subject: (rest.subject || '').trim() || '',
+      from_name: (rest.from_name || '').trim() || '',
+      from_email: (rest.from_email || '').trim() || '',
+      reply_to: (rest.reply_to || '').trim() || null,
       template_id: rest.template_id || null,
+      html_content: rest.html_content ?? '',
+      segment_id: rest.segment_id || null,
+      status: ['draft', 'scheduled', 'sending', 'sent', 'cancelled'].includes(rest.status) ? rest.status : 'draft',
+      scheduled_at: ts(rest.scheduled_at),
+      sent_at: ts(rest.sent_at),
+      updated_at: new Date().toISOString(),
       stats_sent: stats?.sent ?? rest.stats_sent ?? 0,
       stats_delivered: stats?.delivered ?? rest.stats_delivered ?? 0,
       stats_opened: stats?.opened ?? rest.stats_opened ?? 0,
       stats_clicked: stats?.clicked ?? rest.stats_clicked ?? 0,
       stats_bounced: stats?.bounced ?? rest.stats_bounced ?? 0,
       stats_unsubscribed: stats?.unsubscribed ?? rest.stats_unsubscribed ?? 0,
-      ab_test_enabled: ab_test ?? rest.ab_test_enabled ?? false,
-      ab_subject_b: subject_b ?? rest.ab_subject_b ?? '',
+      ab_test_enabled: Boolean(ab_test ?? rest.ab_test_enabled),
+      ab_subject_b: (subject_b ?? rest.ab_subject_b ?? '').trim(),
     };
+    if (ts(rest.created_at)) row.created_at = rest.created_at.trim();
     const { data, error } = await supabase.from('marketing_email_campaigns').upsert(row).select('id').single();
     if (error) throw error;
     return (data?.id as string) || id;

@@ -104,8 +104,9 @@ export const EmailMarketingManager: React.FC = () => {
       await appBackend.saveEmailCampaign({ ...editingCampaign, status: 'draft' });
       await load();
       backToList();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert(e?.message || 'Erro ao salvar rascunho. Verifique o console.');
     } finally {
       setIsLoading(false);
     }

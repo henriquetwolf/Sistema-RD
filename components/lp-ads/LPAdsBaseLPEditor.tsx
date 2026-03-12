@@ -301,6 +301,17 @@ export const LPAdsBaseLPEditor: React.FC<Props> = ({ project, baseLp, assets, on
             {copiedHtml ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
             {copiedHtml ? 'Copiado!' : 'Copiar HTML'}
           </button>
+          {lp && (
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}${window.location.pathname}?lpAdsPageId=${lp.id}`;
+                window.open(url, '_blank');
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+            >
+              <ExternalLink size={14} /> Abrir Página
+            </button>
+          )}
           <button onClick={handleSaveLP} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Salvar

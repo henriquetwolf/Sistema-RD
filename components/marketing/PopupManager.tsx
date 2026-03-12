@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MousePointerClick, Plus, Search, Trash2, Edit2, Eye, Loader2, X, Check,
-  BarChart3, ArrowDown, LogOut, Globe, FileText, Settings, Circle, CheckCircle
+  BarChart3, ArrowDown, LogOut, Globe, FileText, Settings, Circle, CheckCircle, Upload, ImageIcon
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
@@ -17,6 +17,7 @@ interface Popup {
   cta_text: string;
   image_url: string;
   form_id: string | null;
+  cta_url: string | null;
   target_pages: string[];
   display_frequency: 'once' | 'every_visit' | 'every_session';
   is_active: boolean;
@@ -33,6 +34,7 @@ const EMPTY_POPUP: Partial<Popup> = {
   cta_text: 'Quero saber mais',
   image_url: '',
   form_id: null,
+  cta_url: null,
   target_pages: [],
   display_frequency: 'once',
   is_active: true,
@@ -60,8 +62,11 @@ export const PopupManager: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<Popup>>(EMPTY_POPUP);
+  const [ctaDestination, setCtaDestination] = useState<'section' | 'form' | 'link'>('section');
   const [saving, setSaving] = useState(false);
   const [targetPageInput, setTargetPageInput] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -88,7 +93,11 @@ export const PopupManager: React.FC = () => {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await appBackend.saveMarketingPopup(editing);
+      const toSave = {
+        ...editing,
+        cta_url: (editing.cta_url || '').trim() || null,
+      };
+      await appBackend.saveMarketingPopup(toSave);
       setShowModal(false);
       setEditing(EMPTY_POPUP);
       await loadData();
@@ -108,8 +117,12 @@ export const PopupManager: React.FC = () => {
   }, [loadData]);
 
   const openEditor = useCallback((popup?: Popup) => {
-    setEditing(popup ? { ...popup } : { ...EMPTY_POPUP });
+    const data = popup ? { ...popup } : { ...EMPTY_POPUP };
+    setEditing(data);
     setTargetPageInput('');
+    if ((data.cta_url ?? '').toString().trim()) setCtaDestination('link');
+    else if (data.form_id) setCtaDestination('form');
+    else setCtaDestination('section');
     setShowModal(true);
   }, []);
 
@@ -128,6 +141,26 @@ export const PopupManager: React.FC = () => {
       ...prev,
       target_pages: (prev.target_pages || []).filter(p => p !== url),
     }));
+  }, []);
+
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    setImageUploading(true);
+    try {
+      const url = await appBackend.uploadMarketingPopupImage(file);
+      setEditing(prev => ({ ...prev, image_url: url }));
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao enviar a imagem. Tente novamente.');
+    } finally {
+      setImageUploading(false);
+      e.target.value = '';
+    }
+  }, []);
+
+  const removeImage = useCallback(() => {
+    setEditing(prev => ({ ...prev, image_url: '' }));
   }, []);
 
   const conversionRate = (views: number, conversions: number) =>
@@ -347,43 +380,155 @@ export const PopupManager: React.FC = () => {
                     className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 resize-none"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">Texto do Botão CTA</label>
-                    <input
-                      value={editing.cta_text || ''}
-                      onChange={e => setEditing(p => ({ ...p, cta_text: e.target.value }))}
-                      placeholder="Ex: Quero saber mais"
-                      className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">URL da Imagem (opcional)</label>
-                    <input
-                      value={editing.image_url || ''}
-                      onChange={e => setEditing(p => ({ ...p, image_url: e.target.value }))}
-                      placeholder="https://..."
-                      className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Texto do Botão CTA</label>
+                  <input
+                    value={editing.cta_text || ''}
+                    onChange={e => setEditing(p => ({ ...p, cta_text: e.target.value }))}
+                    placeholder="Ex: Quero saber mais"
+                    className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Imagem do pop-up (opcional)</label>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                    disabled={imageUploading}
+                  />
+                  {editing.image_url ? (
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={editing.image_url}
+                        alt="Preview"
+                        className="w-24 h-24 object-cover rounded-xl border border-slate-200"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-500 truncate">Imagem enviada</p>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => imageInputRef.current?.click()}
+                            disabled={imageUploading}
+                            className="text-xs font-medium text-purple-600 hover:text-purple-700 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {imageUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                            Trocar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={removeImage}
+                            className="text-xs font-medium text-slate-500 hover:text-red-600 flex items-center gap-1"
+                          >
+                            <Trash2 size={12} /> Remover
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={imageUploading}
+                      className={clsx(
+                        'w-full flex items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed transition-colors',
+                        'border-slate-200 hover:border-purple-300 hover:bg-purple-50/50 text-slate-500 hover:text-purple-600',
+                        imageUploading && 'opacity-70 pointer-events-none'
+                      )}
+                    >
+                      {imageUploading ? (
+                        <Loader2 size={20} className="animate-spin text-purple-500" />
+                      ) : (
+                        <ImageIcon size={20} />
+                      )}
+                      <span className="text-sm font-medium">
+                        {imageUploading ? 'Enviando...' : 'Clique para fazer upload da imagem'}
+                      </span>
+                    </button>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1">JPG, PNG, GIF ou WebP. Máx. 5 MB.</p>
                 </div>
               </div>
 
-              {/* Form Link */}
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  Formulário de Captura (opcional)
+              {/* Destino do botão CTA */}
+              <div className="space-y-3">
+                <label className="text-xs font-semibold text-slate-600 block">
+                  Destino do botão
                 </label>
-                <select
-                  value={editing.form_id || ''}
-                  onChange={e => setEditing(p => ({ ...p, form_id: e.target.value || null }))}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
-                >
-                  <option value="">Nenhum formulário</option>
-                  {forms.map(f => (
-                    <option key={f.id} value={f.id}>{f.title}</option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setCtaDestination('section'); setEditing(p => ({ ...p, cta_url: null, form_id: null })); }}
+                    className={clsx(
+                      'py-2.5 rounded-xl text-sm font-medium border-2 transition-all',
+                      ctaDestination === 'section'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    )}
+                  >
+                    Rolar (#oferta)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCtaDestination('form'); setEditing(p => ({ ...p, cta_url: null })); }}
+                    className={clsx(
+                      'py-2.5 rounded-xl text-sm font-medium border-2 transition-all',
+                      ctaDestination === 'form'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    )}
+                  >
+                    Formulário
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCtaDestination('link'); setEditing(p => ({ ...p, form_id: null, cta_url: p.cta_url != null ? p.cta_url : '' })); }}
+                    className={clsx(
+                      'py-2.5 rounded-xl text-sm font-medium border-2 transition-all',
+                      ctaDestination === 'link'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    )}
+                  >
+                    Link
+                  </button>
+                </div>
+                {ctaDestination === 'form' && (
+                  <div>
+                    <label className="text-xs text-slate-500 block mb-1">Formulário de captura</label>
+                    <select
+                      value={editing.form_id || ''}
+                      onChange={e => setEditing(p => ({ ...p, form_id: e.target.value || null }))}
+                      className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                    >
+                      <option value="">Selecione um formulário</option>
+                      {forms.map(f => (
+                        <option key={f.id} value={f.id}>{f.title}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">O botão levará o visitante à página do formulário.</p>
+                  </div>
+                )}
+                {ctaDestination === 'link' && (
+                  <div>
+                    <label className="text-xs text-slate-500 block mb-1">URL do link</label>
+                    <input
+                      type="url"
+                      value={editing.cta_url || ''}
+                      onChange={e => setEditing(p => ({ ...p, cta_url: e.target.value.trim() || null }))}
+                      placeholder="https://..."
+                      className="w-full text-sm border border-slate-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Link externo ou interno. Use https:// para abrir em nova aba.</p>
+                  </div>
+                )}
+                {ctaDestination === 'section' && (
+                  <p className="text-[10px] text-slate-400">O botão rolará a página até a seção #oferta.</p>
+                )}
               </div>
 
               {/* Target Pages */}

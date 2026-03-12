@@ -1761,6 +1761,21 @@ export const appBackend = {
     await supabase.from('marketing_popups').delete().eq('id', id);
   },
 
+  uploadMarketingPopupImage: async (file: File): Promise<string> => {
+    if (!isConfigured) throw new Error('Supabase não configurado.');
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    const extOk = allowed.includes(ext) ? ext : 'png';
+    const path = `popups/${crypto.randomUUID()}.${extOk}`;
+    const { error } = await supabase.storage.from('marketing').upload(path, file, {
+      contentType: file.type || `image/${extOk}`,
+      upsert: false,
+    });
+    if (error) throw new Error(`Erro no upload: ${error.message}`);
+    const { data: urlData } = supabase.storage.from('marketing').getPublicUrl(path);
+    return urlData.publicUrl;
+  },
+
   // --- WhatsApp Buttons ---
   getMarketingWAButtons: async (): Promise<any[]> => {
     if (!isConfigured) return [];

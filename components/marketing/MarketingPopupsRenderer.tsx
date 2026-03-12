@@ -11,6 +11,7 @@ interface PopupPayload {
   cta_text: string;
   image_url?: string;
   form_id?: string | null;
+  cta_url?: string | null;
   target_pages: string[];
   display_frequency: 'once' | 'every_visit' | 'every_session';
   is_active: boolean;
@@ -161,6 +162,27 @@ export const MarketingPopupsRenderer: React.FC<MarketingPopupsRendererProps> = (
     setVisiblePopup(null);
   }, []);
 
+  /** Destino do botão CTA: link externo, página do formulário ou #oferta */
+  const getCtaHref = (popup: PopupPayload): string => {
+    const url = (popup.cta_url || '').trim();
+    if (url) return url;
+    if (popup.form_id) {
+      const base = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || '/'}` : '';
+      return `${base}?publicFormId=${popup.form_id}`;
+    }
+    return '#oferta';
+  };
+
+  const isExternalLink = (href: string): boolean => {
+    if (!href || href.startsWith('#') || href.startsWith('/')) return false;
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return new URL(href, origin).origin !== origin;
+    } catch {
+      return false;
+    }
+  };
+
   if (!visiblePopup) return null;
 
   return (
@@ -197,7 +219,15 @@ export const MarketingPopupsRenderer: React.FC<MarketingPopupsRendererProps> = (
             {visiblePopup.description || ''}
           </p>
           <a
-            href="#oferta"
+            href={getCtaHref(visiblePopup)}
+            {...(isExternalLink(getCtaHref(visiblePopup)) ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+            {...(getCtaHref(visiblePopup) === '#oferta' ? {
+              onClick: (e: React.MouseEvent) => {
+                e.preventDefault();
+                handleClose();
+                document.getElementById('oferta')?.scrollIntoView({ behavior: 'smooth' });
+              },
+            } : {})}
             className="inline-block bg-purple-600 text-white px-8 py-2.5 rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors"
           >
             {visiblePopup.cta_text || 'Quero saber mais'}

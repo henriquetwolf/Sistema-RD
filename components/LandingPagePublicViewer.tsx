@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
+import { MarketingPopupsRenderer } from './marketing/MarketingPopupsRenderer';
 import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
@@ -84,6 +85,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       return (
           <div className="min-h-screen bg-white overflow-x-hidden">
               {renderWithForm()}
+              <MarketingPopupsRenderer />
           </div>
       );
   }
@@ -424,20 +426,23 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden selection:bg-indigo-100 selection:text-indigo-900" style={{ backgroundColor: content.theme?.bg_color }}>
-      <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex justify-between items-center shadow-sm">
-          <img src={VOLL_LOGO_BASE64} alt="VOLL" className="h-6 object-contain" />
-          <div className="flex gap-4">
-             {sections.map(s => (
-                <a key={s.id} href={`#${s.id}`} className="hidden lg:block text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">{s.type}</a>
-             ))}
-             <a href="#oferta" className="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg active:scale-95">Quero Começar</a>
-          </div>
-      </nav>
+    <>
+      <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden selection:bg-indigo-100 selection:text-indigo-900" style={{ backgroundColor: content.theme?.bg_color }}>
+        <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex justify-between items-center shadow-sm">
+            <img src={VOLL_LOGO_BASE64} alt="VOLL" className="h-6 object-contain" />
+            <div className="flex gap-4">
+               {sections.map(s => (
+                  <a key={s.id} href={`#${s.id}`} className="hidden lg:block text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">{s.type}</a>
+               ))}
+               <a href="#oferta" className="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg active:scale-95">Quero Começar</a>
+            </div>
+        </nav>
 
-      <main>
-        {sections.map(renderSection)}
-      </main>
-    </div>
+        <main>
+          {sections.map(renderSection)}
+        </main>
+      </div>
+      <MarketingPopupsRenderer />
+    </>
   );
 };

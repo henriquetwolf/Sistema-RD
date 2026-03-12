@@ -397,7 +397,7 @@ export const PopupManager: React.FC = () => {
                     value={targetPageInput}
                     onChange={e => setTargetPageInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addTargetPage()}
-                    placeholder="Ex: /pilates/* ou /landing-page"
+                    placeholder="Ex: /pilates/*, /landing-page ou landingPageId=uuid-da-página"
                     className="flex-1 text-sm border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
                   />
                   <button onClick={addTargetPage} className="bg-purple-100 text-purple-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-purple-200 transition-colors">

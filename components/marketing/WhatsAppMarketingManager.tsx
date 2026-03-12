@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, Plus, Search, Trash2, Edit2, Send, Clock,
-  Loader2, X, Check, Users, BarChart3, Eye
+  Loader2, X, Check, Users, BarChart3, Eye, Settings
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
+import { WhatsAppConfig } from './WhatsAppConfig';
 
 type ViewMode = 'list' | 'editor';
+type WaSubTab = 'campaigns' | 'config';
 
 interface Campaign {
   id: string;
@@ -49,6 +51,7 @@ const replacePreviewVars = (msg: string) =>
     .replace(/\{\{telefone\}\}/gi, '(11) 99999-0000');
 
 export const WhatsAppMarketingManager: React.FC = () => {
+  const [waSubTab, setWaSubTab] = useState<WaSubTab>('campaigns');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [segments, setSegments] = useState<any[]>([]);
   const [view, setView] = useState<ViewMode>('list');
@@ -168,10 +171,43 @@ export const WhatsAppMarketingManager: React.FC = () => {
 
   const pct = (a: number, b: number) => b > 0 ? ((a / b) * 100).toFixed(1) : '0.0';
 
+  const subTabBar = (
+    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+      <button
+        onClick={() => setWaSubTab('campaigns')}
+        className={clsx(
+          'px-4 py-2 rounded-lg text-sm font-bold transition-all',
+          waSubTab === 'campaigns' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+        )}
+      >
+        Campanhas
+      </button>
+      <button
+        onClick={() => setWaSubTab('config')}
+        className={clsx(
+          'px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2',
+          waSubTab === 'config' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+        )}
+      >
+        <Settings size={16} /> Configurar Whatsapp
+      </button>
+    </div>
+  );
+
+  if (waSubTab === 'config') {
+    return (
+      <div className="space-y-6">
+        {subTabBar}
+        <WhatsAppConfig onBack={() => setWaSubTab('campaigns')} />
+      </div>
+    );
+  }
+
   // ─── LIST ───
   if (view === 'list') {
     return (
       <div className="space-y-6">
+        {subTabBar}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
@@ -284,6 +320,7 @@ export const WhatsAppMarketingManager: React.FC = () => {
   if (view === 'editor' && editing) {
     return (
       <div className="space-y-6">
+        {subTabBar}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={backToList} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100">

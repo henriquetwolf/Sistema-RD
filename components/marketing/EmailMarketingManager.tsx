@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Mail, Plus, Search, Trash2, Edit2, Send, Clock, Eye, BarChart3,
   Copy, Loader2, X, Check, AlertTriangle, Calendar, Users, Zap,
-  ArrowLeft, FileText, MousePointerClick
+  ArrowLeft, FileText, MousePointerClick, Settings
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../../services/appBackend';
+import { EmailBrevoConfig } from './EmailBrevoConfig';
 
 type ViewMode = 'list' | 'editor' | 'stats';
 
@@ -36,7 +37,10 @@ const blankCampaign = (): any => ({
   created_at: new Date().toISOString(),
 });
 
+type EmailSubTab = 'campaigns' | 'config';
+
 export const EmailMarketingManager: React.FC = () => {
+  const [emailSubTab, setEmailSubTab] = useState<EmailSubTab>('campaigns');
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [segments, setSegments] = useState<any[]>([]);
@@ -182,10 +186,43 @@ export const EmailMarketingManager: React.FC = () => {
   // ─── Stats helpers ───
   const pct = (a: number, b: number) => b > 0 ? ((a / b) * 100).toFixed(1) : '0.0';
 
+  const subTabBar = (
+    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+      <button
+        onClick={() => setEmailSubTab('campaigns')}
+        className={clsx(
+          'px-4 py-2 rounded-lg text-sm font-bold transition-all',
+          emailSubTab === 'campaigns' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+        )}
+      >
+        Campanhas
+      </button>
+      <button
+        onClick={() => setEmailSubTab('config')}
+        className={clsx(
+          'px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2',
+          emailSubTab === 'config' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+        )}
+      >
+        <Settings size={16} /> Configurar E-mail (Brevo)
+      </button>
+    </div>
+  );
+
+  if (emailSubTab === 'config') {
+    return (
+      <div className="space-y-6">
+        {subTabBar}
+        <EmailBrevoConfig onBack={() => setEmailSubTab('campaigns')} />
+      </div>
+    );
+  }
+
   // ─── LIST VIEW ───
   if (view === 'list') {
     return (
       <div className="space-y-6">
+        {subTabBar}
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -309,6 +346,7 @@ export const EmailMarketingManager: React.FC = () => {
   if (view === 'editor' && editingCampaign) {
     return (
       <div className="space-y-6">
+        {subTabBar}
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -614,6 +652,7 @@ export const EmailMarketingManager: React.FC = () => {
 
     return (
       <div className="space-y-6">
+        {subTabBar}
         {/* Header */}
         <div className="flex items-center gap-3">
           <button onClick={backToList} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100">

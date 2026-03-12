@@ -1113,7 +1113,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                             <Mail size={20} className="text-emerald-600" /> Configuração de E-mail (Brevo Franquia)
                                         </h3>
-                                        <p className="text-xs text-slate-500 mt-1">Configure uma chave Brevo específica para e-mails de agendamento de reuniões. Se vazio, será usado a configuração geral do sistema (Formulários &gt; E-mail).</p>
+                                        <p className="text-xs text-slate-500 mt-1">Configure uma chave Brevo específica para e-mails de agendamento de reuniões. Se vazio, será usado a configuração geral do sistema (Email Marketing → Configurar E-mail (Brevo)).</p>
                                     </div>
                                     <div className="p-6 space-y-5">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1148,7 +1148,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                         </div>
 
                                         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                                            <p className="text-xs text-amber-800"><strong>Nota:</strong> Os campos acima são salvos junto com as demais configurações ao clicar em "Salvar" no topo. O envio de teste salva automaticamente antes de enviar. Se os campos estiverem vazios, os e-mails de reunião usarão a configuração geral do Brevo (Formulários &gt; Configurar E-mail).</p>
+                                            <p className="text-xs text-amber-800"><strong>Nota:</strong> Os campos acima são salvos junto com as demais configurações ao clicar em "Salvar" no topo. O envio de teste salva automaticamente antes de enviar. Se os campos estiverem vazios, os e-mails de reunião usarão a configuração geral do Brevo (Email Marketing → Configurar E-mail (Brevo)).</p>
                                         </div>
                                     </div>
                                 </div>

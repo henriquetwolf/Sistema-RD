@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder, AutomationFlow, WAAutomationLog, EmailConfig } from '../types';
+import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder, AutomationFlow, WAAutomationLog } from '../types';
 import { FormViewer } from './FormViewer';
 import { AutomationFlowEditor } from './AutomationFlowEditor';
 import { 
@@ -9,27 +9,16 @@ import {
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, Type, AlignLeft, 
   Mail, Phone, Calendar, Hash, Palette, Sparkles, Image as ImageIcon,
   AlignCenter, Filter, Tag, ArrowRightLeft, User, Users, Info, FileSpreadsheet, RefreshCw, Megaphone,
-  Zap, GitBranch, Settings, Smartphone, Wifi, WifiOff, Link2, History,
+  Zap, GitBranch, Smartphone, History,
   ChevronUp, ChevronDown, GripVertical, ToggleLeft, ToggleRight, Send
 } from 'lucide-react';
 import { appBackend, Pipeline } from '../services/appBackend';
-import { evolutionProxy } from '../services/evolutionProxy';
 import clsx from 'clsx';
 
 declare const XLSX: any;
 
 interface FormsManagerProps {
   onBack: () => void;
-}
-
-interface WAConfig {
-  mode: 'evolution' | 'twilio';
-  evolutionMethod: 'qr' | 'code';
-  instanceUrl: string;
-  instanceName: string;
-  apiKey: string;
-  pairingNumber: string;
-  isConnected: boolean;
 }
 
 const INITIAL_FORM: FormModel = {
@@ -95,45 +84,11 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
-  // WhatsApp Config States
-  const [showWAConfig, setShowWAConfig] = useState(false);
-  const [isSavingWAConfig, setIsSavingWAConfig] = useState(false);
-  const [isGeneratingWAConnection, setIsGeneratingWAConnection] = useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-  const [pairingCodeValue, setPairingCodeValue] = useState<string | null>(null);
-  const [waConnLogs, setWaConnLogs] = useState<string[]>([]);
-  const [waConfig, setWaConfig] = useState<WAConfig>({
-      mode: 'evolution',
-      evolutionMethod: 'qr',
-      instanceUrl: '',
-      instanceName: '',
-      apiKey: '',
-      pairingNumber: '',
-      isConnected: false
-  });
-
-  // Email Config States
-  const [showEmailConfig, setShowEmailConfig] = useState(false);
-  const [isSavingEmailConfig, setIsSavingEmailConfig] = useState(false);
-  const [emailConfig, setEmailConfig] = useState<EmailConfig>({
-    apiKey: '',
-    senderEmail: '',
-    senderName: 'VOLL Pilates',
-    provider: 'brevo'
-  });
-  const [testEmailRecipient, setTestEmailRecipient] = useState('');
-  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
-  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; error?: string } | null>(null);
-
-  const webhookUrlDisplay = "https://wfrzsnwisypmgsbeccfj.supabase.co/functions/v1/rapid-service";
-
   useEffect(() => { 
     loadForms(); 
     loadFlows(); 
     loadFolders(); 
-    loadMetadata(); 
-    loadWAConfig(); 
-    loadEmailConfig();
+    loadMetadata();
   }, []);
 
   useEffect(() => {
@@ -152,126 +107,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const loadWAConfig = async () => {
-    const c = await appBackend.getWhatsAppConfig();
-    if (c) {
-        setWaConfig(prev => ({ ...prev, ...c }));
-        checkWARealStatus(c);
-    }
-  };
-
-  const loadEmailConfig = async () => {
-    const c = await appBackend.getEmailConfig();
-    if (c) {
-      setEmailConfig(c);
-    }
-  };
-
-  const checkWARealStatus = async (targetConfig?: any) => {
-    const target = targetConfig || waConfig;
-    if (!target.instanceUrl || !target.instanceName) return;
-    try {
-        let baseUrl = target.instanceUrl.trim();
-        if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
-        baseUrl = baseUrl.replace(/\/$/, "");
-        const state = await evolutionProxy.checkConnectionState(baseUrl, target.apiKey.trim(), target.instanceName.trim());
-        setWaConfig(prev => ({ ...prev, isConnected: state === 'open' }));
-    } catch (e) {
-        setWaConfig(prev => ({ ...prev, isConnected: false }));
-    }
-  };
-
-  const handleSaveWAConfig = async () => {
-    setIsSavingWAConfig(true);
-    try {
-        const sanitizedConfig = {
-            ...waConfig,
-            instanceUrl: waConfig.instanceUrl.trim().replace(/\/$/, ""),
-            instanceName: waConfig.instanceName.trim(),
-            apiKey: waConfig.apiKey.trim()
-        };
-        await appBackend.saveWhatsAppConfig(sanitizedConfig);
-        setWaConfig(sanitizedConfig);
-        setShowWAConfig(false);
-        alert("Configurações do WhatsApp salvas!");
-        checkWARealStatus(sanitizedConfig);
-    } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingWAConfig(false); }
-  };
-
-  const handleSaveEmailConfig = async () => {
-    setIsSavingEmailConfig(true);
-    try {
-      await appBackend.saveEmailConfig({ ...emailConfig, provider: 'brevo' });
-      setShowEmailConfig(false);
-      alert("Configurações Brevo salvas com sucesso!");
-    } catch (e: any) {
-      alert(`Erro: ${e.message}`);
-    } finally {
-      setIsSavingEmailConfig(false);
-    }
-  };
-
-  const handleSendTestEmail = async () => {
-    if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
-      alert('Digite um e-mail válido para o teste.');
-      return;
-    }
-    setIsSendingTestEmail(true);
-    setTestEmailResult(null);
-    try {
-      await appBackend.saveEmailConfig({ ...emailConfig, provider: 'brevo' });
-      const result = await appBackend.sendTestEmail(testEmailRecipient);
-      setTestEmailResult(result);
-    } catch (e: any) {
-      setTestEmailResult({ success: false, error: e.message });
-    } finally {
-      setIsSendingTestEmail(false);
-    }
-  };
-
-  const handleConnectWAEvolution = async () => {
-    setIsGeneratingWAConnection(true);
-    setQrCodeUrl(null);
-    setPairingCodeValue(null);
-    setWaConnLogs([`Iniciando tentativa de conexão via proxy...`]);
-    try {
-        if (!waConfig.instanceUrl || !waConfig.instanceName) throw new Error("Preencha os dados da instância.");
-        
-        let baseUrl = waConfig.instanceUrl.trim();
-        if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
-        baseUrl = baseUrl.replace(/\/$/, "");
-        const instanceName = waConfig.instanceName.trim();
-        const apiKey = waConfig.apiKey.trim();
-
-        if (waConfig.evolutionMethod === 'code') {
-            const cleanNumber = waConfig.pairingNumber.replace(/\D/g, '');
-            if (!cleanNumber) throw new Error("Número de pareamento é obrigatório.");
-            setWaConnLogs(prev => [`Solicitando código de pareamento...`, ...prev]);
-            const code = await evolutionProxy.connectPairingCode(baseUrl, apiKey, instanceName, cleanNumber);
-            if (code === "ALREADY_CONNECTED") {
-                setWaConfig(prev => ({ ...prev, isConnected: true }));
-                setWaConnLogs(prev => [`WhatsApp já está conectado! Não é necessário parear novamente.`, ...prev]);
-                return;
-            }
-            setPairingCodeValue(code);
-        } else {
-            setWaConnLogs(prev => [`Gerando QR Code...`, ...prev]);
-            const data = await evolutionProxy.connectQrCode(baseUrl, apiKey, instanceName);
-            if (data.alreadyConnected) {
-                setWaConfig(prev => ({ ...prev, isConnected: true }));
-                setWaConnLogs(prev => [`WhatsApp já está conectado! Não é necessário parear novamente.`, ...prev]);
-                return;
-            }
-            const token = data.base64 || data.code;
-            if (!token) throw new Error("A API não retornou QR Code. Resposta: " + JSON.stringify(data).substring(0, 200));
-            setQrCodeUrl(token.startsWith('data:image') ? token : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`);
-        }
-        setWaConnLogs(prev => [`Conexão solicitada com sucesso!`, ...prev]);
-    } catch (err: any) { 
-        setWaConnLogs(prev => [`[ERRO] ${err.message}`, ...prev]);
-    } finally { setIsGeneratingWAConnection(false); }
   };
 
   const loadForms = async () => { 
@@ -919,25 +754,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                         <History size={16} /> Histórico
                     </button>
                     <div className="h-px bg-slate-100 my-1 mx-2"></div>
-                    <button 
-                        onClick={() => setShowWAConfig(true)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
-                    >
-                        <Settings size={16} /> Configurar WhatsApp
-                    </button>
-                    <button 
-                        onClick={() => setShowEmailConfig(true)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
-                    >
-                        <Mail size={16} /> Configurar E-mail (Brevo)
-                    </button>
-                    <div className={clsx("p-3 rounded-xl border flex items-center justify-between transition-all", waConfig.isConnected ? "bg-teal-50 border-teal-100" : "bg-red-50 border-red-100")}>
-                        <div className="flex items-center gap-2">
-                            <div className={clsx("w-1.5 h-1.5 rounded-full", waConfig.isConnected ? "bg-teal-500 animate-pulse" : "bg-red-500")}></div>
-                            <span className={clsx("text-[9px] font-black uppercase tracking-widest", waConfig.isConnected ? "text-teal-700" : "text-red-700")}>{waConfig.isConnected ? "Online" : "Offline"}</span>
-                        </div>
-                        {waConfig.isConnected ? <Wifi size={12} className="text-teal-400" /> : <WifiOff size={12} className="text-red-400" />}
-                    </div>
                 </div>
             )}
         </div>
@@ -1123,129 +939,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           </div>
       )}
 
-      {/* WHATSAPP CONFIG MODAL */}
-      {showWAConfig && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
-                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
-                      <div className="flex items-center gap-3"><Settings className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Evolution API Config</h3></div>
-                      <button onClick={() => setShowWAConfig(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">URL da API</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={waConfig.instanceUrl} onChange={e => setWaConfig({...waConfig, instanceUrl: e.target.value})} placeholder="https://api.voll.com" /></div>
-                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Instância</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={waConfig.instanceName} onChange={e => setWaConfig({...waConfig, instanceName: e.target.value})} placeholder="Instancia_VOLL" /></div>
-                          <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">API Key Global</label><input type="password" title="API Key" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={waConfig.apiKey} onChange={e => setWaConfig({...waConfig, apiKey: e.target.value})} /></div>
-                      </div>
-
-                      <div className="p-6 bg-indigo-50 border border-indigo-100 rounded-[2rem] space-y-3">
-                          <label className="block text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2"><Link2 size={12}/> URL de Webhook p/ Evolution API</label>
-                          <div className="flex gap-2">
-                              <input type="text" readOnly className="flex-1 px-4 py-3 bg-white border border-indigo-200 rounded-2xl text-[11px] font-mono text-indigo-900 shadow-sm" value={webhookUrlDisplay} />
-                              <button onClick={() => { navigator.clipboard.writeText(webhookUrlDisplay); alert("Link do Webhook copiado!"); }} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-md active:scale-95" title="Copiar URL"><Copy size={20}/></button>
-                          </div>
-                      </div>
-
-                      <div className="p-6 bg-teal-50 rounded-[2rem] border-2 border-teal-100 space-y-4">
-                        <div className="flex justify-between items-center"><h4 className="text-xs font-black text-teal-800 uppercase tracking-widest">Conectar Novo Aparelho</h4><div className="flex gap-2"><button onClick={() => setWaConfig({...waConfig, evolutionMethod: 'qr'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", waConfig.evolutionMethod === 'qr' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>QR Code</button><button onClick={() => setWaConfig({...waConfig, evolutionMethod: 'code'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", waConfig.evolutionMethod === 'code' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>Código</button></div></div>
-                        {waConfig.evolutionMethod === 'code' && (<div><label className="block text-[10px] font-bold text-teal-700 uppercase mb-1">Celular (com DDI+DDD)</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" placeholder="5551999999999" value={waConfig.pairingNumber} onChange={e => setWaConfig({...waConfig, pairingNumber: e.target.value})} /></div>)}
-                        <button onClick={handleConnectWAEvolution} disabled={isGeneratingWAConnection} className="w-full py-4 bg-white border-2 border-teal-500 text-teal-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-teal-500 hover:text-white transition-all flex items-center justify-center gap-2">{isGeneratingWAConnection ? <Loader2 size={18} className="animate-spin"/> : <Wifi size={18}/>} Iniciar Pareamento</button>
-                        {qrCodeUrl && (<div className="flex flex-col items-center pt-4 animate-in zoom-in-95"><div className="p-4 bg-white rounded-3xl shadow-xl border-2 border-teal-100"><img src={qrCodeUrl} className="w-48 h-48" alt="QR" /></div><p className="text-xs text-teal-600 font-bold mt-4">ESCANEIE COM SEU CELULAR</p></div>)}
-                        {pairingCodeValue && (<div className="text-center pt-4 animate-in zoom-in-95"><div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-teal-200 text-3xl font-black tracking-[0.5em] text-teal-600">{pairingCodeValue}</div><p className="text-xs text-teal-600 font-bold mt-4 uppercase">DIGITE NO SEU WHATSAPP</p></div>)}
-                        <div className="space-y-1">{waConnLogs.map((log, i) => (<p key={i} className="text-[10px] font-mono text-teal-400">{log}</p>))}</div>
-                      </div>
-                  </div>
-                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]"><button onClick={handleSaveWAConfig} disabled={isSavingWAConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center gap-2">{isSavingWAConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações</button></div>
-              </div>
-          </div>
-      )}
-
-      {/* EMAIL CONFIG MODAL (BREVO) */}
-      {showEmailConfig && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
-                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
-                      <div className="flex items-center gap-3"><Mail className="text-indigo-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Configuração Brevo (E-mail & SMS)</h3></div>
-                      <button onClick={() => { setShowEmailConfig(false); setTestEmailResult(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3 text-xs text-blue-800 mb-2">
-                        <Info size={16} className="shrink-0" />
-                        <div>
-                          <p className="font-bold mb-1">Provedor: Brevo (brevo.com)</p>
-                          <p>Configure sua chave de API do Brevo para envio de e-mails transacionais (automações, reuniões, notificações). Futuramente também para SMS.</p>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Chave API Brevo (api-key)</label>
-                            <input
-                              type="password"
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold"
-                              value={emailConfig.apiKey}
-                              onChange={e => setEmailConfig({...emailConfig, apiKey: e.target.value})}
-                              placeholder="xkeysib-xxxxxxxxxxxxxxxx"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">E-mail Remetente (Sender)</label>
-                            <input
-                              type="email"
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold"
-                              value={emailConfig.senderEmail}
-                              onChange={e => setEmailConfig({...emailConfig, senderEmail: e.target.value})}
-                              placeholder="noreply@seudominio.com.br"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome de Exibição</label>
-                            <input
-                              type="text"
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold"
-                              value={emailConfig.senderName}
-                              onChange={e => setEmailConfig({...emailConfig, senderName: e.target.value})}
-                              placeholder="VOLL Pilates"
-                            />
-                          </div>
-                      </div>
-
-                      {/* Test email section */}
-                      <div className="border-t border-slate-200 pt-5 space-y-3">
-                          <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Envio de Teste</h4>
-                          <div className="flex gap-2">
-                              <input
-                                type="email"
-                                className="flex-1 px-4 py-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all"
-                                value={testEmailRecipient}
-                                onChange={e => { setTestEmailRecipient(e.target.value); setTestEmailResult(null); }}
-                                placeholder="seuemail@teste.com"
-                              />
-                              <button
-                                onClick={handleSendTestEmail}
-                                disabled={isSendingTestEmail || !emailConfig.apiKey || !emailConfig.senderEmail}
-                                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all disabled:opacity-50 whitespace-nowrap"
-                              >
-                                {isSendingTestEmail ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                                Enviar Teste
-                              </button>
-                          </div>
-                          {testEmailResult && (
-                              <div className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${testEmailResult.success ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                  {testEmailResult.success ? <Check size={14} /> : <Info size={14} />}
-                                  {testEmailResult.success ? 'E-mail de teste enviado com sucesso! Verifique sua caixa de entrada.' : `Erro: ${testEmailResult.error}`}
-                              </div>
-                          )}
-                      </div>
-                  </div>
-                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]">
-                    <button onClick={() => { setShowEmailConfig(false); setTestEmailResult(null); }} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-all">Cancelar</button>
-                    <button onClick={handleSaveEmailConfig} disabled={isSavingEmailConfig} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2">
-                      {isSavingEmailConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações
-                    </button>
-                  </div>
-              </div>
-          </div>
-      )}
     </div>
   );
 };

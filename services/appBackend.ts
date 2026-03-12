@@ -1754,18 +1754,32 @@ export const appBackend = {
     let sent = 0;
     let failed = 0;
     const subject = (campaign.subject || '').trim() || 'Sem assunto';
-    let htmlContent = (campaign.html_content || '').trim() || '<p>Sem conteúdo.</p>';
+    const baseHtml = (campaign.html_content || '').trim() || '<p>Sem conteúdo.</p>';
     const baseUrl = (APP_URL || '').replace(/\/$/, '');
-    const trackingPixelUrl = baseUrl ? `${baseUrl}/functions/v1/email-open-track?c=${campaignId}` : '';
-    if (trackingPixelUrl) {
-      const pixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none" alt="" />`;
-      htmlContent = htmlContent.includes('</body>') ? htmlContent.replace('</body>', `${pixel}</body>`) : htmlContent + '\n' + pixel;
-    }
     for (const lead of withEmail) {
       const to = (lead.email || '').trim();
       const toName = (lead.name || lead.email || to).trim();
+      const sendId = crypto.randomUUID();
+      let htmlContent = baseHtml;
+      if (baseUrl) {
+        const trackingPixelUrl = `${baseUrl}/functions/v1/email-open-track?s=${sendId}`;
+        const pixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none" alt="" />`;
+        htmlContent = baseHtml.includes('</body>') ? baseHtml.replace('</body>', `${pixel}</body>`) : baseHtml + '\n' + pixel;
+      }
       const result = await brevoService.sendEmail(config.apiKey, fromEmail, fromName, { to, toName, subject, htmlContent });
-      if (result.success) sent++; else failed++;
+      if (result.success) {
+        sent++;
+        await supabase.from('marketing_email_sends').insert({
+          id: sendId,
+          campaign_id: campaignId,
+          lead_id: lead.id,
+          email: to,
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        });
+      } else {
+        failed++;
+      }
     }
     await supabase.from('marketing_email_campaigns').update({
       status: 'sent',

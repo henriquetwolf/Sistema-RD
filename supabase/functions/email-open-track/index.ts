@@ -1,6 +1,6 @@
 /**
  * Rastreamento de abertura de e-mail (tracking pixel).
- * GET ?c=<campaign_id> → responde com 1x1 GIF e incrementa stats_opened da campanha.
+ * GET ?s=<send_id> → 1x1 GIF e marca abertura única do destinatário (uma por e-mail).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
@@ -30,9 +30,9 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const campaignId = url.searchParams.get("c")?.trim();
+  const sendId = url.searchParams.get("s")?.trim();
 
-  if (!campaignId || !UUID_REGEX.test(campaignId)) {
+  if (!sendId || !UUID_REGEX.test(sendId)) {
     return new Response(TRANSPARENT_GIF, {
       status: 200,
       headers: { "Content-Type": "image/gif", "Cache-Control": "no-store" },
@@ -42,21 +42,40 @@ Deno.serve(async (req) => {
   const supabase = getSupabase();
 
   try {
-    const { data: campaign } = await supabase
-      .from("marketing_email_campaigns")
-      .select("stats_sent, stats_opened")
-      .eq("id", campaignId)
+    const { data: sendRow } = await supabase
+      .from("marketing_email_sends")
+      .select("id, campaign_id, opened_at")
+      .eq("id", sendId)
       .single();
 
-    if (campaign) {
-      const sent = Number(campaign.stats_sent ?? 0);
-      const current = Number(campaign.stats_opened ?? 0);
-      const nextOpened = Math.min(current + 1, sent);
+    if (!sendRow) {
+      return new Response(TRANSPARENT_GIF, {
+        status: 200,
+        headers: { "Content-Type": "image/gif", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
+      });
+    }
+
+    const campaignId = sendRow.campaign_id as string;
+    const alreadyOpened = !!sendRow.opened_at;
+
+    if (!alreadyOpened) {
+      const now = new Date().toISOString();
+      await supabase
+        .from("marketing_email_sends")
+        .update({ opened_at: now, status: "opened" })
+        .eq("id", sendId);
+
+      const { count } = await supabase
+        .from("marketing_email_sends")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", campaignId)
+        .not("opened_at", "is", null);
+
       await supabase
         .from("marketing_email_campaigns")
         .update({
-          stats_opened: nextOpened,
-          updated_at: new Date().toISOString(),
+          stats_opened: count ?? 0,
+          updated_at: now,
         })
         .eq("id", campaignId);
     }

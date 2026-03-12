@@ -42,6 +42,7 @@ import { SupportManager } from './components/SupportManager';
 import { AiAssistant } from './components/AiAssistant';
 import { LandingPageManager } from './components/LandingPageManager';
 import { LandingPagePublicViewer } from './components/LandingPagePublicViewer';
+import { LPAdsPublicRenderer } from './components/lp-ads/LPAdsPublicRenderer';
 import { ContaAzulManager } from './components/ContaAzulManager';
 import { PagBankManager } from './components/PagBankManager';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -112,6 +113,7 @@ function App() {
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
   const [publicLandingPage, setPublicLandingPage] = useState<LandingPage | null>(null);
+  const [publicLPAdsPage, setPublicLPAdsPage] = useState<any | null>(null);
   const [publicCheckoutCourseId, setPublicCheckoutCourseId] = useState<string | null>(null);
   const [publicCheckoutDealId, setPublicCheckoutDealId] = useState<string | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
@@ -180,12 +182,24 @@ function App() {
         const contractId = params.get('contractId');
         const certificateHash = params.get('certificateHash');
         const landingPageId = params.get('landingPageId');
+        const lpAdsPageId = params.get('lpAdsPageId');
         const checkoutCourseId = params.get('checkout');
         const checkoutDealId = params.get('deal');
 
         if (checkoutCourseId) {
             setPublicCheckoutCourseId(checkoutCourseId);
             if (checkoutDealId) setPublicCheckoutDealId(checkoutDealId);
+            return;
+        }
+
+        if (lpAdsPageId) {
+            setIsPublicLoading(true);
+            try {
+                const lp = await appBackend.lpAds.landingPages.getById(lpAdsPageId);
+                if (lp) setPublicLPAdsPage(lp);
+                else setPublicError("Página não encontrada.");
+            } catch { setPublicError("Erro ao carregar página."); }
+            setIsPublicLoading(false);
             return;
         }
 
@@ -642,6 +656,7 @@ function App() {
   if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
+  if (publicLPAdsPage) return <LPAdsPublicRenderer landingPage={publicLPAdsPage} />;
   if (publicLandingPage) return <LandingPagePublicViewer landingPage={publicLandingPage} />;
   
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;

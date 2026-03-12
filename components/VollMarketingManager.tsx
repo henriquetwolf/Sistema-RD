@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Megaphone, LayoutDashboard, Mail, FileText, Globe, Link2, Share2,
   Zap, MessageCircle, Smartphone, Bell, Users, Filter, BarChart3, Settings,
-  ArrowLeft, ChevronRight, Target, Send, Eye, AlertTriangle
+  ArrowLeft, ChevronRight, Target, Send, Eye, AlertTriangle, BrainCircuit
 } from 'lucide-react';
 import clsx from 'clsx';
 import { MarketingDashboard } from './marketing/MarketingDashboard';
@@ -21,12 +21,13 @@ import { LeadManager } from './marketing/LeadManager';
 import { SegmentBuilder } from './marketing/SegmentBuilder';
 import { MarketingAnalytics } from './marketing/MarketingAnalytics';
 import { CrmIntegrationConfig } from './marketing/CrmIntegrationConfig';
+import { LPAdsManager } from './lp-ads/LPAdsManager';
 import { appBackend } from '../services/appBackend';
 
 type MarketingModule =
   | 'dashboard'
   | 'social_media' | 'link_bio'
-  | 'landing_pages' | 'forms' | 'popups' | 'wa_button'
+  | 'landing_pages' | 'lp_ads' | 'forms' | 'popups' | 'wa_button'
   | 'email' | 'automation' | 'wa_marketing' | 'sms' | 'web_push'
   | 'leads' | 'segments'
   | 'analytics'
@@ -44,6 +45,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'social_media', label: 'Redes Sociais', icon: <Share2 size={18} />, pillar: 'ATRAIR' },
   { id: 'link_bio', label: 'Link da Bio', icon: <Link2 size={18} />, pillar: 'ATRAIR' },
   { id: 'landing_pages', label: 'Landing Pages', icon: <Globe size={18} />, pillar: 'CONVERTER' },
+  { id: 'lp_ads', label: 'LP + Anúncios (IA)', icon: <BrainCircuit size={18} />, pillar: 'CONVERTER' },
   { id: 'forms', label: 'Formulários', icon: <FileText size={18} />, pillar: 'CONVERTER' },
   { id: 'popups', label: 'Pop-ups', icon: <Eye size={18} />, pillar: 'CONVERTER' },
   { id: 'wa_button', label: 'Botão WhatsApp', icon: <MessageCircle size={18} />, pillar: 'CONVERTER' },
@@ -143,6 +145,8 @@ export const VollMarketingManager: React.FC<Props> = ({ onBack }) => {
         return <LinkBioManager />;
       case 'landing_pages':
         return <LandingPageManager onBack={() => setActiveModule('dashboard')} />;
+      case 'lp_ads':
+        return <LPAdsManager onBack={() => setActiveModule('dashboard')} />;
       case 'forms':
         return <FormsManager onBack={() => setActiveModule('dashboard')} />;
       case 'popups':

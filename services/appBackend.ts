@@ -3499,4 +3499,201 @@ export const appBackend = {
       active_streaks: (streaksRes.data || []).filter(s => s.current_streak > 0).length,
     };
   },
+
+  // ── LP + Anúncios (IA) ────────────────────────────────────
+
+  lpAds: {
+    projects: {
+      list: async (): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_projects').select('*').order('created_at', { ascending: false });
+        return data || [];
+      },
+      getById: async (id: string): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { data } = await supabase.from('lp_ads_projects').select('*').eq('id', id).maybeSingle();
+        return data || null;
+      },
+      save: async (project: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const isNew = !project.id;
+        if (isNew) {
+          const { id, ...rest } = project;
+          const { data } = await supabase.from('lp_ads_projects').insert([rest]).select().single();
+          return data;
+        }
+        const { data } = await supabase.from('lp_ads_projects').update(project).eq('id', project.id).select().single();
+        return data;
+      },
+      delete: async (id: string): Promise<void> => {
+        if (!isConfigured) return;
+        await supabase.from('lp_ads_projects').delete().eq('id', id);
+      },
+    },
+
+    landingPages: {
+      listByProject: async (projectId: string): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_landing_pages').select('*').eq('project_id', projectId).order('created_at', { ascending: true });
+        return data || [];
+      },
+      getById: async (id: string): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { data } = await supabase.from('lp_ads_landing_pages').select('*').eq('id', id).maybeSingle();
+        return data || null;
+      },
+      save: async (lp: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const isNew = !lp.id;
+        if (isNew) {
+          const { id, ...rest } = lp;
+          const { data } = await supabase.from('lp_ads_landing_pages').insert([rest]).select().single();
+          return data;
+        }
+        const { data } = await supabase.from('lp_ads_landing_pages').update(lp).eq('id', lp.id).select().single();
+        return data;
+      },
+      delete: async (id: string): Promise<void> => {
+        if (!isConfigured) return;
+        await supabase.from('lp_ads_landing_pages').delete().eq('id', id);
+      },
+    },
+
+    lpVersions: {
+      listByLP: async (landingPageId: string): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_lp_versions').select('*').eq('landing_page_id', landingPageId).order('version_number', { ascending: false });
+        return data || [];
+      },
+      save: async (version: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { id, ...rest } = version;
+        const { data } = await supabase.from('lp_ads_lp_versions').insert([rest]).select().single();
+        return data;
+      },
+    },
+
+    campaigns: {
+      listByProject: async (projectId: string): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_campaigns').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+        return data || [];
+      },
+      getById: async (id: string): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { data } = await supabase.from('lp_ads_campaigns').select('*').eq('id', id).maybeSingle();
+        return data || null;
+      },
+      save: async (campaign: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const isNew = !campaign.id;
+        if (isNew) {
+          const { id, ...rest } = campaign;
+          const { data } = await supabase.from('lp_ads_campaigns').insert([rest]).select().single();
+          return data;
+        }
+        const { data } = await supabase.from('lp_ads_campaigns').update(campaign).eq('id', campaign.id).select().single();
+        return data;
+      },
+      delete: async (id: string): Promise<void> => {
+        if (!isConfigured) return;
+        await supabase.from('lp_ads_campaigns').delete().eq('id', id);
+      },
+    },
+
+    campaignVersions: {
+      listByCampaign: async (campaignId: string): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_campaign_versions').select('*').eq('campaign_id', campaignId).order('version_number', { ascending: false });
+        return data || [];
+      },
+      save: async (version: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { id, ...rest } = version;
+        const { data } = await supabase.from('lp_ads_campaign_versions').insert([rest]).select().single();
+        return data;
+      },
+    },
+
+    sourceAssets: {
+      listByProject: async (projectId: string): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_source_assets').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+        return data || [];
+      },
+      save: async (asset: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { id, ...rest } = asset;
+        const { data } = await supabase.from('lp_ads_source_assets').insert([rest]).select().single();
+        return data;
+      },
+      delete: async (id: string): Promise<void> => {
+        if (!isConfigured) return;
+        await supabase.from('lp_ads_source_assets').delete().eq('id', id);
+      },
+    },
+
+    generationJobs: {
+      listByProject: async (projectId: string): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('lp_ads_generation_jobs').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+        return data || [];
+      },
+      save: async (job: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const isNew = !job.id;
+        if (isNew) {
+          const { id, ...rest } = job;
+          const { data } = await supabase.from('lp_ads_generation_jobs').insert([rest]).select().single();
+          return data;
+        }
+        const { data } = await supabase.from('lp_ads_generation_jobs').update(job).eq('id', job.id).select().single();
+        return data;
+      },
+    },
+
+    aiConfigs: {
+      list: async (): Promise<any[]> => {
+        if (!isConfigured) return [];
+        const { data } = await supabase.from('ai_provider_configs').select('*').order('created_at', { ascending: false });
+        return data || [];
+      },
+      getActive: async (provider: string = 'claude'): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const { data } = await supabase.from('ai_provider_configs').select('*').eq('provider', provider).eq('is_active', true).maybeSingle();
+        return data || null;
+      },
+      save: async (config: any): Promise<any | null> => {
+        if (!isConfigured) return null;
+        const isNew = !config.id;
+        if (isNew) {
+          const { id, ...rest } = config;
+          const { data } = await supabase.from('ai_provider_configs').insert([rest]).select().single();
+          return data;
+        }
+        const { data } = await supabase.from('ai_provider_configs').update(config).eq('id', config.id).select().single();
+        return data;
+      },
+      delete: async (id: string): Promise<void> => {
+        if (!isConfigured) return;
+        await supabase.from('ai_provider_configs').delete().eq('id', id);
+      },
+    },
+
+    uploadAssetFile: async (projectId: string, file: File): Promise<string> => {
+      if (!isConfigured) return '';
+      const ext = file.name.split('.').pop() || 'pdf';
+      const path = `${projectId}/${Date.now()}.${ext}`;
+      await supabase.storage.from('lp_ads').upload(path, file, { upsert: true });
+      const { data } = supabase.storage.from('lp_ads').getPublicUrl(path);
+      return data.publicUrl || '';
+    },
+
+    generate: async (payload: { job_type: string; project_id: string; target_id?: string; section_id?: string; user_instruction?: string }): Promise<any> => {
+      if (!isConfigured) return { success: false, error: 'Not configured' };
+      const { data, error } = await supabase.functions.invoke('claude-generate', { body: payload });
+      if (error) throw error;
+      return data;
+    },
+  },
 };

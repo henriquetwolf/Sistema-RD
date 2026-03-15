@@ -32,6 +32,7 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
 
   const [gateway, setGateway] = useState<PaymentGateway>('stripe');
   const [availableGateways, setAvailableGateways] = useState<PaymentGateway[]>([]);
+  const [isSandbox, setIsSandbox] = useState(false);
 
   const [couponCode, setCouponCode] = useState('');
   const [couponValidation, setCouponValidation] = useState<PagBankCouponValidation | null>(null);
@@ -76,6 +77,7 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
       try {
         const pagConfig = await pagBankService.getConfig();
         if (pagConfig.configured) gateways.push('pagbank');
+        if (pagConfig.sandbox_mode) setIsSandbox(true);
       } catch (_) {}
 
       setAvailableGateways(gateways);
@@ -479,6 +481,11 @@ export function CheckoutPage({ courseId, dealId, studentName, studentEmail, stud
                 ? 'Você será redirecionado para a página segura do Stripe onde poderá pagar com Cartão de Crédito ou Boleto.'
                 : 'Você será redirecionado para a página segura do PagBank onde poderá escolher pagar com PIX, Cartão de Crédito, Débito ou Boleto.'}
             </p>
+            {gateway === 'pagbank' && isSandbox && (
+              <p className="mt-2 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 inline-block">
+                Ambiente de teste — sem cobrança real
+              </p>
+            )}
           </div>
 
           <button

@@ -41,6 +41,7 @@ async function getPagBankConfig() {
 }
 
 function getApiUrl(sandbox: boolean): string {
+  if (Deno.env.get("FORCE_PAGBANK_SANDBOX") === "true") return PAGBANK_SANDBOX_URL;
   return sandbox ? PAGBANK_SANDBOX_URL : PAGBANK_API_URL;
 }
 

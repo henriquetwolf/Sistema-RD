@@ -362,6 +362,17 @@ export function PagBankManager() {
             </div>
           </div>
 
+          {configForm.sandbox_mode && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+              <div className="space-y-1">
+                <p className="text-sm text-amber-800 font-bold">Ambiente de Teste (Sandbox)</p>
+                <p className="text-xs text-amber-700">Use as credenciais do <strong>ambiente de teste</strong> do PagBank (obtidas no painel sandbox). Nenhuma cobrança real será feita.</p>
+                <p className="text-xs text-amber-600">Para ativar produção: desative o modo sandbox, insira as credenciais de produção e salve.</p>
+              </div>
+            </div>
+          )}
+
           {!configForm.sandbox_mode && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
               <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
